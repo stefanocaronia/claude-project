@@ -28,6 +28,8 @@ const markOf = (priority: string) => priorities[priority as keyof typeof priorit
 const nextPriority: Record<string, string | undefined> = { P1: "P2", P2: "P3", P3: "P1" };
 const workColor = "#4E9A6B";
 const decisionColor = "#8A63C9";
+// A task's number beside its title, as a decision's is beside its own, in a color of its own.
+const taskColor = "#2E9AA6";
 // The mark of a decision, taken or to take: the scales, drawn as text so that it stays one color.
 const scales = "⚖︎";
 const errorColor = "#D0453F";
@@ -364,6 +366,7 @@ export const register: Register = (on) => {
                     {face(task.to, isPart ? 18 : 24)}
                     {typeMark(task)}
                     {priorityMark(task)}
+                    <Box flexShrink={0}><Text color={taskColor} bold>{`${prefix}-${task.id}`}</Text></Box>
                     <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
                         <Button key={`open-${task.id}`} plain onPress={expand(key)}>
                             <Text wrap="truncate-end">{`${isExpanded ? "▾" : "▸"} ${task.text}`}</Text>

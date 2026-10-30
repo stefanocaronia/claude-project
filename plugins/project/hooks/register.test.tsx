@@ -113,6 +113,7 @@ test("the panel shows the project's numbers, the tasks in progress and the P1 to
         expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 4");
         expect((await ui.find({ key: "toggle-decisions" }))?.props.label).toBe("▸ ⚖︎ Decisioni · 2 da decidere");
         expect(await ui.find({ type: "Text", text: "▸ I pacchetti nei loro repo" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: "T-62" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /^▸ Revisione/ })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /6\/9/ })).toBeDefined();
         // A closed goal has no bar: only the count of the closed ones, a link to the page.
