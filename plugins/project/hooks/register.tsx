@@ -33,6 +33,8 @@ const errorColor = "#D0453F";
 // Material's outline, its hover state layer, and the gray of a count with nothing wrong, readable in both themes.
 const outline = "#8080803d";
 const stateLayer = "#80808014";
+// A task's card, faintly in its priority's color, a little more under the pointer, as Crew's.
+const tinted = (color?: string) => (color ? { backgroundColor: `${color}0a`, hover: { backgroundColor: `${color}14` } } : { hover: { backgroundColor: stateLayer } });
 const quietColor = "#888780";
 const effortMeters: Record<string, string> = { low: "▮▯▯▯", medium: "▮▮▯▯", high: "▮▮▮▯", xhigh: "▮▮▮▮", max: "▮▮▮▮", none: "" };
 // The exit code of snapshot.mjs in a folder with no project above it.
@@ -142,9 +144,9 @@ export const register: Register = (on) => {
         // A space that never breaks: "2 g" stays on one line.
         const age = (day: string | null) => (day ? words("days", { days: Math.max(0, Math.round((Date.parse(snapshot.today) - Date.parse(day)) / 86_400_000)) }).replace(" ", " ") : "");
         const border = isDesktop ? { borderColor: outline } : { borderDimColor: true };
-        // Material's outlined card, with the state layer under the pointer, as Crew's.
-        const card = (key: string, children: (JSX.Element | null)[]) => (
-            <Box key={key} flexDirection="column" borderStyle="round" {...border} paddingX={1} {...(isDesktop ? { hover: { backgroundColor: stateLayer } } : {})}>
+        // Material's outlined card, with the state layer under the pointer, as Crew's; a task's tinted by its priority.
+        const card = (key: string, children: (JSX.Element | null)[], color?: string) => (
+            <Box key={key} flexDirection="column" borderStyle="round" {...border} paddingX={1} {...(isDesktop ? tinted(color) : {})}>
                 {children}
             </Box>
         );
@@ -257,7 +259,7 @@ export const register: Register = (on) => {
                         </Box>
                     )
                     : null,
-            ]);
+            ], markOf(task.priority).color);
         };
         const taskSection = (key: "doing" | "rest", icon: string, title: string, tasks: Task[], none: string) => section(key, icon, `${title} · ${tasks.length}`, [
             ...(tasks.length === 0 ? [<Text key={`none-${key}`} dimColor>{none}</Text>] : limited(key, tasks).map(taskRow)),
@@ -343,7 +345,7 @@ export const register: Register = (on) => {
                         </Box>
                     )
                     : null,
-            ]);
+            ], proposal.priority ? markOf(proposal.priority).color : undefined);
         };
         const decisionRow = (decision: Snapshot["decisions"]["recent"][number]) => {
             const key = `decision-${decision.number}`;
