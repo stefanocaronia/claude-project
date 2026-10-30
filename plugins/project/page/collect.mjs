@@ -10,7 +10,7 @@ import { parseTodo } from "../lib/todos.mjs";
 import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
 import { decisionLinks } from "../lib/links.mjs";
 import { check } from "../scripts/check.mjs";
-import { readCode, readIssues } from "../scripts/code.mjs";
+import { readCode, readIssues, readOwner } from "../scripts/code.mjs";
 import { context } from "../scripts/extensions.mjs";
 import { colleagues, git, profileOf, projectName, read, readBacklog, readDecisions, projectRepos, readGoals, readHolds, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
 
@@ -47,7 +47,9 @@ export async function collect(config, say, extensions = [])
         documents: readDocuments(config),
         keyDocuments: config.documents.map((document, index) => ({ name: document.name, path: shown(config, document.path), href: `/document/${index}`, exists: existsSync(document.path) })),
         inbox: readInbox(config),
+        people: config.people,
         colleagues: readColleagues(config),
+        owner: await ownerOf(config),
         tasks: readTasks(config),
         board: readBoard(config),
         issues: freeIssues(readIssues(config), readBacklog(config).tasks).map(({ number, title, url }) => ({ number, title, url })),
@@ -132,6 +134,13 @@ function readDecisionsData(config)
         duplicates: twice,
         missing,
     };
+}
+
+/** The person this machine's gh is signed in as: their name, and where the page serves their GitHub picture; null without one. */
+async function ownerOf(config)
+{
+    const owner = await readOwner(config);
+    return owner ? { name: owner.name, fullName: owner.fullName, href: owner.file ? "/avatar" : null } : null;
 }
 
 /** The backlog for the board and the lists: every task not archived, and those archived within the board's days, with who holds it. */

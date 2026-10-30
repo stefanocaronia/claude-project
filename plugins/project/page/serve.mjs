@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { isMain, loadProject, notePath } from "../scripts/project.mjs";
 import { context, loadExtensions } from "../scripts/extensions.mjs";
 import { collect } from "./collect.mjs";
+import { readOwner } from "../scripts/code.mjs";
 import { apply, propose, runFix, tidyState } from "./tidy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -38,7 +39,7 @@ export async function pageServer(from)
                 const changed = runFix(config, url.pathname.split("/")[3]);
                 send(response, 200, "application/json", JSON.stringify({ changed, state: tidyState(config) }));
             } else if (request.method === "POST" && url.pathname === "/tidy/propose") {
-                send(response, propose(config) ? 200 : 409, "application/json", JSON.stringify(tidyState(config)));
+                send(response, propose(config, url.searchParams.get("scope") === "backlog" ? "backlog" : "docs") ? 200 : 409, "application/json", JSON.stringify(tidyState(config)));
             } else if (request.method === "POST" && url.pathname === "/tidy/apply") {
                 const { ids } = JSON.parse((await body(request)) || "{}");
                 send(response, Array.isArray(ids) && apply(config, ids.map(String)) ? 200 : 409, "application/json", JSON.stringify(tidyState(config)));
@@ -53,6 +54,10 @@ export async function pageServer(from)
                 // A task's note, by the task's number: never another file.
                 const path = notePath(config, Number(url.pathname.split("/")[2]));
                 existsSync(path) ? send(response, 200, "text/plain; charset=utf-8", readFileSync(path)) : send(response, 404, "text/plain", "no such note");
+            } else if (url.pathname === "/avatar") {
+                // The owner's GitHub picture, as the page's data names it.
+                const owner = await readOwner(config);
+                owner?.file ? send(response, 200, "image/jpeg", readFileSync(owner.file)) : send(response, 404, "text/plain", "no picture");
             } else if (url.pathname.startsWith("/portrait/")) {
                 const id = url.pathname.slice("/portrait/".length).replace(/[^a-z0-9-]/g, "");
                 const path = `${config.memory}/${id}/avatar-small.jpg`;

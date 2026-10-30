@@ -1543,11 +1543,25 @@
     }
 
     .row.proposal {
-        grid-template-columns: 22px minmax(0, 1fr);
+        grid-template-columns: 48px minmax(0, 1fr);
+    }
+
+    /* Who decides, and a proposal's priority */
+    .row .who {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
     }
 
     .row.decision {
-        grid-template-columns: 52px minmax(0, 1fr);
+        grid-template-columns: 84px minmax(0, 1fr);
+    }
+
+    /* Who decided, beside the decision's number */
+    .row.decision .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
     }
 
     .row .task-text {
@@ -2490,7 +2504,7 @@ function proposalRow(proposal)
     const meta = [proposal.day ? `<span data-tip="${attribute(escape(formatDay(proposal.day)))}">${escape(age(proposal.day))}</span>` : "", `<span>${escape(t("lineAt", proposal.line))}</span>`];
 
     return `<li class="row proposal">
-            ${proposal.priority ? `<span class="prio" role="img" aria-label="${attribute(priorityName(proposal.priority))}">${priorityMark(proposal.priority)}</span>` : "<span></span>"}
+            <span class="who">${decider() ? face({ to: decider() }) : ""}${proposal.priority ? `<span class="prio" role="img" aria-label="${attribute(priorityName(proposal.priority))}">${priorityMark(proposal.priority)}</span>` : ""}</span>
             <div>${expandButton(id, escape(proposal.text))}<div class="row-meta">${meta.join("")}</div></div>
         </li>`;
 }
@@ -2527,9 +2541,15 @@ function decisionRow(row, terms)
     const day = row.day || tasks ? `<div class="row-meta">${row.day ? `<span>${escape(formatDay(row.day))}</span>` : ""}${tasks}</div>` : "";
 
     return `<li class="row decision">
-            <span class="tag">${escape(data.prefixes.decision)}-${row.number}</span>
+            <span class="tag">${decider() ? face({ to: decider() }) : ""}${escape(data.prefixes.decision)}-${row.number}</span>
             <div>${expandButton(id, marked(row.text, terms))}${why}${day}</div>
         </li>`;
+}
+
+/** Who decides: the owner, else the first person of the project who is not Claude. */
+function decider()
+{
+    return data.owner?.name ?? (data.people ?? []).find((person) => person !== "Claude") ?? null;
 }
 
 function foundLine(count)
@@ -2550,7 +2570,7 @@ function tasksPanel()
     const { tasks, colleagues } = data;
 
     return `<section class="card span-12">
-            <h2>${t("listTitle")}</h2>
+            <h2>${t("listTitle")} <button type="button" class="action" id="tidy-backlog" data-tidy-backlog>${t("tidyBacklog")}</button></h2>
             <p class="hint">${escape(t("listHint", data.boardDays))}</p>
             <div class="filters" id="task-filters">${taskFilters()}</div>
             <div id="task-list">${taskListBody()}</div>
@@ -2888,6 +2908,10 @@ function setupBoard()
         } else if (target.hasAttribute("data-clear-filters")) {
             Object.assign(taskFilter, { state: "open", priority: "all", type: "all", who: "all", goal: "all" });
             refreshTaskList("filter-state-open");
+        } else if (target.hasAttribute("data-tidy-backlog")) {
+            // The backlog's tidying runs from the cleanup, in the Health tab, where its proposals show.
+            selectTab(document.getElementById("tab-health"));
+            tidyAction("backlog", { cost: null });
         } else if (target.dataset.takeIssue) {
             changeTask({ command: "issue", issue: target.dataset.takeIssue, title: target.dataset.title }, t("issueTaken", target.dataset.takeIssue));
         } else if (target.dataset.goLane !== undefined) {
@@ -3105,6 +3129,11 @@ function face(task)
 
     if (person?.hasPortrait) {
         return `<img class="face" src="/portrait/${attribute(person.id)}" alt="${attribute(name)}" ${tip}>`;
+    }
+
+    // The owner's GitHub picture, on their tasks and on every decision.
+    if (data.owner?.href && task.to === data.owner.name) {
+        return `<img class="face" src="${attribute(data.owner.href)}" alt="${attribute(data.owner.fullName)}" data-tip="${attribute(`<b>${escape(data.owner.fullName)}</b>`)}">`;
     }
 
     const initials = String(name).split(/\s+/).map((part) => part[0] ?? "").join("").slice(0, 2).toUpperCase();
@@ -3653,6 +3682,7 @@ function renderTidy()
             <button type="button" class="action" data-tidy="whitespace" ${whitespace.length ? "" : "disabled"}>${escape(t("tidyWhitespace", whitespace.length))}</button>
             <button type="button" class="action" data-tidy="dates" ${undatedCount ? "" : "disabled"}>${escape(t("tidyDates", undatedCount))}</button>
             <button type="button" class="action primary" data-tidy="propose" ${running ? "disabled" : ""}>${t("tidyPropose")}</button>
+            <button type="button" class="action" data-tidy="backlog" ${running ? "disabled" : ""}>${t("tidyBacklog")}</button>
         </div>
         ${runLine}${appliedLine}
         ${ready.length ? `<ul class="list proposals">${list}</ul>
@@ -3681,6 +3711,8 @@ async function tidyAction(action, preview)
         await post("/tidy/fix/dates");
     } else if (action === "propose" && confirm(t("tidyConfirmPropose", preview.cost))) {
         await post("/tidy/propose");
+    } else if (action === "backlog" && confirm(t("tidyConfirmBacklog", preview.cost))) {
+        await post("/tidy/propose?scope=backlog");
     } else if (action === "apply") {
         const ids = [...document.querySelectorAll("input[data-proposal]:checked")].map((input) => input.dataset.proposal);
 

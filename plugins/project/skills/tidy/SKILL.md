@@ -28,6 +28,20 @@ A numbered list, the most important first: what, why, what changes. Applied only
 - **Docs outside the index**: into it, or into the archive folder if the work is closed.
 - **Heavy files**: the superseded rows first, then the lines that repeat what another already says.
 
+## 4. The backlog
+
+When the user asks to tidy the backlog (the panel's «Tidy the backlog», or the page's), read it whole with `backlog.mjs list --json` and `backlog.mjs list --state done --json`, the plan's goals and the decisions, then:
+
+- **Fix without asking** what changes no meaning: a task's text that breaks the line's rules or reads badly (one line, clear, no « · »), a part whose goal differs from its large task's, a type plainly wrong or missing where the text says it (a bug, a research).
+- **Propose**, numbered, the most useful first, each with the `backlog.mjs` command that applies it:
+  - priorities that no longer fit: P1 only for what blocks the work at hand or the next step;
+  - tasks that belong together as one piece of work: a large task with its parts, `(in: T-n)`, one level deep;
+  - tasks another task or a commit already did (`show` names the code that cites a task), to close with `done`;
+  - tasks a later decision made moot, revised or contradicted (read the decisions they cite and the later ones), to close or rewrite;
+  - duplicates, to archive one and point the other to it with `(see: T-n)`;
+  - waits that no longer hold, goals that changed.
+- Apply only what the user says yes to, through `backlog.mjs` alone; at the end `check.mjs` and a short report.
+
 ## The rules that stay
 
 - The docs hold only what is decided, in short.

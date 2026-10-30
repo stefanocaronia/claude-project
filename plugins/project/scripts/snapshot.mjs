@@ -9,7 +9,7 @@ import { plainMarkdown } from "../lib/text.mjs";
 import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
 import { decisionLinks } from "../lib/links.mjs";
 import { check } from "./check.mjs";
-import { readCode, readIssues } from "./code.mjs";
+import { readCode, readIssues, readOwner } from "./code.mjs";
 import { extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
 import { colleagues, findRoot, isMain, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readGoals, runCli, taskLinks, today, todoFiles } from "./project.mjs";
 
@@ -55,6 +55,8 @@ export async function snapshot(config, say, withHealth = true)
         issues: freeIssues(issues, tasks).map(({ number, title, url }) => ({ number, title, url })),
         documents: config.documents.map((document, index) => ({ name: document.name, href: `${page}/document/${index}`, exists: existsSync(document.path) })),
         colleagues: team,
+        // The person this machine's gh is signed in as, with their GitHub picture inline: on their tasks and on every decision.
+        owner: ownerOf(await readOwner(config)),
         // Each with its links: what it waits for, still open, and the chain to do first; what points to it; its note.
         tasks: tasks.filter((task) => openStates.includes(task.state)).map(({ file, line, archived, done, ...task }) => ({
             ...task,
@@ -102,6 +104,17 @@ if (isMain(import.meta.url)) {
 function count(findings, severity)
 {
     return findings.filter((finding) => finding.severity === severity).length;
+}
+
+/** The owner as the panel draws them: their picture inline when it is light enough; null without one. */
+function ownerOf(owner)
+{
+    if (!owner) {
+        return null;
+    }
+
+    const portrait = owner.file && statSync(owner.file).size <= portraitLimit * 4 ? `data:image/jpeg;base64,${readFileSync(owner.file).toString("base64")}` : undefined;
+    return { name: owner.name, fullName: owner.fullName, ...(portrait ? { portrait } : {}) };
 }
 
 /** A colleague's small portrait, as Crew keeps it, inline for the panel; nothing when there is none or it is too heavy. */

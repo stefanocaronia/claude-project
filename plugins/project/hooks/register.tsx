@@ -16,7 +16,7 @@ const command = "project-panel";
 const board = atom({ plugin: "project", key: "board" } as const, { snapshot: null, problem: null, readAt: 0, stamp: "", holds: {}, session: "" }, { shape: "board-2" });
 // A chat's holds older than this are of a chat long gone that never said so.
 const holdsLast = 24 * 3_600_000;
-const view = atom({ plugin: "project", key: "view" } as const, { sections: {}, expanded: null, whole: {}, starting: {} }, { shape: "view-1" });
+const view = atom({ plugin: "project", key: "view" } as const, { sections: {}, expanded: null, whole: {}, starting: {}, frozen: null }, { shape: "view-1" });
 // The sections open at the start, as Joseph's sketch has them: the decisions closed, the tile above says how many wait.
 const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, goals: true, decisions: false };
 // How many rows a section shows before "show all".
@@ -39,6 +39,10 @@ const stateLayer = "#80808014";
 // Every card's faint gray, the same for all, as Crew's.
 const cardTint = "#80808003";
 const quietColor = "#888780";
+// A ▶ that cannot be pressed now: gray, fainter than a dim one.
+const idleColor = "#8080806b";
+// How long the lists keep their order after a priority turns.
+const frozenFor = 4000;
 const warningColor = "#E2852B";
 // A hint in Material's inverse colors, which read on both themes, as Crew's.
 const tooltipBackground = "#2b2b29";
@@ -165,9 +169,14 @@ export const register: Register = (on) => {
             const own = [task, ...snapshot.tasks.filter((part) => part.parent === `${snapshot.prefixes.task}-${task.id}`)].map((one) => `${one.priority}${one.created}`).sort()[0];
             return `${task.state === "postponed" ? 1 : 0}${own}`;
         };
-        const rest = snapshot.tasks.filter((task) => task.state === "todo" && !isGrouped(task)).sort((first, second) => order(first).localeCompare(order(second)));
+        // Just after a priority turns, the lists keep the order they had, so that the task stays under the pointer; then they sort again.
+        const frozen = panel.frozen && now < panel.frozen.until ? panel.frozen.rank : null;
+        const byOrder = (first: Task, second: Task) => (frozen ? (frozen[String(first.id)] ?? Number.MAX_SAFE_INTEGER) - (frozen[String(second.id)] ?? Number.MAX_SAFE_INTEGER) : 0) || order(first).localeCompare(order(second)) || first.id - second.id;
+        const rest = snapshot.tasks.filter((task) => task.state === "todo" && !isGrouped(task)).sort(byOrder);
         // The postponed in a section of their own, after the tasks to do, in the same order.
-        const postponed = snapshot.tasks.filter((task) => task.state === "postponed" && !isGrouped(task)).sort((first, second) => order(first).localeCompare(order(second)));
+        const postponed = snapshot.tasks.filter((task) => task.state === "postponed" && !isGrouped(task)).sort(byOrder);
+        // Where each task stands now, the parts after their large task: what a priority's turn keeps for a moment.
+        const shownRank = new Map([...rest, ...postponed].flatMap((task) => [task, ...snapshot.tasks.filter((part) => part.parent === `${prefix}-${task.id}`).sort(byOrder)]).map((task, index) => [task.id, index]));
         const todoOf = (priority: string) => snapshot.tasks.filter((task) => task.state === "todo" && task.priority === priority).length;
         const isOpen = (section: string) => panel.sections[section] ?? openAtStart[section] ?? false;
         const toggle = (section: string) => () => update($, view, (old) => ({ ...old, sections: { ...old.sections, [section]: !(old.sections[section] ?? openAtStart[section] ?? false) } }));
@@ -197,9 +206,11 @@ export const register: Register = (on) => {
         const more = (list: string, count: number, label: "showAllTasks" | "showAllDecisions") =>
             count > (rows[list] ?? 3) && !panel.whole[list] ? <Button key={`more-${list}`} plain dimColor label={words(label, { count })} onPress={showWhole(list)} /> : null;
 
-        // Who holds a task: Claude's critter, a colleague's portrait or initials, a person's initials in gray.
+        // Who holds a task: Claude's critter, a colleague's portrait or initials, the owner's GitHub picture, a person's initials in gray.
+        const owner = snapshot.owner;
+        const decider = owner?.name ?? snapshot.people.find((person) => person !== "Claude") ?? null;
         const face = (name: string, size: number) => {
-            const member = byName.get(name);
+            const member = byName.get(name) ?? (owner && name === owner.name ? { id: name, name, fullName: owner.fullName, role: "", color: "gray", portrait: owner.portrait } : undefined);
 
             if (!Svg) {
                 return <Text key={`face-${name}`} color={member?.color} dimColor={!member}>●</Text>;
@@ -211,7 +222,10 @@ export const register: Register = (on) => {
         // A press on a task's priority turns it, P1, P2, P3 and P1 again: a clear button laid over the drawn mark takes the press.
         const priorityMark = (task: Task) => {
             const mark = markOf(task.priority);
-            const turn = () => backlog($, ["set", `${prefix}-${task.id}`, "--p", nextPriority[task.priority] ?? "P1"]);
+            const turn = async () => {
+                await freezeOrder($, Object.fromEntries(snapshot.tasks.map((one) => [String(one.id), shownRank.get(one.id) ?? Number.MAX_SAFE_INTEGER])));
+                await backlog($, ["set", `${prefix}-${task.id}`, "--p", nextPriority[task.priority] ?? "P1"]);
+            };
             const drawn = Svg ? prioritySvg(task.priority) : undefined;
 
             if (!drawn || !Svg) {
@@ -241,19 +255,19 @@ export const register: Register = (on) => {
 
             // A chat at work on a task starts no other: another task is for a new session of the project.
             if (busyWith && busyWith.id !== task.id) {
-                return null;
+                return idle(task, words("playBusy", { id: `${prefix}-${busyWith.id}` }));
             }
 
             // A large task is done through its parts: its ▶ starts the next one, by priority and age, free and to do.
             if (isLarge(task)) {
                 const part = snapshot.tasks.find((one) => `${prefix}-${one.id}` === task.nextPart);
                 const isStartable = part && (part.to === "Claude" || byName.has(part.to)) && !isStarting(`task-${part.id}`);
-                return part && isStartable ? <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={() => startTask($, snapshot, part, byName.get(part.to))} /> : null;
+                return part && isStartable ? <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={() => startTask($, snapshot, part, byName.get(part.to))} /> : idle(task, words("playNoPart"));
             }
 
             // Nobody starts a person's own task but them.
             if (!member && task.to !== "Claude") {
-                return null;
+                return idle(task, words("playPerson", { name: task.to }));
             }
 
             // Who holds it now decides what ▶ does; the user sees only whether there is one. A colleague at work, or this very chat, needs
@@ -266,7 +280,7 @@ export const register: Register = (on) => {
             }
 
             if (held && held.session === current.session) {
-                return null;
+                return idle(task, words("playHere"));
             }
 
             if (isStarting(key)) {
@@ -280,6 +294,14 @@ export const register: Register = (on) => {
 
             return <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={() => startTask($, snapshot, task, member, held?.session)} />;
         };
+        // A button that cannot be pressed now keeps its place and shape, gray, its reason under the pointer.
+        const idleButton = (key: string, label: string, reason: string) => tip(key, reason, (
+            <Box key={key} flexShrink={0} borderStyle="round" paddingX={1} {...(isDesktop ? { borderColor: outline } : { borderDimColor: true })}>
+                <Text color={idleColor}>{label}</Text>
+            </Box>
+        ));
+        // A ▶ that cannot be pressed now stays in its place, gray, its reason under the pointer.
+        const idle = (task: Task, reason: string) => tip(`idle-${task.id}`, reason, <Box key={`idle-${task.id}`} flexShrink={0}><Text color={idleColor}>▶</Text></Box>);
         // In place of its age, a blocked task shows what it waits for: «⛓ T-62», and how many more; a large task, its parts closed. On the
         // desktop a hint under the pointer says it in words.
         // After those, a due day near or past, «⏰ 3 g», red when late; a task stuck in progress, «⏸ 4 g», in the color of a warning.
@@ -378,7 +400,7 @@ export const register: Register = (on) => {
         const withParts = (task: Task, state: Task["state"]) => [`${prefix}-${task.id}`, ...snapshot.tasks.filter((part) => part.parent === `${prefix}-${task.id}` && part.state === state).map((part) => `${prefix}-${part.id}`)];
         const taskRow = (task: Task) => {
             const parts = snapshot.tasks.filter((part) => part.parent === `${prefix}-${task.id}`)
-                .sort((first, second) => Number(second.state === "doing") - Number(first.state === "doing") || order(first).localeCompare(order(second)));
+                .sort((first, second) => (frozen ? 0 : Number(second.state === "doing") - Number(first.state === "doing")) || byOrder(first, second));
             return card(`task-${task.id}`, [
                 ...taskLines(task),
                 ...parts.map((part) => <Box key={`part-${part.id}`} flexDirection="column" paddingLeft={isDesktop ? 4 : 2}>{taskLines(part, true)}</Box>),
@@ -485,6 +507,7 @@ export const register: Register = (on) => {
             const cut = proposal.text.length > proposalLength ? `${proposal.text.slice(0, proposalLength)}…` : proposal.text;
             return card(key, [
                 <Box key={`proposal-row-${proposal.line}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
+                    {decider ? face(decider, 18) : null}
                     <Box flexShrink={0}><Text color={decisionColor}>{scales}</Text></Box>
                     {proposal.priority && Svg ? <Svg source={prioritySvg(proposal.priority) ?? ""} alt={proposal.priority} width={14} height={14} /> : null}
                     <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
@@ -512,6 +535,7 @@ export const register: Register = (on) => {
             const isExpanded = panel.expanded === key;
             return card(key, [
                 <Box key={`decision-row-${decision.number}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
+                    {decider ? face(decider, 18) : null}
                     <Box flexShrink={0}><Text color={decisionColor}>{scales}</Text></Box>
                     <Box flexShrink={0}><Text color={decisionColor} bold>{`${snapshot.prefixes.decision}-${decision.number}`}</Text></Box>
                     <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
@@ -541,14 +565,17 @@ export const register: Register = (on) => {
         const nextProposal = proposals[0];
         const actions = (
             <Box key="actions" flexDirection="row" flexWrap="wrap" gap={1} alignItems="center">
-                {busyWith ? <Text key="busy" dimColor>{words("busyChat", { id: `${prefix}-${busyWith.id}` })}</Text> : null}
+                {busyWith && !isDesktop ? <Text key="busy" dimColor>{words("busyChat", { id: `${prefix}-${busyWith.id}` })}</Text> : null}
                 {nextTask
                     ? isStarting(`task-${nextTask.id}`)
                         ? <Button key="next-task" label={words("starting")} onPress={() => undefined} />
                         : <Button key="next-task" variant="primary" label={words("nextTask", { id: `${prefix}-${nextTask.id}` })} onPress={() => startTask($, snapshot, nextTask, byName.get(nextTask.to))} />
-                    : null}
-                {nextProposal ? <Button key="next-decision" label={words("nextDecision")} onPress={() => submit($, words("promptChoice", { line: nextProposal.line, text: nextProposal.whole }))} /> : null}
+                    : idleButton("next-task-idle", words("nextTaskIdle"), busyWith ? words("busyChat", { id: `${prefix}-${busyWith.id}` }) : words("noneToStart"))}
+                {nextProposal
+                    ? <Button key="next-decision" label={words("nextDecision")} onPress={() => submit($, words("promptChoice", { line: nextProposal.line, text: nextProposal.whole }))} />
+                    : idleButton("next-decision-idle", words("nextDecision"), words("noneOpen"))}
                 <Button key="where-we-stand" label={words("whereWeStand")} onPress={() => submit($, words("promptWhereWeStand"))} />
+                <Button key="tidy-backlog" label={words("tidyBacklog")} onPress={() => submit($, words("promptTidyBacklog"))} />
                 <Button key="tidy-docs" label={words("tidyDocs")} onPress={() => submit($, words("promptTidy"))} />
             </Box>
         );
@@ -819,6 +846,14 @@ async function postLink($: EngineInterface, url: string): Promise<void>
     }
 
     await refresh($, true);
+}
+
+/** Keeps the lists' order for a moment, then lets them sort again: the drawing after the wait reads the order freed. */
+async function freezeOrder($: EngineInterface, rank: Record<string, number>): Promise<void>
+{
+    const until = (await $.clock.now()) + frozenFor;
+    await update($, view, (old) => ({ ...old, frozen: { until, rank } }));
+    $.clock.after(frozenFor, () => void update($, view, (old) => (old.frozen && old.frozen.until <= until ? { ...old, frozen: null } : old)));
 }
 
 /** Changes the backlog through its own command line, then reads the project again. */

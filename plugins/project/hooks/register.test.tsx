@@ -272,6 +272,8 @@ test("a task in progress: a colleague at work shows instead of ▶, the chat tha
     expect(await again.find({ key: "start-143" })).toBeUndefined();
     // A chat at work on a task starts no other: no next task, no ▶, a line that says where another one starts.
     expect(await again.find({ key: "next-task" })).toBeUndefined();
+    // The button stays in its place, gray, with why it cannot be pressed.
+    expect(await again.find({ type: "Text", text: "▶ Prossimo compito" })).toBeDefined();
     expect(await again.find({ key: "start-61" })).toBeUndefined();
     expect(await again.find({ type: "Text", text: "Questa chat lavora a T-143: un altro compito si avvia in una nuova sessione del progetto." })).toBeDefined();
     await again.unmount();
@@ -349,6 +351,8 @@ test("the button for where the project stands asks Claude for a short report", a
     expect((await ui.find({ key: "where-we-stand" }))?.props.label).toBe("◎ Il punto della situazione");
     await ui.press({ key: "where-we-stand" });
     expect(prompts[0]).toMatch(/^Fammi il punto della situazione del progetto, in al massimo 30 righe/);
+    await ui.press({ key: "tidy-backlog" });
+    expect(prompts[1]).toMatch(/^Riordina il backlog con la skill tidy, sezione 4/);
     await ui.unmount();
 });
 
@@ -420,5 +424,47 @@ test("a postponed task goes back to do from its row, and a large task takes its 
     await ui.press({ key: "open-80" });
     await ui.press({ key: "postpone-80" });
     expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "todo", "T-71"], ["backlog.mjs", "postpone", "T-80", "T-81"]]);
+    await ui.unmount();
+});
+
+test("the owner's GitHub picture on their tasks and beside every decision; without it, the initials of the person who decides", async ($, on) => {
+    const owned = { ...good, stdout: JSON.stringify({ ...snapshot, owner: { name: "Stefano", fullName: "Stefano Caronia", portrait: "data:image/jpeg;base64,AAAA" } }) };
+    world(on, [owned]);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    const pictures = async () => (await ui.findAll({ type: "Svg" })).filter((one) => (one.props as { alt?: string }).alt === "Stefano Caronia");
+    // T-70, Stefano's, in its row; none yet beside the decisions, closed.
+    expect((await pictures()).length).toBe(1);
+    await ui.press({ key: "toggle-decisions" });
+    // Two proposals and the latest decision, each with who decides.
+    expect((await pictures()).length).toBe(4);
+    await ui.unmount();
+});
+
+test("a ▶ that cannot be pressed stays in its place, gray, with its reason", async ($, on) => {
+    world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    // Stefano's own task: no button, a gray ▶ that says who starts it.
+    expect(await ui.find({ key: "start-70" })).toBeUndefined();
+    expect(await ui.find({ key: "idle-70" })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: "Lo avvia Stefano" })).toBeDefined();
+    await ui.unmount();
+});
+
+test("a task whose priority turns stays under the pointer while the list keeps its order", async ($, on) => {
+    const lowered = { ...good, stdout: JSON.stringify({ ...snapshot, tasks: snapshot.tasks.map((task) => (task.id === 61 ? { ...task, priority: "P2" } : task)) }) };
+    const answers = [good];
+    world(on, answers);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
+    const rows = async () => (await ui.findAll({ type: "Button" })).map((one) => one.key).filter((key): key is string => Boolean(key) && /^open-\d+$/.test(key ?? ""));
+    const before = await rows();
+    expect(before.indexOf("open-61")).toBeLessThan(before.indexOf("open-70"));
+    // The reading after the press has T-61 lowered.
+    answers.push(lowered);
+    await ui.press({ key: "priority-61" });
+    // Now P2, T-61 would sort after the P1 tasks; for a moment every row stays where it was.
+    expect(await rows()).toEqual(before);
     await ui.unmount();
 });

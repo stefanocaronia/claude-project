@@ -77,6 +77,8 @@ export type Snapshot = {
     /** The open GitHub issues no task does yet, to take into the backlog; none without gh. */
     issues?: { number: number; title: string; url: string | null }[];
     colleagues: Member[];
+    /** The person this machine's gh is signed in as, with their GitHub picture: on their tasks and on every decision; null without gh. */
+    owner?: { name: string; fullName: string; portrait?: string } | null;
     tasks: Task[];
     plan: { updated: string | null; goals: Goal[] };
     decisions: { open: Proposal[]; recent: Decision[] };
@@ -96,6 +98,8 @@ export type View = {
     expanded: string | null;
     whole: Record<string, boolean>;
     starting: Record<string, number>;
+    /** The lists' order kept for a moment after a priority turns, by task number, until a time; null when they sort freely. */
+    frozen?: { until: number; rank: Record<string, number> } | null;
 };
 
 declare module "claude-code" {

@@ -26,10 +26,15 @@ export function runFix(config, fix)
     return fix === "whitespace" ? fixWhitespace(config, true) : fix === "dates" ? dateTasks(config, true) : [];
 }
 
-/** Starts the run that writes the proposals, reading only; false when a run is going. */
-export function propose(config)
+/** Starts the run that writes the proposals, reading only, on the docs or on the backlog; false when a run is going. */
+export function propose(config, scope = "docs")
 {
     const check = `node ${pluginRoot}/scripts/check.mjs`;
+
+    if (scope === "backlog") {
+        return proposeBacklog(config);
+    }
+
     const brief = `Run the tidy skill of the project plugin: read ${pluginRoot}/skills/tidy/SKILL.md and do only its section 3, the proposals. Change no file.
 Start from the report of \`${check}\`, whose files are relative to the project's root. Read with Read and Grep; Bash is only for that command. Read only the lines the findings point at (Read with offset and limit) and what you need to judge them: the decisions' file can be very large, never read it whole. If while reading you find something else the skill asks to propose, propose it.
 Every proposal changes something: what stays as it is (a revision in part, say) is not a proposal. The whitespace, the blank lines and the tasks' dates the page fixes itself: do not propose them.
@@ -40,6 +45,25 @@ Answer with a JSON array and nothing else, at most 25 proposals, the most useful
     return startRun(config, "propose", brief, ["Read", "Grep", "Glob", `Bash(${check})`], (state, result) => {
         state.proposals = proposalsOf(result);
         state.applied = null;
+        state.scope = "docs";
+        return `${state.proposals.length}`;
+    });
+}
+
+/** The proposals on the backlog: priorities, large tasks, texts, tasks already done or made moot; reading only. */
+function proposeBacklog(config)
+{
+    const backlog = `node ${pluginRoot}/scripts/backlog.mjs`;
+    const brief = `Run the tidy skill of the project plugin on the backlog: read ${pluginRoot}/skills/tidy/SKILL.md, section 4, and do only its proposals. Change no file.
+Read the backlog with \`${backlog} list --json\`, the done ones with \`${backlog} list --state done --json\`, a task whole with \`${backlog} show T-n\`; the plan's goals in ${shown(config, config.files.plan)}; the decisions a task cites, and the later ones, in ${shown(config, config.files.decisions)} with Grep (never read it whole).
+Run each command alone, exactly as written here: no cd, no pipes, no other program. Every proposal changes something, and "change" is the exact \`${backlog} …\` command or commands that apply it; a large task's new parts are added with \`--in T-n\`, the large task's number. A proposal that cannot be applied now carries in "waits" what it waits for: "user" (a decision of theirs) or "a run of its own"; the others have "waits": null.
+Answer with a JSON array and nothing else, at most 25 proposals, the most useful first, written in the project's language (${config.language}):
+[{"id": "p1", "kind": "task", "file": "${shown(config, config.files.tasks)}", "line": null, "title": "one line", "why": "the reason, in one or two sentences", "change": "${backlog} set T-12 --p P1", "waits": null}]`;
+
+    return startRun(config, "propose", brief, ["Read", "Grep", "Glob", `Bash(${backlog} list *)`, `Bash(${backlog} show *)`], (state, result) => {
+        state.proposals = proposalsOf(result);
+        state.applied = null;
+        state.scope = "backlog";
         return `${state.proposals.length}`;
     });
 }
@@ -54,6 +78,23 @@ export function apply(config, ids)
     }
 
     const check = `node ${pluginRoot}/scripts/check.mjs`;
+
+    // The backlog's proposals are applied through its command alone.
+    if (readState(config).scope === "backlog") {
+        const backlog = `node ${pluginRoot}/scripts/backlog.mjs`;
+        const brief = `Apply these proposals on the backlog, approved by the user, and only these, each with the \`${backlog} …\` commands its "change" names:
+${JSON.stringify(chosen, null, 2)}
+Follow ${pluginRoot}/skills/tidy/SKILL.md, section 4 and "The rules that stay". If a command is refused, read its message, fix the command once, or skip the proposal and say why. At the end run \`${check}\`.
+Answer with a JSON object and nothing else, its summary in the project's language (${config.language}): {"applied": ["p1"], "skipped": [{"id": "p3", "why": "..."}], "summary": "two or three sentences"}`;
+        return startRun(config, "apply", brief, ["Read", "Grep", `Bash(${backlog} *)`, `Bash(${check})`], (state, result) => {
+            const outcome = objectOf(result);
+            const applied = new Set(outcome.applied ?? []);
+            state.proposals = (state.proposals ?? []).filter((proposal) => !applied.has(proposal.id));
+            state.applied = { at: new Date().toISOString(), applied: [...applied], skipped: outcome.skipped ?? [], summary: outcome.summary ?? result.slice(0, 600) };
+            return outcome.summary ?? "";
+        });
+    }
+
     const docs = shown(config, config.docs);
     const memory = shown(config, config.memory);
     const brief = `Apply these proposals of the cleanup, approved by the user, and only these:

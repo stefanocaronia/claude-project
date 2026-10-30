@@ -42,6 +42,43 @@ export function closeIssue(config, number, comment)
     writeFileSync(cacheFile(config, "issues"), "");
 }
 
+/** The person of the project this machine's gh is signed in as, by their name or login, with their GitHub picture kept small in the
+ * temporary folder: { name, fullName, file }, file null until it is downloaded; null without gh or when no person of the project is
+ * them. Claude Code gives a plugin no picture of its own account: GitHub's is the one the person already shows. */
+export async function readOwner(config)
+{
+    let user = null;
+
+    try {
+        user = JSON.parse(ghCached(config, "user", ["api", "user", "--jq", "{name: .name, login: .login, avatar: .avatar_url}"]));
+    } catch {
+        return null;
+    }
+
+    const first = String(user?.name ?? "").split(/\s+/)[0].toLowerCase();
+    const name = config.people.find((person) => [first, String(user?.login ?? "").toLowerCase()].includes(person.toLowerCase()));
+
+    if (!name || !user.avatar) {
+        return null;
+    }
+
+    const file = join(tmpdir(), "claude-project", `avatar-${String(user.login).replace(/[^\w-]/g, "_")}.jpg`);
+
+    if (!existsSync(file)) {
+        try {
+            const answer = await fetch(`${user.avatar}${user.avatar.includes("?") ? "&" : "?"}s=64`, { signal: AbortSignal.timeout(5000) });
+
+            if (answer.ok) {
+                writeFileSync(file, Buffer.from(await answer.arrayBuffer()));
+            }
+        } catch {
+            // offline: the initials, and the picture another time
+        }
+    }
+
+    return { name, fullName: user.name || name, file: existsSync(file) ? file : null };
+}
+
 /** What gh answers, the last reading when it is recent; "[]" when gh is missing or fails, or PROJECT_NO_GH is set. */
 function ghCached(config, name, args)
 {
