@@ -11,6 +11,18 @@ export type Task = {
     goal: string;
     text: string;
     state: "doing" | "todo" | "postponed";
+    /** The tasks and todo ids it waits for, `(after: T-62, #giulia-1)`; those still open; the open ones to do first, the first first. */
+    after: string[];
+    blockedBy: string[];
+    chain: string[];
+    /** The tasks that wait for it. */
+    waitedBy: string[];
+    /** The tasks and decisions it points to, `(see: T-12, D-2)`, and the tasks that point to it. */
+    see: string[];
+    seenFrom: string[];
+    /** Its note's path from the project's root, and its address on the page; null without one. */
+    note: string | null;
+    noteHref: string | null;
 };
 
 export type Goal = { name: string; phase: number | null; done: number; total: number; isDoing: boolean };
@@ -34,6 +46,8 @@ export type Snapshot = {
     /** What did not load: an extension's error, say. */
     problems: string[];
     people: string[];
+    /** The key documents, each opened through the project's page. */
+    documents: { name: string; href: string; exists: boolean }[];
     colleagues: Member[];
     tasks: Task[];
     plan: { updated: string | null; goals: Goal[] };

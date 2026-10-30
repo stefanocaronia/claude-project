@@ -2,15 +2,15 @@
 // what reads and what does not; with write, writes the configuration and the docs that are missing; with steps, moves the plan's
 // checkbox steps into the backlog. Run through init.mjs adopt.
 import { existsSync, readdirSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { formatLine, nextId, parseBacklog } from "../lib/backlog.mjs";
 import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
 import { parseDecisions } from "../lib/decisions.mjs";
 import { phaseSuffix, planGoals, planPhases } from "../lib/plan.mjs";
-import { quoted } from "../lib/text.mjs";
+import { escapeRegex, quoted } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { presets, stateKeys } from "../lib/words.mjs";
-import { colleagues, git, loadProject, readmeTitle, ProjectError, read, readBacklog, realPath, shown, today, withBacklogLock, write, writeBacklog } from "./project.mjs";
+import { colleagues, git, loadProject, readmeTitle, ProjectError, read, readBacklog, readDecisions, realPath, shown, today, withBacklogLock, write, writeBacklog } from "./project.mjs";
 
 const skipped = new Set(["node_modules", ".git", "dist", "build", "tmp", "sandbox", ".codegraph", "worktrees", "coverage"]);
 const textFile = /\.(md|ts|tsx|js|mjs|cjs|yaml|yml|json|py)$/;
@@ -121,6 +121,80 @@ function moveStepsLocked(config, say)
     }
 
     return moved.map((task) => formatLine(task, config.words, config.prefixes.task));
+}
+
+/** A numbered list of decisions under a heading of another file (`72. **Title** text…`), moved into the decisions' table with the same
+ * numbers, so that every citation stays true: the why is the text after the language's «Why:», when there is one; the list leaves a
+ * line in its place that points to the table. Refused when a number is in the table already. */
+export function moveDecisions(root, file, heading)
+{
+    const { config, say } = loadProject(root);
+    const source = join(root, file).replaceAll("\\", "/");
+    const text = read(source);
+    const newline = text.includes("\r\n") ? "\r\n" : "\n";
+    const lines = text.split(/\r?\n/);
+    const start = lines.findIndex((line) => new RegExp(`^(#+)\\s+${escapeRegex(heading)}\\s*$`).test(line));
+
+    if (start < 0) {
+        throw new ProjectError(say("noHeading", { heading, file }));
+    }
+
+    const level = /^#+/.exec(lines[start])[0].length;
+    const end = lines.findIndex((line, index) => index > start && new RegExp(`^#{1,${level}}\\s`).test(line));
+    const body = lines.slice(start + 1, end < 0 ? lines.length : end);
+    const rows = [];
+
+    for (const line of body) {
+        const item = /^(\d+)\.\s+(.*)$/.exec(line);
+
+        if (item) {
+            rows.push({ number: Number(item[1]), text: item[2].trim() });
+        } else if (rows.length > 0 && line.trim() !== "") {
+            // A line that goes on with the item before joins it: a cell of the table is one line.
+            rows.at(-1).text += ` ${line.trim().replace(/^[-*]\s+/, "")}`;
+        }
+    }
+
+    const { decided } = readDecisions(config);
+    const taken = new Set(decided.map((row) => row.number));
+    const clash = rows.filter((row) => taken.has(row.number)).map((row) => `${config.prefixes.decision}-${row.number}`);
+
+    if (clash.length > 0) {
+        throw new ProjectError(say("decisionsClash", { list: clash.join(", ") }));
+    }
+
+    const why = new RegExp(`\\s+${escapeRegex(config.words.why)}:\\s+`, "i");
+    const cells = rows.map((row) => {
+        const parts = row.text.replace(/\s+\|\s+/g, " / ").split(why);
+        return { number: row.number, text: parts[0].trim(), why: parts.slice(1).join(" ").trim() };
+    });
+    write(config.files.decisions, withRows(read(config.files.decisions), cells.map((row) => `| ${row.number} | ${row.text} | ${row.why} |`), config.words));
+    const kept = [...lines.slice(0, start + 1), "", say("decisionsMoved", { name: config.files.decisions.split("/").at(-1), path: relative(dirname(source), config.files.decisions).replaceAll("\\", "/") }), "", ...(end < 0 ? [] : lines.slice(end))];
+    write(source, kept.join(newline));
+    return { count: cells.length, file: shown(config, config.files.decisions) };
+}
+
+/** The decisions' text with these rows in its table, every row by number: the rows already there stay as written, and so does what
+ * is above the table and the points to decide; a file without a table gets one. */
+function withRows(text, added, words)
+{
+    const lines = text.split(/\r?\n/);
+    const numberOf = (line) => Number(/^\|\s*(\d+)\s*\|/.exec(line)?.[1] ?? Number.NaN);
+    const openAt = lines.findIndex((line) => line.startsWith(`## ${words.open}`));
+    const end = openAt < 0 ? lines.length : openAt;
+    const rowsAt = lines.map((line, index) => (index < end && !Number.isNaN(numberOf(line)) ? index : -1)).filter((index) => index >= 0);
+    const header = lines.findIndex((line, index) => index < end && /^\|\s*#\s*\|/.test(line));
+    const first = rowsAt[0] ?? (header >= 0 ? header + 2 : -1);
+    const last = rowsAt.at(-1) ?? first - 1;
+    const rows = [...rowsAt.map((index) => lines[index]), ...added].sort((one, other) => numberOf(one) - numberOf(other));
+
+    if (first < 0) {
+        const above = lines.slice(0, end).join("\n").trimEnd();
+        const below = openAt < 0 ? `## ${words.open}\n` : lines.slice(openAt).join("\n");
+        return `${above}${above ? "\n\n" : ""}| # | ${words.decision} | ${words.why} |\n|---|---|---|\n${rows.join("\n")}\n\n${below}`;
+    }
+
+    return [...lines.slice(0, first), ...rows, ...lines.slice(last + 1)].join("\n");
 }
 
 /** What reads and what does not, in lines for the person who decides. */

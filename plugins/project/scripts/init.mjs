@@ -8,7 +8,7 @@ import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { quoted } from "../lib/text.mjs";
 import { presets } from "../lib/words.mjs";
-import { moveSteps, survey, writeSettings } from "./adopt.mjs";
+import { moveDecisions, moveSteps, survey, writeSettings } from "./adopt.mjs";
 import { isMain, ProjectError, read, readmeTitle, runCli, today, write } from "./project.mjs";
 
 const examples = { language: "--language it", docs: "--docs project", people: '--people "Claude,Ann"', private: "--private private", name: '--name "My app"' };
@@ -104,6 +104,15 @@ function adoptCommand(root, args)
 {
     const { found, settings, report } = survey(root);
     const say = sayer(settings.language);
+
+    if (args[0] === "--decisions") {
+        if (!args[1] || !args[2]) {
+            throw new ProjectError(say("noValue", { name: "decisions", example: 'adopt --decisions design/flow.md "Decisions taken"' }));
+        }
+
+        console.log(say("decisionsMovedCount", moveDecisions(root, args[1], args[2])));
+        return;
+    }
 
     if (args.includes("--steps")) {
         const moved = moveSteps(root);

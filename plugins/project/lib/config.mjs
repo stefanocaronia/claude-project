@@ -47,6 +47,8 @@ export function readConfig(text, root)
             archive: resolve(docs, files.archive),
             index: resolve(docs, files.index),
             inbox: files.inbox ? resolve(docs, files.inbox) : undefined,
+            // The folder of the tasks' notes, one a task: T-12.md.
+            notes: resolve(docs, files.notes),
         },
         repos: given.repos === undefined ? undefined : (Array.isArray(given.repos) ? given.repos : []).map((repo) => ({ name: String(repo.name), path: resolve(root, repo.path ?? ".") })),
         archiveFolder: files.archiveFolder,
@@ -60,6 +62,8 @@ export function readConfig(text, root)
         limits: { ...defaults.limits, ...(given.limits ?? {}) },
         page: { ...defaults.page, ...(given.page ?? {}) },
         extensions: list(given.extensions, defaults.extensions).map((path) => resolve(root, path)),
+        // The project's key documents (a game's GDD, a business plan, a specification), the first to read: { name, path }.
+        documents: (Array.isArray(given.documents) ? given.documents : []).map((document) => ({ name: String(document.name ?? document.path), path: resolve(root, String(document.path)) })),
     };
 
     return config;

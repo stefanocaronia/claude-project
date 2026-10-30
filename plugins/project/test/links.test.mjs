@@ -1,0 +1,193 @@
+// What a task waits for and points to: the lines' `(after: …)` and `(see: …)` read and written, the dependencies of the backlog and the
+// todos together, and the commands and the check on a small project.
+import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { after, before, test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { formatLine, parseLine, taskErrors } from "../lib/backlog.mjs";
+import { badLinks, dependencies, joinLinks, listOf, seenFrom, splitLinks, todoLinks } from "../lib/links.mjs";
+import { sayer } from "../lib/messages.mjs";
+import { wordsOf } from "../lib/words.mjs";
+
+const en = wordsOf("en");
+const scripts = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts");
+let root;
+
+test("a text's after and see are read from its end in any order, and written back after first", () => {
+    assert.deepEqual(splitLinks("fix it (see: T-12, D-2) (after: T-62, #giulia-1)"), { text: "fix it", after: ["T-62", "#giulia-1"], see: ["T-12", "D-2"] });
+    assert.deepEqual(splitLinks("the (after: x) is in the middle"), { text: "the (after: x) is in the middle", after: [], see: [] });
+    assert.equal(joinLinks("fix it", ["T-62"], ["D-2"]), "fix it (after: T-62) (see: D-2)");
+    assert.equal(joinLinks("fix it", [], []), "fix it");
+    assert.deepEqual(listOf("T-3, #giulia-1 T-3"), ["T-3", "#giulia-1"]);
+    assert.deepEqual(listOf("-"), []);
+
+    const line = "- T-5 · P1 · high · Ann · 2026-10-29 · — · fix it (after: T-2, #giulia-1) (see: D-4) · done 2026-10-30";
+    const task = parseLine(line, "done", en);
+    assert.deepEqual([task.text, task.after, task.see, task.done], ["fix it", ["T-2", "#giulia-1"], ["D-4"], "2026-10-30"]);
+    assert.equal(formatLine(task, en), line);
+});
+
+test("an after names tasks and todo ids, a see tasks and decisions; a task never waits for itself", () => {
+    const prefixes = { task: "T", decision: "D" };
+    assert.deepEqual(badLinks("after", ["T-2", "#giulia-1", "D-3", "giulia"], prefixes), ["D-3", "giulia"]);
+    assert.deepEqual(badLinks("see", ["T-2", "D-3", "#giulia-1"], prefixes), ["#giulia-1"]);
+    const say = sayer("en");
+    const task = { id: 4, priority: "P1", effort: "high", to: "Ann", goal: "—", text: "ok", state: "todo", after: ["T-4", "D-1"], see: [] };
+    const errors = taskErrors(task, { words: en, people: ["Ann"], goals: [], say });
+    assert.equal(errors.length, 2);
+    assert.match(errors[0], /not D-1/);
+    assert.match(errors[1], /T-4 cannot wait for itself/);
+});
+
+test("a todo line gives its id, Crew's or a task's number, and what it waits for", () => {
+    assert.deepEqual(todoLinks("#matteo-3 · correct lootNote (after: T-61)"), { id: "#matteo-3", after: ["T-61"] });
+    assert.deepEqual(todoLinks("T-61 · my part of it"), { id: "T-61", after: [] });
+    assert.deepEqual(todoLinks("plain (after: #elena-1)"), { id: null, after: ["#elena-1"] });
+});
+
+test("the dependencies of the backlog and the todos: blockers, the chain to do first, a todo line that is a task, the cycles", () => {
+    const tasks = [
+        { id: 1, state: "todo", after: ["T-2"] },
+        { id: 2, state: "doing", after: ["#giulia-1"] },
+        { id: 3, state: "done", after: [] },
+        { id: 4, state: "todo", after: ["T-3", "#giulia-9"] },
+        { id: 5, state: "todo", after: ["T-6"] },
+        { id: 6, state: "todo", after: [] },
+    ];
+    const todos = [
+        { id: "#giulia-1", after: ["#matteo-3"], done: false },
+        { id: "#matteo-3", after: [], done: false },
+        { id: "T-6", after: ["T-5"], done: false },
+        { id: "T-3", after: [], done: false },
+    ];
+    const graph = dependencies(tasks, todos);
+    assert.deepEqual(graph.blockers("T-1"), ["T-2"]);
+    assert.deepEqual(graph.chain("T-1"), ["#matteo-3", "#giulia-1", "T-2"]);
+    // A task done or not found waits for nothing; the backlog, not the todo line, says whether T-3 is open.
+    assert.deepEqual(graph.blockers("T-4"), []);
+    assert.equal(graph.isOpen("T-3"), false);
+    assert.equal(graph.known("#giulia-9"), false);
+    // T-6's todo line waits for T-5, which waits for T-6.
+    assert.deepEqual(graph.cycles(), [["T-5", "T-6"]]);
+    assert.deepEqual(graph.chain("T-5"), ["T-6"]);
+    assert.deepEqual([...seenFrom([{ id: 7, see: ["T-1", "D-2"] }, { id: 8, see: ["T-1"] }]).entries()], [["T-1", ["T-7", "T-8"]], ["D-2", ["T-7"]]]);
+});
+
+before(() => {
+    root = mkdtempSync(join(tmpdir(), "claude-project-links-"));
+    put(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude, Ann]\n");
+    put(".claude/agents/giulia-ferri.md", "---\nname: giulia-ferri\n---\n");
+    put(".claude/agent-memory/giulia-ferri/todo.md", "- [ ] P1 · 2026-10-29 · #giulia-1 · read the rules\n- [ ] P2 · 2026-10-29 · T-2 · her part of the dice\n");
+    put("docs/README.md", "# Docs\n\n- [Plan](PLAN.md)\n- [Tasks](TASKS.md)\n- [Decisions](DECISIONS.md)\n");
+    put("docs/PLAN.md", "# Plan\n\n## Goals\n\n### Core (phase 1)\n");
+    put("docs/DECISIONS.md", "# Decisions\n\n| # | Decision | Why |\n|---|---|---|\n| 1 | Real dice. | |\n");
+    put("docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n- T-1 · P1 · high · Claude · 2026-10-01 · Core · the dice\n- T-2 · P2 · medium · Giulia · 2026-10-01 · Core · the rolls\n- T-3 · P3 · low · Ann · 2026-10-01 · Core · the log\n\n## Postponed\n\n## Done\n");
+});
+
+after(() => rmSync(root, { recursive: true, force: true }));
+
+test("set --after and --see write the links, show reads them both ways with the chain, and a cycle or a missing number is refused", () => {
+    assert.match(run("set", "T-1", "--after", "T-2, #giulia-1", "--see", "D-1"), /· the dice \(after: T-2, #giulia-1\) \(see: D-1\)$/);
+    assert.match(run("set", "T-3", "--see", "T-1"), /· the log \(see: T-1\)$/);
+    assert.match(run("set", "T-1", "--text", "the dice, fair"), /· the dice, fair \(after: T-2, #giulia-1\) \(see: D-1\)$/);
+    assert.match(run("add", "the table (after: T-1)", "--goal", "Core"), /T-4 added: .* · the table \(after: T-1\)$/);
+
+    const shown = run("show", "T-1");
+    assert.match(shown, /waits for: T-2 \(To do\), #giulia-1 \(open in a todo\)/);
+    assert.match(shown, /the chain, in order: T-2 → #giulia-1 → T-1/);
+    assert.match(shown, /waited for by: T-4/);
+    assert.match(shown, /see: D-1/);
+    assert.match(shown, /seen from: T-3/);
+
+    const before = read("docs/TASKS.md");
+    assert.match(fails("set", "T-2", "--after", "T-4"), /A cycle of waits, each waiting for the next: T-1 → T-2 → T-4 → T-1/);
+    assert.match(fails("set", "T-2", "--after", "T-2"), /T-2 cannot wait for itself/);
+    assert.match(fails("set", "T-3", "--see", "T-99, D-7"), /T-3 links to T-99[\s\S]*T-3 links to D-7/);
+    assert.match(fails("set", "T-3", "--after", "giulia"), /An after names a backlog task/);
+    assert.equal(read("docs/TASKS.md"), before);
+
+    assert.match(run("set", "T-1", "--after", "", "--see", ""), /· the dice, fair$/);
+});
+
+test("a task's note is written once, in the notes folder, and show names it", () => {
+    assert.equal(run("note", "T-2"), "docs/tasks/T-2.md");
+    assert.equal(read("docs/tasks/T-2.md"), "# T-2 · the rolls\n");
+    writeFileSync(join(root, "docs/tasks/T-2.md"), "# T-2 · the rolls\n\nWhere it got to.\n");
+    assert.equal(run("note", "T-2"), "docs/tasks/T-2.md");
+    assert.match(read("docs/tasks/T-2.md"), /Where it got to/);
+    assert.match(run("show", "T-2"), /note: docs\/tasks\/T-2\.md/);
+});
+
+test("the check finds a cycle through a todo line, an after to a todo id nobody gave, a link to a missing task and an orphan note", () => {
+    const tasks = read("docs/TASKS.md").replace("· the log", "· the log (after: #giulia-7) (see: T-50)").replace("· the rolls", "· the rolls (after: T-3)");
+    writeFileSync(join(root, "docs/TASKS.md"), tasks);
+    writeFileSync(join(root, ".claude/agent-memory/giulia-ferri/todo.md"), "- [ ] P1 · 2026-10-29 · #giulia-1 · read the rules\n- [ ] P2 · 2026-10-29 · T-3 · her part (after: T-2)\n");
+    put("docs/tasks/T-40.md", "# T-40\n");
+
+    const findings = JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: root, encoding: "utf8", env: environment() }).stdout);
+    const has = (severity, pattern) => findings.some((finding) => finding.severity === severity && pattern.test(`${finding.file}:${finding.line} ${finding.message}`));
+    assert.ok(has("error", /TASKS\.md:\d+ A cycle of waits, each waiting for the next: T-2 → T-3 → T-2/));
+    assert.ok(has("warning", /TASKS\.md:\d+ T-3 waits for #giulia-7, which no colleague's todo holds/));
+    assert.ok(has("error", /TASKS\.md:\d+ T-3 links to T-50, which does not exist/));
+    assert.ok(has("warning", /docs\/tasks\/T-40\.md:null The note of T-40/));
+    assert.ok(!has("warning", /#giulia-1/));
+});
+
+function run(...args)
+{
+    return execFileSync(process.execPath, [join(scripts, "backlog.mjs"), ...args], { cwd: root, encoding: "utf8", env: environment() }).trim();
+}
+
+function fails(...args)
+{
+    const result = spawnSync(process.execPath, [join(scripts, "backlog.mjs"), ...args], { cwd: root, encoding: "utf8", env: environment() });
+    assert.notEqual(result.status, 0, `backlog.mjs ${args.join(" ")} should fail`);
+    return `${result.stdout}${result.stderr}`;
+}
+
+function environment()
+{
+    const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...rest } = process.env;
+    return rest;
+}
+
+function put(path, text)
+{
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), text);
+}
+
+function read(path)
+{
+    return existsSync(join(root, path)) ? readFileSync(join(root, path), "utf8") : "";
+}
+
+test("the page serves a task's note by its number, and its data carries each task's links", async () => {
+    const { pageServer } = await import("../page/serve.mjs");
+    const { server } = await pageServer(root);
+    await new Promise((done) => server.listen(0, "127.0.0.1", done));
+    const port = server.address().port;
+
+    try {
+        await pageChecks(port);
+    } finally {
+        server.closeAllConnections();
+        server.close();
+    }
+});
+
+async function pageChecks(port)
+{
+    const note = await fetch(`http://127.0.0.1:${port}/note/2`);
+    assert.equal(note.status, 200);
+    assert.match(await note.text(), /Where it got to/);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/note/3`)).status, 404);
+
+    const data = await (await fetch(`http://127.0.0.1:${port}/data`)).json();
+    const two = data.board.find((task) => task.id === 2);
+    assert.deepEqual([two.after, two.blockedBy, two.waitedBy, two.note, two.noteHref], [["T-3"], ["T-3"], [], "docs/tasks/T-2.md", "/note/2"]);
+    assert.deepEqual(data.board.find((task) => task.id === 3).see, ["T-50", "T-1"]);
+}

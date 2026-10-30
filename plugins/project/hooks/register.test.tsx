@@ -14,13 +14,16 @@ const snapshot = {
     page: "http://localhost:5790",
     links: [{ label: "↗ betasim 1280", href: "http://localhost:5790/extension/game/betasim/1280/latest/index.html" }, { label: "▶ Demo · 5e", post: "http://localhost:5790/extension/game/demo/5e/start" }],
     people: ["Claude", "Stefano"],
+    documents: [{ name: "GDD", href: "http://localhost:5790/document/0", exists: true }],
     colleagues: [{ id: "matteo-conti", name: "Matteo", fullName: "Matteo Conti", role: "code review", color: "red" }],
     tasks: [
-        { id: 62, priority: "P1", effort: "alto", effortKey: "high", to: "Matteo", colleague: "matteo-conti", created: "2026-10-28", goal: "Revisione", text: "I pacchetti nei loro repo", state: "doing" },
-        { id: 143, priority: "P2", effort: "alto", effortKey: "high", to: "Claude", colleague: null, created: "2026-10-29", goal: "—", text: "Il plugin claude-project", state: "doing" },
-        { id: 61, priority: "P1", effort: "alto", effortKey: "high", to: "Matteo", colleague: "matteo-conti", created: "2026-10-28", goal: "Revisione", text: "La plancia, in tre parti", state: "todo" },
-        { id: 70, priority: "P1", effort: "medio", effortKey: "medium", to: "Stefano", colleague: null, created: "2026-10-28", goal: "—", text: "Il login di npm", state: "todo" },
-        { id: 71, priority: "P3", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-28", goal: "Revisione", text: "Più avanti", state: "postponed" },
+        { id: 62, priority: "P1", effort: "alto", effortKey: "high", to: "Matteo", colleague: "matteo-conti", created: "2026-10-28", goal: "Revisione", text: "I pacchetti nei loro repo", state: "doing", after: [], blockedBy: [], chain: [], waitedBy: ["T-72"], see: [], seenFrom: [], note: null, noteHref: null },
+        { id: 143, priority: "P2", effort: "alto", effortKey: "high", to: "Claude", colleague: null, created: "2026-10-29", goal: "—", text: "Il plugin claude-project", state: "doing", after: [], blockedBy: [], chain: [], waitedBy: [], see: ["D-541"], seenFrom: ["T-61"], note: "docs/compiti/T-143.md", noteHref: "http://localhost:5790/note/143" },
+        { id: 61, priority: "P1", effort: "alto", effortKey: "high", to: "Matteo", colleague: "matteo-conti", created: "2026-10-28", goal: "Revisione", text: "La plancia, in tre parti", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: ["T-143"], seenFrom: [], note: null, noteHref: null },
+        // The oldest P1 to do, but it waits for T-62, still in progress: the next-task button skips it.
+        { id: 72, priority: "P1", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-20", goal: "Revisione", text: "Il rilascio", state: "todo", after: ["T-62", "#giulia-1"], blockedBy: ["T-62", "#giulia-1"], chain: ["#giulia-1", "T-62"], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
+        { id: 70, priority: "P1", effort: "medio", effortKey: "medium", to: "Stefano", colleague: null, created: "2026-10-28", goal: "—", text: "Il login di npm", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
+        { id: 71, priority: "P3", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-28", goal: "Revisione", text: "Più avanti", state: "postponed", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
     ],
     plan: { updated: "2026-10-29", goals: [{ name: "Revisione", phase: null, done: 6, total: 9, isDoing: true }, { name: "La 5e", phase: 4, done: 0, total: 3, isDoing: false }] },
     decisions: {
@@ -99,9 +102,10 @@ test("the panel shows the project's numbers, the tasks in progress and the P1 to
     for (const surface of surfaces) {
         const ui = await $.ui.mount({ plugin, surface, component: "Pane", requestId: "project", props });
         expect(await ui.find({ type: "Text", text: "demo" })).toBeDefined();
+        expect((await ui.find({ key: "toggle-documents" }))?.props.label).toBe("▾ 📄 Documenti");
         expect((await ui.find({ key: "toggle-doing" }))?.props.label).toBe("▾ ⚒︎ In corso · 2");
         expect((await ui.find({ key: "toggle-goals" }))?.props.label).toBe("▾ ⚑︎ Piano · 2");
-        expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 3");
+        expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 4");
         expect((await ui.find({ key: "toggle-decisions" }))?.props.label).toBe("▸ ⚖︎ Decisioni · 2 da decidere");
         expect(await ui.find({ type: "Text", text: "▸ I pacchetti nei loro repo" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /^▸ Revisione/ })).toBeDefined();
@@ -251,4 +255,41 @@ test("a task in progress: a colleague at work shows instead of ▶, the chat tha
     // This chat holds T-143 now: no ▶, once the start shown on the button is over.
     expect(await again.find({ key: "start-143" })).toBeUndefined();
     await again.unmount();
+});
+
+test("a blocked task shows what it waits for in place of its age, its ▶ asks for the chain, and its links show both ways", async ($, on) => {
+    const { prompts, commands } = world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+
+    for (const surface of surfaces) {
+        const ui = await $.ui.mount({ plugin, surface, component: "Pane", requestId: "project", props });
+        expect(await ui.find({ type: "Text", text: "⛓ T-62 +1" })).toBeDefined();
+        await ui.press({ key: "open-72" });
+        expect(await ui.find({ type: "Text", text: "aspetta: T-62, #giulia-1" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: "⛓ la catena, in ordine: #giulia-1 → T-62 → T-72" })).toBeDefined();
+        await ui.press({ key: "open-72" });
+        await ui.press({ key: "open-143" });
+        expect(await ui.find({ type: "Text", text: "vedi: D-541" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: "citato da: T-61" })).toBeDefined();
+        expect((await ui.find({ type: "Link", text: "📄 Nota ↗" }))?.props.href).toBe("http://localhost:5790/note/143");
+        await ui.press({ key: "open-143" });
+        await ui.unmount();
+    }
+
+    // The start shows on its ▶ for a while: pressed once, on the desktop.
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    await ui.press({ key: "start-72" });
+    expect(prompts[0]).toMatch(/^Avvia la catena di T-72: Il rilascio\. .*la catena, in ordine: #giulia-1 → T-62 → T-72\. .*chiedimi una volta sola/);
+    await ui.unmount();
+    expect(commands).toEqual([]);
+});
+
+test("the next-task button skips a blocked task, and taking up a task with a note sends Claude to it", async ($, on) => {
+    const { prompts } = world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
+    expect((await ui.find({ key: "next-task" }))?.props.label).toBe("▶ Prossimo compito (T-61)");
+    await ui.press({ key: "start-143" });
+    expect(prompts[0]).toMatch(/^Riprendi T-143: .* La sua nota, col contesto e dove è arrivato il lavoro: docs\/compiti\/T-143\.md; leggila prima\.$/);
+    await ui.unmount();
 });

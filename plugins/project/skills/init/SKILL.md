@@ -41,6 +41,8 @@ Then propose the migration as one numbered list, one decision per point, with wh
    - `words:` headings that differ from the language's.
    - `page.port` when another page holds 5790.
    - `extensions:` for the parts of an old page that belong to this project alone.
+   - `documents:` the project's key documents (a GDD, a specification, a business plan), from its README and docs' index.
+2b. **Decisions in another format**: a numbered list under a heading (`72. **Title** text`) moves into the table with `init.mjs adopt --decisions <file> "<heading>"`, the numbers kept, so every citation stays true; the list leaves a link in its place. Proposals still open go under the table's heading of what is to decide, by hand.
 2. **What does not read**: lines of the backlog in another format, decisions without the table, a plan whose steps are checkboxes. The plan's checkbox steps under its goals go into the backlog with `init.mjs adopt --steps`: open ones to do, done ones archived, their sub-lines joined to the text. Other formats you convert with Edit, line by line, after the user's yes.
 3. **The old tools** the plugin replaces, point by point: what each did, which command of the plugin does it now (see the `project` and `tidy` skills), and that it goes. A tool that does something the plugin does not keeps its place, or becomes an extension.
 4. **The texts that cite them**: the instructions, the docs' index, the colleagues' memory. Each line rewritten to the plugin's commands.
@@ -68,5 +70,6 @@ files: { decisions: DECISIONI.md, inbox: IDEE.md }   # names other than the lang
 repos: [{ name: app, path: . }, { name: docs, path: private }]   # the commits the page counts
 page: { port: 5790 }         # one port per project
 extensions: []               # modules that add the project's own parts to the page and links to the panel
+documents: [{ name: GDD, path: private/project/GDD.md }]   # the key documents, in the panel and the page
 words: {}                    # any heading or marker of the language, overridden
 ```

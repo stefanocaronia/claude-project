@@ -17,7 +17,7 @@ const board = atom({ plugin: "project", key: "board" } as const, { snapshot: nul
 const holdsLast = 24 * 3_600_000;
 const view = atom({ plugin: "project", key: "view" } as const, { sections: {}, expanded: null, whole: {}, starting: {} }, { shape: "view-1" });
 // The sections open at the start, as Joseph's sketch has them: the decisions closed, the tile above says how many wait.
-const openAtStart: Record<string, boolean> = { links: true, doing: true, rest: true, goals: true, decisions: false };
+const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, goals: true, decisions: false };
 // How many rows a section shows before "show all".
 const rows: Record<string, number> = { doing: 5, rest: 10, goals: 5, open: 3, recent: 3 };
 const proposalLength = 400;
@@ -227,8 +227,27 @@ export const register: Register = (on) => {
                 return <Box key={`starting-${task.id}`} flexShrink={0}><Text dimColor wrap="truncate">{words("starting")}</Text></Box>;
             }
 
+            // A task that waits for others still open: ▶ asks Claude for the whole chain, with one yes.
+            if (isBlocked(task) && !held) {
+                return <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={() => startChain($, snapshot, task)} />;
+            }
+
             return <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={() => startTask($, snapshot, task, member, held?.session)} />;
         };
+        // In place of its age, a blocked task shows what it waits for: «⛓ T-62», and how many more.
+        const ageOrWait = (task: Task) => {
+            const blockers = task.blockedBy ?? [];
+            const label = blockers.length > 0 ? `⛓ ${blockers[0]}${blockers.length > 1 ? ` +${blockers.length - 1}` : ""}` : age(task.created);
+            return <Box key={`age-${task.id}`} flexShrink={0}><Text dimColor wrap="truncate">{label}</Text></Box>;
+        };
+        // A task's links, both ways, under its facts: what it waits for and what waits for it, what it points to and what points to it.
+        const linkLines = (task: Task) => [
+            (task.after ?? []).length > 0 ? words("waitsFor", { list: task.after.join(", ") }) : null,
+            (task.chain ?? []).length > 0 ? `⛓ ${words("chainFirst", { list: [...task.chain, `${prefix}-${task.id}`].join(" → ") })}` : null,
+            (task.waitedBy ?? []).length > 0 ? words("waitedBy", { list: task.waitedBy.join(", ") }) : null,
+            (task.see ?? []).length > 0 ? words("seeLabel", { list: task.see.join(", ") }) : null,
+            (task.seenFrom ?? []).length > 0 ? words("seenFrom", { list: task.seenFrom.join(", ") }) : null,
+        ].filter((line): line is string => Boolean(line)).map((line, index) => <Text key={`link-${task.id}-${index}`} dimColor>{line}</Text>);
         const taskRow = (task: Task) => {
             const key = `task-${task.id}`;
             const isExpanded = panel.expanded === key;
@@ -243,7 +262,7 @@ export const register: Register = (on) => {
                             <Text wrap="truncate-end">{`${isExpanded ? "▾" : "▸"} ${task.text}`}</Text>
                         </Button>
                     </Box>
-                    <Box flexShrink={0}><Text dimColor wrap="truncate">{age(task.created)}</Text></Box>
+                    {ageOrWait(task)}
                     {effortCell(task)}
                     {start(task)}
                 </Box>,
@@ -252,7 +271,9 @@ export const register: Register = (on) => {
                         <Box key={`details-${task.id}`} flexDirection="column" gap={1} paddingLeft={isDesktop ? 4 : 2}>
                             <Text>{task.text}</Text>
                             <Text dimColor>{facts.filter(Boolean).join(" · ")}</Text>
+                            {linkLines(task)}
                             <Box flexDirection="row" columnGap={2}>
+                                {task.noteHref ? <Link key={`note-${task.id}`} href={task.noteHref}>{words("openNote")}</Link> : null}
                                 <Button key={`done-${task.id}`} plain label={words("markDone")} onPress={() => backlog($, ["done", `${prefix}-${task.id}`])} />
                                 {task.state === "postponed" ? null : <Button key={`postpone-${task.id}`} plain dimColor label={words("postpone")} onPress={() => backlog($, ["postpone", `${prefix}-${task.id}`])} />}
                             </Box>
@@ -375,7 +396,8 @@ export const register: Register = (on) => {
         const rank = (proposal: Proposal) => (proposal.priority ? Number(proposal.priority.slice(1)) : 4);
         const proposals = snapshot.decisions.open.slice().sort((first, second) => rank(first) - rank(second) || (first.day ?? "9999").localeCompare(second.day ?? "9999") || first.line - second.line);
         // What the buttons above the links start: the first task someone here can start, the first decision to take.
-        const nextTask = rest.find((task) => task.state === "todo" && (task.to === "Claude" || byName.has(task.to)));
+        // A blocked task is skipped: its chain starts from its own ▶.
+        const nextTask = rest.find((task) => task.state === "todo" && !isBlocked(task) && (task.to === "Claude" || byName.has(task.to)));
         const nextProposal = proposals[0];
         const actions = (
             <Box key="actions" flexDirection="row" flexWrap="wrap" gap={1}>
@@ -438,6 +460,17 @@ export const register: Register = (on) => {
                                     {link.href
                                         ? <Link key={`link-${index}`} href={link.href}>{link.label}</Link>
                                         : <Button key={`link-${index}`} plain label={link.label} onPress={() => postLink($, link.post ?? "")} />}
+                                </Box>
+                            ))}
+                        </Box>,
+                    ])
+                    : null}
+                {(snapshot.documents ?? []).length > 0
+                    ? section("documents", "📄", words("sectionDocuments"), [
+                        <Box key="documents-row" flexDirection="row" flexWrap="wrap" gap={1}>
+                            {(snapshot.documents ?? []).map((document, index) => (
+                                <Box key={`document-box-${index}`} borderStyle="round" {...border} paddingX={1} {...(isDesktop ? { hover: { backgroundColor: stateLayer } } : {})}>
+                                    {document.exists ? <Link key={`document-${index}`} href={document.href}>{document.name}</Link> : <Text key={`document-${index}`} dimColor>{document.name}</Text>}
                                 </Box>
                             ))}
                         </Box>,
@@ -649,9 +682,8 @@ async function startTask($: EngineInterface, snapshot: Snapshot, task: Task, mem
 {
     const words = sayer(snapshot.language);
     const id = `${snapshot.prefixes.task}-${task.id}`;
-    const at = await $.clock.now();
     const isGoingOn = task.state === "doing";
-    await update($, view, (old) => ({ ...old, starting: { ...Object.fromEntries(Object.entries(old.starting).filter(([, when]) => at - when < startingFor)), [`task-${task.id}`]: at } }));
+    await markStarting($, task.id);
 
     if (elsewhere) {
         await submit($, words("promptElsewhere", { id, text: task.text, session: elsewhere }));
@@ -669,7 +701,28 @@ async function startTask($: EngineInterface, snapshot: Snapshot, task: Task, mem
     }
 
     await hold($, (held) => applyHold(held, [task.id], { colleague: null, agentId: null })).catch(() => undefined);
-    await submit($, words(isGoingOn ? "promptResume" : "promptWork", { id, text: task.text }));
+    await submit($, words(isGoingOn ? "promptResume" : "promptWork", { id, text: task.text }) + (task.note ? words("promptNote", { path: task.note }) : ""));
+}
+
+/** ▶ on a task that waits for others: Claude shows the whole chain, the first first, and starts it on one yes. */
+async function startChain($: EngineInterface, snapshot: Snapshot, task: Task): Promise<void>
+{
+    const id = `${snapshot.prefixes.task}-${task.id}`;
+    await markStarting($, task.id);
+    await submit($, sayer(snapshot.language)("promptChain", { id, text: task.text, chain: [...task.chain, id].join(" → ") }));
+}
+
+/** The ▶ of a task shows that it starts, for a while, so that it is not pressed twice; the old marks go. */
+async function markStarting($: EngineInterface, id: number): Promise<void>
+{
+    const at = await $.clock.now();
+    await update($, view, (old) => ({ ...old, starting: { ...Object.fromEntries(Object.entries(old.starting).filter(([, when]) => at - when < startingFor)), [`task-${id}`]: at } }));
+}
+
+/** Whether a task waits for one still open. */
+function isBlocked(task: Task): boolean
+{
+    return (task.blockedBy ?? []).length > 0;
 }
 
 async function submit($: EngineInterface, text: string): Promise<void>

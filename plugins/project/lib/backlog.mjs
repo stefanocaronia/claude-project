@@ -1,5 +1,6 @@
 // The backlog's lines: `- T-12 · P2 · medium · Matteo · 2026-10-29 · <goal> · text · done 2026-10-30 · archived 2026-10-31`, one task a
 // line under the heading of its state. Pure: the text in, the text out, in the project's words.
+import { badLinks, joinLinks, splitLinks } from "./links.mjs";
 import { escapeRegex } from "./text.mjs";
 import { priorityKeys, stateKeys } from "./words.mjs";
 
@@ -17,16 +18,18 @@ export function parseLine(line, state, words, prefix = "T")
 
     const [, id, priority, effort, to, created, goal, rest] = match;
     const marks = new RegExp(`^(.*?)(?: · ${escapeRegex(words.doneMarker)} (\\d{4}-\\d{2}-\\d{2}))?(?: · ${escapeRegex(words.archivedMarker)} (\\d{4}-\\d{2}-\\d{2}))?$`);
-    const [, text, done, archived] = marks.exec(rest);
-    return { id: Number(id), priority, effort: effort.trim(), to: to.trim(), created, goal: goal.trim(), text: text.trim(), done: done ?? null, archived: archived ?? null, state };
+    const [, whole, done, archived] = marks.exec(rest);
+    const { text, after, see } = splitLinks(whole);
+    return { id: Number(id), priority, effort: effort.trim(), to: to.trim(), created, goal: goal.trim(), text, after, see, done: done ?? null, archived: archived ?? null, state };
 }
 
-/** The task as a line again. */
+/** The task as a line again, its links at the end of its text. */
 export function formatLine(task, words, prefix = "T")
 {
     const done = task.done ? `${separator}${words.doneMarker} ${task.done}` : "";
     const archived = task.archived ? `${separator}${words.archivedMarker} ${task.archived}` : "";
-    return `- ${prefix}-${task.id}${separator}${[task.priority, task.effort, task.to, task.created, task.goal, task.text].join(separator)}${done}${archived}`;
+    const text = joinLinks(task.text, task.after, task.see);
+    return `- ${prefix}-${task.id}${separator}${[task.priority, task.effort, task.to, task.created, task.goal, text].join(separator)}${done}${archived}`;
 }
 
 /** The tasks of a backlog's text, each with its line and the state of its heading, and the lines that do not read as a task. What comes
@@ -109,7 +112,7 @@ export function nextId(tasks)
 }
 
 /** What makes a task wrong before it is written, as messages; empty when it is right. */
-export function taskErrors(task, { words, people, goals, prefix = "T", say })
+export function taskErrors(task, { words, people, goals, prefix = "T", decisionPrefix = "D", say })
 {
     const errors = [];
     const efforts = Object.values(words.efforts);
@@ -136,6 +139,18 @@ export function taskErrors(task, { words, people, goals, prefix = "T", say })
 
     if (/ · /.test(task.text) || /\n/.test(task.text) || task.text.trim() === "") {
         errors.push(say("badText", { prefix }));
+    }
+
+    for (const kind of ["after", "see"]) {
+        const bad = badLinks(kind, task[kind] ?? [], { task: prefix, decision: decisionPrefix });
+
+        if (bad.length > 0) {
+            errors.push(say(kind === "after" ? "badAfter" : "badSee", { list: bad.join(", "), task: `${prefix}-12`, decision: `${decisionPrefix}-2` }));
+        }
+    }
+
+    if ((task.after ?? []).includes(`${prefix}-${task.id}`)) {
+        errors.push(say("afterItself", { id: `${prefix}-${task.id}` }));
     }
 
     return errors;

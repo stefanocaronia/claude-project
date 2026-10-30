@@ -7,7 +7,7 @@ import { planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { backlogProblems } from "./backlog.mjs";
-import { citingFiles, isMain, loadProject, read, readDecisions, runCli, shown, today, todoFiles } from "./project.mjs";
+import { citingFiles, isMain, loadProject, read, readBacklog, readDecisions, readDependencies, readTodos, runCli, shown, today, todoFiles, todoIdsEver } from "./project.mjs";
 
 /** Every finding about the docs, from errors that must be fixed to notes for the cleanup: { severity, kind, file, line, message }. */
 export function check(config, say)
@@ -21,6 +21,7 @@ export function check(config, say)
     checkRevisions(config, say, decisions, add);
     checkTodos(config, say, add);
     checkBacklog(config, say, add);
+    checkLinks(config, say, add);
     checkPlan(config, say, add);
     checkOpen(config, say, add);
     checkMarkdown(config, say, add);
@@ -195,6 +196,39 @@ function checkBacklog(config, say, add)
 {
     for (const problem of backlogProblems(config, say)) {
         add("error", "backlog", problem.file, problem.line, problem.message);
+    }
+}
+
+/** The waits of the backlog and the todos read together: a cycle, a todo id nobody gave, a note of a task that is not there. */
+function checkLinks(config, say, add)
+{
+    const prefix = config.prefixes.task;
+    const { tasks } = readBacklog(config);
+    const graph = readDependencies(config, tasks);
+    const todoIds = todoIdsEver(config);
+    const todos = readTodos(config);
+
+    for (const cycle of graph.cycles()) {
+        // Where the cycle starts: its first task's line, or the first todo line with its id.
+        const first = tasks.find((task) => `${prefix}-${task.id}` === cycle[0]) ?? todos.find((todo) => todo.id === cycle[0]);
+        add("error", "links", first?.file ?? config.files.tasks, first?.line ?? null, say("cycle", { ids: [...cycle, cycle[0]].join(" → ") }));
+    }
+
+    for (const task of tasks) {
+        for (const other of task.after.filter((one) => one.startsWith("#") && !todoIds.has(one))) {
+            add("warning", "links", task.file, task.line, say("afterUnknownTodo", { id: `${prefix}-${task.id}`, other }));
+        }
+    }
+
+    const ids = new Set(tasks.map((task) => task.id));
+    const notes = existsSync(config.files.notes) ? readdirSync(config.files.notes) : [];
+
+    for (const name of notes) {
+        const id = new RegExp(`^${escapeRegex(prefix)}-(\\d+)\\.md$`).exec(name)?.[1];
+
+        if (id && !ids.has(Number(id))) {
+            add("warning", "links", `${config.files.notes}/${name}`, null, say("noteOrphan", { id: `${prefix}-${id}` }));
+        }
     }
 }
 

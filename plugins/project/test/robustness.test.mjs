@@ -169,3 +169,37 @@ test("a task a failed write left in both files is written once by the next chang
     assert.equal(all.match(/^- T-3 /gm).length, 1);
     rmSync(root, { recursive: true, force: true });
 });
+
+test("the page changes a task's state or priority through the backlog's command line, and nothing else", async () => {
+    const root = project();
+    const { pageServer } = await import("../page/serve.mjs");
+    const { server } = await pageServer(root);
+    await new Promise((done) => server.listen(0, "127.0.0.1", done));
+    const port = server.address().port;
+    const post = async (payload) => (await fetch(`http://127.0.0.1:${port}/backlog`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })).json();
+    assert.equal((await post({ command: "start", id: "T-1" })).ok, true);
+    assert.equal((await post({ command: "set", id: "T-2", priority: "P1" })).ok, true);
+    assert.equal((await post({ command: "archive", id: "T-1" })).ok, false);
+    assert.equal((await post({ command: "set", id: "T-2; rm -rf /", priority: "P1" })).ok, false);
+    assert.match((await post({ command: "done", id: "T-9" })).message, /T-9 non c'è/);
+    const tasks = readFileSync(join(root, "docs/TASKS.md"), "utf8");
+    assert.match(tasks, /## In corso\n\n- T-1 /);
+    assert.match(tasks, /- T-2 · P1 /);
+    const data = await (await fetch(`http://127.0.0.1:${port}/data`)).json();
+    assert.deepEqual(data.board.map((task) => [task.id, task.state]), [[1, "doing"], [2, "todo"], [3, "done"]]);
+    assert.equal(data.decisions.all[0].number, 1);
+    server.closeAllConnections();
+    server.close();
+    rmSync(root, { recursive: true, force: true });
+});
+
+test("adopt --decisions moves a numbered list into the table with its numbers, and refuses a number the table has", () => {
+    const root = project({ "design/flow.md": "# Flow\n\n## Decisioni prese\n\n1. **Uno.** Il primo. Perché: per cominciare.\n2. **Due** | con una barra\n   e una riga che continua.\n\n## Altro\n\nResta.\n" });
+    writeFileSync(join(root, "docs/DECISIONI.md"), "# Decisioni\n\n| # | Decisione | Perché |\n|---|---|---|\n| 5 | Cinque. | |\n\n## Da decidere\n\n- aperta\n");
+    assert.match(cli(root, "init.mjs", "adopt", "--decisions", "design/flow.md", "Decisioni prese").stdout, /2 decisioni spostate in docs\/DECISIONI\.md/);
+    assert.equal(readFileSync(join(root, "docs/DECISIONI.md"), "utf8"), "# Decisioni\n\n| # | Decisione | Perché |\n|---|---|---|\n| 1 | **Uno.** Il primo. | per cominciare. |\n| 2 | **Due** / con una barra e una riga che continua. |  |\n| 5 | Cinque. | |\n\n## Da decidere\n\n- aperta\n");
+    assert.equal(readFileSync(join(root, "design/flow.md"), "utf8"), "# Flow\n\n## Decisioni prese\n\nLe decisioni sono in [DECISIONI.md](../docs/DECISIONI.md).\n\n## Altro\n\nResta.\n");
+    writeFileSync(join(root, "design/again.md"), "## Decisioni prese\n\n5. doppia\n");
+    assert.match(cli(root, "init.mjs", "adopt", "--decisions", "design/again.md", "Decisioni prese").stderr, /D-5 sono già nella tabella/);
+    rmSync(root, { recursive: true, force: true });
+});

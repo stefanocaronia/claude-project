@@ -802,6 +802,793 @@
         overflow: auto;
     }
 
+    /* The panel's language: Crew's green of work and purple of decisions, a faint gray card with Material's outline. */
+    :root {
+        --work: #4e9a6b;
+        --decision: #8a63c9;
+        --outline: #8080803d;
+        --card: color-mix(in srgb, var(--ink) 3.5%, var(--surface));
+        --card-hover: color-mix(in srgb, var(--ink) 7%, var(--surface));
+    }
+
+    .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
+    button:focus-visible, select:focus-visible, input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
+
+    .icon {
+        display: block;
+        flex: none;
+    }
+
+    svg.icon {
+        width: auto;
+        height: auto;
+    }
+
+    .face {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        flex: none;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        object-fit: cover;
+        font-size: 9px;
+        font-weight: 650;
+        color: #ffffff;
+    }
+
+    .face svg {
+        width: 22px;
+        height: 22px;
+    }
+
+    .prio {
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+    }
+
+    button.prio:hover {
+        background: var(--outline);
+    }
+
+    .effort {
+        color: var(--muted);
+    }
+
+    .work {
+        color: var(--work);
+        font-weight: 600;
+    }
+
+    /* The board: a column by state, a lane by goal */
+    .board-head, .lane-cells {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .board-head {
+        position: sticky;
+        top: var(--tabs-height, 58px);
+        z-index: 2;
+        margin: 0 -20px;
+        padding: 10px 20px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--grid);
+    }
+
+    .column-name {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink-2);
+    }
+
+    .column-name .days {
+        font-weight: 400;
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .column-mark {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex: none;
+        background: var(--axis);
+    }
+
+    .column-mark.doing {
+        background: var(--work);
+    }
+
+    .column-mark.done {
+        background: var(--good);
+    }
+
+    .lane {
+        border-bottom: 1px solid var(--grid);
+    }
+
+    .lane > summary {
+        list-style: none;
+        cursor: pointer;
+        display: grid;
+        grid-template-columns: 12px minmax(0, 1fr) minmax(80px, 220px) 52px;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 6px;
+        border-radius: 8px;
+    }
+
+    .lane > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .lane > summary:hover {
+        background: var(--surface-2);
+    }
+
+    .lane > summary:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+    }
+
+    .chevron {
+        width: 0;
+        height: 0;
+        border-left: 5px solid var(--muted);
+        border-top: 4px solid transparent;
+        border-bottom: 4px solid transparent;
+        transition: transform 0.15s;
+    }
+
+    .lane[open] .chevron {
+        transform: rotate(90deg);
+    }
+
+    .lane .title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .lane .title b {
+        font-weight: 580;
+    }
+
+    .lane .title span, .lane .count {
+        color: var(--muted);
+        font-size: 12px;
+        margin-left: 6px;
+    }
+
+    .lane .count {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        margin: 0;
+    }
+
+    .lane .bar.doing > i {
+        background: var(--work);
+    }
+
+    .lane-cells {
+        padding: 2px 0 16px;
+    }
+
+    .cell {
+        min-width: 0;
+        min-height: 48px;
+        border-radius: 10px;
+        transition: background 0.12s;
+    }
+
+    .cell.can-drop {
+        outline: 1px dashed var(--axis);
+        outline-offset: 3px;
+    }
+
+    .cell.target {
+        outline: 2px dashed var(--accent);
+        background: color-mix(in srgb, var(--accent-soft) 30%, transparent);
+    }
+
+    .cell-name {
+        display: none;
+    }
+
+    .cell-list, .rows {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .cell-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .task {
+        background: var(--card);
+        border: 1px solid var(--outline);
+        border-radius: 10px;
+        padding: 7px 10px 8px;
+        display: grid;
+        gap: 4px;
+        cursor: grab;
+        transition: background 0.12s, opacity 0.12s;
+    }
+
+    .task:hover {
+        background: var(--card-hover);
+    }
+
+    .task.doing {
+        box-shadow: inset 3px 0 0 var(--work);
+    }
+
+    .task.dragging, .task.pending {
+        opacity: 0.45;
+    }
+
+    .task.landed {
+        animation: landed 0.6s ease-out;
+    }
+
+    @keyframes landed {
+        from { background: color-mix(in srgb, var(--work) 22%, var(--surface)); }
+    }
+
+    .task-top, .task-foot {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        font-size: 12px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .task-top .id {
+        font-weight: 600;
+        color: var(--ink-2);
+    }
+
+    .task-top .grow {
+        flex: 1;
+    }
+
+    .task-text {
+        font: inherit;
+        font-size: 13px;
+        line-height: 1.4;
+        text-align: left;
+        color: var(--ink);
+        background: none;
+        border: 0;
+        border-radius: 4px;
+        padding: 0;
+        width: 100%;
+        cursor: pointer;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+    }
+
+    .task-text[aria-expanded="true"] {
+        -webkit-line-clamp: unset;
+    }
+
+    .task.done .task-text, .row.done .task-text {
+        color: var(--muted);
+    }
+
+    .task.done .task-text {
+        -webkit-line-clamp: 2;
+    }
+
+    .task.done .task-text[aria-expanded="true"] {
+        -webkit-line-clamp: unset;
+    }
+
+    .moves {
+        display: none;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
+        padding-top: 4px;
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    .task:focus-within .moves, .task.open .moves {
+        display: flex;
+    }
+
+    .moves button {
+        font-size: 12px;
+        padding: 2px 9px;
+        border-radius: 7px;
+        color: var(--ink);
+        border-color: var(--outline);
+    }
+
+    .moves button:hover {
+        background: var(--surface-2);
+    }
+
+    @media (max-width: 720px) {
+        .board-head {
+            display: none;
+        }
+
+        .lane > summary {
+            grid-template-columns: 12px minmax(0, 1fr) 44px;
+            grid-template-areas: "chevron title count" ". bar bar";
+            row-gap: 6px;
+        }
+
+        .lane .chevron { grid-area: chevron; }
+        .lane .title { grid-area: title; white-space: normal; }
+        .lane .bar { grid-area: bar; height: 6px; }
+        .lane .count { grid-area: count; }
+
+        .lane-cells {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 14px;
+        }
+
+        .cell-name {
+            display: flex;
+            margin: 0 0 6px 2px;
+        }
+
+        .cell:not(:has(.task)) {
+            display: none;
+        }
+    }
+
+    /* The lists of tasks and of decisions */
+    .filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 22px;
+        margin: 0 0 14px;
+    }
+
+    .chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .filter-name {
+        font-size: 12px;
+        color: var(--muted);
+        margin-right: 4px;
+    }
+
+    .chips button {
+        font-size: 13px;
+        padding: 3px 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .chips button .count {
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .chips button[aria-pressed="true"] {
+        background: var(--ink);
+        color: var(--surface);
+        border-color: var(--ink);
+    }
+
+    .chips button[aria-pressed="true"] .count {
+        color: inherit;
+        opacity: 0.7;
+    }
+
+    .filters label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    select, input[type="search"] {
+        font: inherit;
+        font-size: 13px;
+        color: var(--ink);
+        background: var(--surface);
+        border: 1px solid var(--outline);
+        border-radius: 8px;
+        padding: 4px 8px;
+        max-width: 240px;
+    }
+
+    input[type="search"] {
+        width: 100%;
+        max-width: 440px;
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: var(--card);
+    }
+
+    .found {
+        margin: 0 0 6px;
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    .search {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 14px;
+        margin: 0 0 12px;
+    }
+
+    .search .found {
+        margin: 0;
+    }
+
+    .row {
+        display: grid;
+        grid-template-columns: 22px 22px minmax(0, 1fr) 16px;
+        gap: 10px;
+        align-items: start;
+        padding: 10px 4px;
+        border-top: 1px solid var(--grid);
+    }
+
+    .row:first-child {
+        border-top: 0;
+    }
+
+    .row > .face, .row > .prio, .row > .effort {
+        margin-top: 0;
+    }
+
+    .row > .effort {
+        padding-top: 5px;
+    }
+
+    .row.proposal {
+        grid-template-columns: 22px minmax(0, 1fr);
+    }
+
+    .row.decision {
+        grid-template-columns: 52px minmax(0, 1fr);
+    }
+
+    .row .task-text {
+        -webkit-line-clamp: 2;
+        padding-top: 1px;
+    }
+
+    .row.decision .task-text {
+        -webkit-line-clamp: 3;
+    }
+
+    .row .task-text[aria-expanded="true"] {
+        -webkit-line-clamp: unset;
+    }
+
+    .row .id, .row .tag {
+        font-weight: 600;
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+        margin-right: 6px;
+    }
+
+    .row .tag {
+        color: var(--decision);
+        padding-top: 1px;
+        margin: 0;
+    }
+
+    .row-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 2px 10px;
+        margin-top: 3px;
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    .row-state {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--ink-2);
+    }
+
+    .row .why {
+        margin: 6px 0 0;
+        font-size: 13px;
+        color: var(--ink-2);
+    }
+
+    mark {
+        background: color-mix(in srgb, var(--warning) 35%, transparent);
+        color: inherit;
+        border-radius: 2px;
+    }
+
+    .more {
+        margin-top: 12px;
+    }
+
+    /* The key documents, and the reader that opens them */
+    .key-documents {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+    }
+
+    .key-document {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        min-width: 0;
+        padding: 14px 16px;
+        border-radius: 12px;
+        background: var(--card);
+        border: 1px solid var(--outline);
+    }
+
+    .key-document b {
+        font-size: 15px;
+        font-weight: 620;
+    }
+
+    .key-document code {
+        color: var(--muted);
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .key-document p {
+        margin: 0 0 8px;
+        font-size: 12px;
+        color: var(--ink-2);
+    }
+
+    .key-document .action {
+        margin-top: auto;
+    }
+
+    .key-document.missing {
+        background: transparent;
+        border-style: dashed;
+    }
+
+    .key-document.missing b {
+        color: var(--ink-2);
+    }
+
+    #reader {
+        width: min(860px, calc(100vw - 32px));
+        max-height: calc(100vh - 48px);
+        padding: 0;
+        border: 0;
+        border-radius: 16px;
+        background: var(--surface);
+        color: var(--ink);
+        box-shadow: var(--shadow);
+        outline: 1px solid var(--ring);
+    }
+
+    #reader[open] {
+        display: flex;
+        flex-direction: column;
+    }
+
+    #reader::backdrop {
+        background: rgba(0, 0, 0, 0.45);
+    }
+
+    .reader-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--grid);
+    }
+
+    .reader-head > div {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .reader-head h2 {
+        margin: 0;
+        font-size: 18px;
+    }
+
+    .reader-path {
+        color: var(--muted);
+    }
+
+    .reader-plain {
+        font-size: 13px;
+        color: var(--accent);
+        white-space: nowrap;
+    }
+
+    .reader-body {
+        overflow: auto;
+        padding: 8px 28px 28px;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+    }
+
+    .reader-body:focus {
+        outline: none;
+    }
+
+    .reader-body h2 {
+        font-size: 22px;
+        margin: 22px 0 8px;
+    }
+
+    .reader-body > h2:first-child {
+        margin-top: 12px;
+    }
+
+    .reader-body h3 {
+        font-size: 18px;
+        margin: 26px 0 6px;
+        padding-top: 12px;
+        border-top: 1px solid var(--grid);
+    }
+
+    .reader-body h4, .reader-body h5, .reader-body h6 {
+        font-size: 15px;
+        margin: 18px 0 4px;
+    }
+
+    .reader-body p, .reader-body ul, .reader-body ol {
+        margin: 0 0 10px;
+    }
+
+    .reader-body ul, .reader-body ol {
+        padding-left: 22px;
+    }
+
+    .reader-body li {
+        margin: 3px 0;
+    }
+
+    .reader-body blockquote {
+        margin: 0 0 12px;
+        padding: 6px 14px;
+        border-left: 3px solid var(--axis);
+        color: var(--ink-2);
+        background: var(--surface-2);
+        border-radius: 0 8px 8px 0;
+    }
+
+    .reader-body blockquote.callout {
+        border-left-color: var(--decision);
+    }
+
+    .reader-body pre {
+        overflow: auto;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: var(--surface-2);
+    }
+
+    .reader-body :not(pre) > code {
+        padding: 1px 4px;
+        border-radius: 4px;
+        background: var(--surface-2);
+    }
+
+    .reader-body a {
+        color: var(--accent);
+    }
+
+    .reader-link {
+        text-decoration: underline dotted var(--muted);
+    }
+
+    .reader-table {
+        overflow-x: auto;
+        margin: 0 0 12px;
+    }
+
+    .reader-body td {
+        vertical-align: top;
+        font-variant-numeric: normal;
+    }
+
+    @media (max-width: 640px) {
+        .key-document {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            column-gap: 12px;
+        }
+
+        .key-document > :not(.action) {
+            grid-column: 1;
+        }
+
+        .key-document .action {
+            grid-column: 2;
+            grid-row: 1 / span 3;
+            align-self: center;
+        }
+
+        .key-document p {
+            margin: 0;
+        }
+
+        #reader {
+            width: 100vw;
+            max-width: 100vw;
+            height: 100dvh;
+            max-height: 100dvh;
+            border-radius: 0;
+        }
+
+        .reader-head {
+            flex-wrap: wrap;
+            padding: 12px 16px;
+        }
+
+        .reader-head > div {
+            flex-basis: 100%;
+        }
+
+        .reader-body {
+            padding: 4px 16px 24px;
+        }
+    }
+
     @media (prefers-reduced-motion: reduce) {
         * { transition: none !important; animation: none !important; }
     }
@@ -823,6 +1610,15 @@
     <div id="app"></div>
 </main>
 <div id="tip" role="tooltip"></div>
+<div id="announce" class="visually-hidden" role="status"></div>
+<dialog id="reader" aria-labelledby="reader-title">
+    <header class="reader-head">
+        <div><h2 id="reader-title"></h2><code class="reader-path"></code></div>
+        <a class="reader-plain" target="_blank" rel="noopener"></a>
+        <button type="button" class="reader-close action"></button>
+    </header>
+    <div class="reader-body" tabindex="0" autofocus></div>
+</dialog>
 <script src="/words.js"></script>
 <script>
 const colors = { blue: "#3987e5", red: "#e34948", green: "#1baf7a", yellow: "#eda100", purple: "#6250d6", cyan: "#0fa3b1", orange: "#eb6834", pink: "#e87ba4", gray: "#898781" };
@@ -830,15 +1626,40 @@ const seriesColors = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "
 const priorityOrder = ["P1", "P2", "P3", "none"];
 const priorityColors = { P1: "#184f95", P2: "#3987e5", P3: "#9ec5f4", none: "var(--never)" };
 const stateMarks = { done: "✓", doing: "◐", todo: "○", postponed: "–" };
+// The board's columns, the backlog command that moves a task into each, and the turn of a priority, as the panel's.
+const boardStates = ["doing", "todo", "postponed", "done"];
+const moveCommands = { doing: "start", todo: "todo", postponed: "postpone", done: "done" };
+const nextPriority = { P1: "P2", P2: "P3", P3: "P1" };
+const priorityRank = { P1: 1, P2: 2, P3: 3 };
+// Crew's marks: a priority as an issue tracker draws it, the effort as four bars, a colleague's color for their initials.
+const priorityMarks = {
+    P1: `<path d="M3.5 7.5L7 4l3.5 3.5M3.5 11L7 7.5l3.5 3.5" stroke="#E5493A"/>`,
+    P2: `<path d="M3 5.5h8M3 8.5h8" stroke="#E2852B"/>`,
+    P3: `<path d="M3.5 5.5L7 9l3.5-3.5" stroke="#4C8FE0"/>`,
+};
+const effortBars = { low: 1, medium: 2, high: 3, xhigh: 4, max: 4 };
+const tints = { red: "#b42318", blue: "#1d4ed8", green: "#15803d", yellow: "#8a6100", purple: "#7e22ce", orange: "#c2410c", pink: "#be185d", cyan: "#0e7490" };
+const critter = claudeCritter();
+const decisionsShown = 50;
 const extensions = [];
 const loadedScripts = new Set();
 const openSections = new Set();
+const expanded = new Set();
+const lanesOpen = savedLanes();
+const taskFilter = { state: "open", priority: "all", who: "all", goal: "all" };
 let words = pageWords.en;
 let data = null;
 let lastData = "";
 let tidyData = null;
 let sectionFilter = "all";
 let days = [];
+let decisionQuery = "";
+let decisionLimit = decisionsShown;
+let dragging = null;
+let renderWaits = false;
+let focusAfter = null;
+let landed = null;
+let announceTimer = 0;
 
 /** What an extension draws with: the page's helpers, words and data calls. */
 const kit = {
@@ -871,6 +1692,9 @@ window.projectPage = {
 
 setupTheme();
 setupTooltip();
+setupBoard();
+setupReader();
+addEventListener("resize", measureTabs);
 addEventListener("hashchange", () => {
     const button = document.getElementById(`tab-${location.hash.slice(1)}`);
 
@@ -938,18 +1762,28 @@ function rerender()
 
 function render()
 {
+    // A card being dragged would be lost under a page drawn again: the drawing waits for the drop.
+    if (dragging) {
+        renderWaits = true;
+        return;
+    }
+
     const { plan, decisions, documents, tasks, health } = data;
     const percent = ratio(plan.done, plan.total);
     const errors = health.filter((finding) => finding.severity === "error").length;
-    const focused = document.activeElement?.closest?.("#tabs [role=tab]")?.id;
+    const focus = focusAfter ?? focusedElement();
+    const doing = (data.board ?? []).filter((task) => task.state === "doing").length;
     days = dayRange(data.activity.map((repo) => repo.days), decisions.byDay, plan.finishedByDay);
+    // A tooltip of a mark drawn again would stay with what it said before.
+    document.getElementById("tip").style.opacity = 0;
     renderChrome();
 
     const tabs = [
         { id: "overview", label: t("tabOverview"), badge: `${percent}%`, panel: overviewPanel },
+        { id: "board", label: t("tabBoard"), badge: doing ? `${doing}` : "", panel: boardPanel },
         { id: "rhythm", label: t("tabRhythm"), badge: "", panel: rhythmPanel },
         { id: "decisions", label: t("tabDecisions"), badge: `${decisions.open.length}`, panel: decisionsPanel },
-        { id: "tasks", label: t("tabTasks"), badge: `${tasks.length}`, panel: tasksPanel },
+        { id: "tasks", label: t("tabTasks"), badge: `${(data.board ?? []).filter((task) => columnOf(task) !== "done").length}`, panel: tasksPanel },
         { id: "health", label: t("tabHealth"), badge: errors ? t("errorsBadge", errors) : "✓", panel: healthPanel },
         { id: "documents", label: t("tabDocuments"), badge: `${documents.length}`, panel: documentsPanel },
     ];
@@ -981,10 +1815,10 @@ function render()
     bindSections();
     bindTabs();
     renderTidy();
-
-    if (focused) {
-        document.getElementById(focused)?.focus();
-    }
+    measureTabs();
+    restoreFocus(focus);
+    focusAfter = null;
+    landed = null;
 
     for (const extension of extensions) {
         const extra = data.extra?.[extension.id];
@@ -1105,17 +1939,92 @@ function decisionsPanel()
     const people = Object.entries(decisions.byPerson ?? {}).sort(([, first], [, second]) => second - first);
     const byPerson = people.length ? t("byPerson", people.map(([name, count]) => `${name} ${count}`).join(", ")) : "";
 
-    return `<section class="card span-6">
+    const proposals = sortedProposals();
+
+    return `<section class="card span-12">
             <h2>${t("openTitle")}</h2>
-            <p class="hint">${t("openHint")}</p>
-            <ul class="list scroll">${decisions.open.map((text) => `<li><div class="clamp">${escape(text)}</div></li>`).join("") || `<li>${t("openNone")}</li>`}</ul>
+            <p class="hint">${t("proposalsHint", proposals.length)}</p>
+            <ul class="rows">${proposals.map(proposalRow).join("") || `<li class="row proposal"><span></span><span class="hint">${t("openNone")}</span></li>`}</ul>
         </section>
 
-        <section class="card span-6">
-            <h2>${t("lastTitle")}</h2>
+        <section class="card span-12">
+            <h2>${t("allTitle")}</h2>
             <p class="hint">${escape(byPerson)}${numberingNote(decisions, prefixes.decision)}</p>
-            <ul class="list scroll">${decisions.last.map((row) => `<li><span class="tag">${escape(prefixes.decision)}-${row.number}</span><div class="clamp">${escape(row.text)}</div></li>`).join("")}</ul>
+            <div class="search">
+                <label for="decision-search" class="visually-hidden">${t("searchLabel")}</label>
+                <input type="search" id="decision-search" value="${attribute(decisionQuery)}" placeholder="${attribute(t("searchPlaceholder"))}" autocomplete="off" spellcheck="false">
+                <p class="found" id="decision-found">${escape(foundLine(matchingDecisions().length))}</p>
+            </div>
+            <div id="decision-list">${decisionListBody()}</div>
         </section>`;
+}
+
+/** The proposals waiting, as the panel orders them: by priority, those without one last, then the oldest, then by their place. */
+function sortedProposals()
+{
+    const rank = (proposal) => priorityRank[proposal.priority] ?? 4;
+
+    return (data.decisions.proposals ?? []).slice().sort((first, second) => rank(first) - rank(second) || (first.day ?? "9999").localeCompare(second.day ?? "9999") || first.line - second.line);
+}
+
+function proposalRow(proposal)
+{
+    const id = `proposal-${proposal.line}`;
+    const meta = [proposal.day ? `<span data-tip="${attribute(escape(formatDay(proposal.day)))}">${escape(age(proposal.day))}</span>` : "", `<span>${escape(t("lineAt", proposal.line))}</span>`];
+
+    return `<li class="row proposal">
+            ${proposal.priority ? `<span class="prio" role="img" aria-label="${attribute(priorityName(proposal.priority))}">${priorityMark(proposal.priority)}</span>` : "<span></span>"}
+            <div>${expandButton(id, escape(proposal.text))}<div class="row-meta">${meta.join("")}</div></div>
+        </li>`;
+}
+
+/** The decisions that hold every word of the search, accents and case aside; all of them without one. */
+function matchingDecisions()
+{
+    const terms = searchTerms(decisionQuery);
+    const prefix = data.prefixes.decision;
+
+    return data.decisions.all.filter((row) => {
+        const text = folded(`${prefix}-${row.number} ${row.text} ${row.why ?? ""}`);
+        return terms.every((term) => text.includes(term));
+    });
+}
+
+function decisionListBody()
+{
+    const found = matchingDecisions();
+    const terms = searchTerms(decisionQuery);
+    const rest = found.length - decisionLimit;
+    const rows = found.slice(0, decisionLimit).map((row) => decisionRow(row, terms)).join("");
+
+    return `<ul class="rows">${rows || `<li class="row decision"><span></span><span class="hint">${t("decisionsNone")}</span></li>`}</ul>
+        ${rest > 0 ? `<button type="button" class="more" id="decisions-more">${escape(t("showMore", Math.min(rest, 100), rest))}</button>` : ""}`;
+}
+
+function decisionRow(row, terms)
+{
+    const id = `decision-${row.number}`;
+    const open = expanded.has(id);
+    const why = open && row.why ? `<p class="why"><b>${t("why")}</b> ${marked(row.why, terms)}</p>` : "";
+    const day = row.day ? `<div class="row-meta"><span>${escape(formatDay(row.day))}</span></div>` : "";
+
+    return `<li class="row decision">
+            <span class="tag">${escape(data.prefixes.decision)}-${row.number}</span>
+            <div>${expandButton(id, marked(row.text, terms))}${why}${day}</div>
+        </li>`;
+}
+
+function foundLine(count)
+{
+    const total = data.decisions.all.length;
+
+    return decisionQuery.trim() ? t("decisionsFound", count, total) : t("decisionsCount", total);
+}
+
+/** A text that opens and closes itself: clamped to a few lines, whole once pressed. */
+function expandButton(id, html)
+{
+    return `<button type="button" class="task-text" id="${id}" data-expand="${id}" aria-expanded="${expanded.has(id)}">${html}</button>`;
 }
 
 function tasksPanel()
@@ -1123,6 +2032,13 @@ function tasksPanel()
     const { tasks, colleagues } = data;
 
     return `<section class="card span-12">
+            <h2>${t("listTitle")}</h2>
+            <p class="hint">${escape(t("listHint", data.boardDays))}</p>
+            <div class="filters" id="task-filters">${taskFilters()}</div>
+            <div id="task-list">${taskListBody()}</div>
+        </section>
+
+        <section class="card span-12">
             <h2>${t("tasksTitle")}</h2>
             <p class="hint">${t("tasksHint", tasks.length)}</p>
             <div class="legend">${priorityOrder.map((key) => `<span><i style="background:${priorityColors[key]}"></i>${escape(priorityLabel(key))}</span>`).join("")}</div>
@@ -1146,6 +2062,566 @@ function tasksPanel()
             <p class="hint">${t("crewHint")}</p>
             <div class="crew">${colleagueCards(colleagues)}</div>
         </section>`;
+}
+
+/** The board: a column for each state, a lane for each goal of the plan in its order and, last, the tasks without one. */
+function boardPanel()
+{
+    const tasks = boardTasks();
+    const lanes = boardLanes(tasks);
+    const head = boardStates.map((state) => {
+        const count = tasks.filter((task) => columnOf(task) === state).length;
+        const note = state === "done" ? `<span class="days">${escape(t("lastDays", data.boardDays))}</span>` : "";
+        return `<div class="column-name"><i class="column-mark ${state}"></i>${escape(stateName(state))}<span class="badge">${count}</span>${note}</div>`;
+    }).join("");
+
+    return `<section class="card span-12">
+            <h2>${t("boardTitle")}</h2>
+            <p class="hint">${escape(t("boardHint", data.boardDays))}</p>
+            <div class="board-head" aria-hidden="true">${head}</div>
+            ${lanes.map(laneBlock).join("") || `<p class="hint">${t("boardEmpty")}</p>`}
+        </section>`;
+}
+
+/** The backlog's tasks the board shows: the open ones, and the done ones of its last days. */
+function boardTasks()
+{
+    const since = dayIso(-data.boardDays);
+
+    return (data.board ?? []).filter((task) => columnOf(task) !== "done" || (task.done ?? task.archived ?? "9999") >= since);
+}
+
+function boardLanes(tasks)
+{
+    const goalOf = (task) => (task.goal && task.goal !== data.words.noGoal ? task.goal : "");
+    const sections = data.plan.sections.filter((section) => section.name !== data.words.noGoal);
+    const names = [...new Set([...sections.map((section) => section.name), ...tasks.map(goalOf).filter(Boolean), ""])];
+
+    return names.map((name) => {
+        const own = tasks.filter((task) => goalOf(task) === name);
+        const section = sections.find((one) => one.name === name);
+        const done = section?.done ?? own.filter((task) => columnOf(task) === "done").length;
+        const total = section?.total ?? own.length;
+        return { name, title: name ? section?.title ?? name : t("noGoalLane"), own, done, total };
+    }).filter((lane) => lane.own.length > 0);
+}
+
+function laneBlock(lane)
+{
+    const percent = ratio(lane.done, lane.total);
+    const working = lane.own.some((task) => task.state === "doing");
+    const open = lanesOpen[lane.name] ?? lane.own.some((task) => columnOf(task) !== "done");
+    const [, name, note] = /^(.*?)(?:\s*\((.*)\))?$/.exec(lane.title);
+    const cells = boardStates.map((state) => laneCell(lane, state)).join("");
+
+    return `<details class="lane" data-lane="${attribute(lane.name)}" ${open ? "open" : ""}>
+            <summary>
+                <span class="chevron" aria-hidden="true"></span>
+                <span class="title"><b>${escape(name)}</b>${note ? ` <span>${escape(note)}</span>` : ""}</span>
+                <div class="bar ${lane.done === lane.total && lane.total > 0 ? "done" : working ? "doing" : ""}" role="img" aria-label="${attribute(t("laneDone", lane.done, lane.total))}"><i data-width="${percent}%"></i></div>
+                <span class="count" aria-hidden="true">${lane.done}/${lane.total}</span>
+            </summary>
+            <div class="lane-cells">${cells}</div>
+        </details>`;
+}
+
+function laneCell(lane, state)
+{
+    const recent = (first, second) => (second.done ?? second.archived ?? "").localeCompare(first.done ?? first.archived ?? "") || second.id - first.id;
+    const own = lane.own.filter((task) => columnOf(task) === state).sort(state === "done" ? recent : taskOrder);
+    const label = `${stateName(state)} · ${lane.name || t("noGoalLane")}`;
+
+    return `<div class="cell" data-state="${state}" data-lane="${attribute(lane.name)}">
+            <div class="cell-name column-name" aria-hidden="true"><i class="column-mark ${state}"></i>${escape(stateName(state))}<span class="badge">${own.length}</span></div>
+            <ul class="cell-list" aria-label="${attribute(label)}">${own.map((task) => taskCard(task, lane.name)).join("")}</ul>
+        </div>`;
+}
+
+/** A task on the board: its priority, number, effort and who holds it; its text, which opens; where it can move, once it has the focus. */
+function taskCard(task, lane)
+{
+    const name = taskName(task);
+    const column = columnOf(task);
+    const held = column === "doing" ? data.holds?.[String(task.id)] : null;
+    const worker = held?.colleague ? data.colleagues.find((person) => person.id === held.colleague) : null;
+    const foot = worker || held?.colleague
+        ? `<span class="work" data-tip="${attribute(escape(t("atWork")))}">⚒︎ ${escape((worker?.name ?? held.colleague).split(" ")[0])}</span>`
+        : column === "done" ? `<span>✓ ${escape(formatDay(task.done ?? task.archived))}</span>` : `<span data-tip="${attribute(escape(t("bornOn", formatDay(task.created))))}">${escape(age(task.created))}</span>`;
+    const moves = boardStates.filter((state) => state !== column)
+        .map((state) => `<button type="button" id="move-${name}-${state}" data-move="${state}" data-task="${task.id}" aria-label="${attribute(t("moveTo", name, stateName(state)))}">${escape(stateName(state))}</button>`).join("");
+
+    return `<li class="task ${column} ${expanded.has(`board-${name}`) ? "open" : ""} ${landed === task.id ? "landed" : ""}" draggable="true" data-task="${task.id}" data-lane="${attribute(lane)}" data-column="${column}">
+            <div class="task-top">${priorityControl(task, "board")}<span class="id">${escape(name)}</span><span class="grow"></span>${effortMeter(task)}${face(task)}</div>
+            ${expandButton(`board-${name}`, escape(task.text))}
+            <div class="task-foot">${foot}</div>
+            <div class="moves" role="group" aria-label="${attribute(t("moveGroup", name))}"><span aria-hidden="true">${escape(t("moveLabel"))}</span>${moves}</div>
+        </li>`;
+}
+
+/** The filters of the list of tasks: state and priority as buttons that stay pressed, who and goal as menus. */
+function taskFilters()
+{
+    const all = data.board ?? [];
+    const countOf = (keep) => all.filter(keep).length;
+    const chip = (kind, value, label, count) => `<button type="button" id="filter-${kind}-${value}" data-task-filter="${kind}" data-value="${value}" aria-pressed="${taskFilter[kind] === value}">${label}${count === undefined ? "" : `<span class="count">${count}</span>`}</button>`;
+    const states = [["open", t("filterOpenTasks"), (task) => columnOf(task) !== "done"], ...boardStates.map((state) => [state, escape(stateName(state)), (task) => columnOf(task) === state]), ["all", t("filterEvery"), () => true]];
+    const priorities = [chip("priority", "all", t("filterAnyPriority")), ...["P1", "P2", "P3"].map((key) => chip("priority", key, `${priorityMark(key)}${escape(key)}`, countOf((task) => task.priority === key && columnOf(task) !== "done")))];
+    const people = [...new Set(all.map((task) => task.to))].sort((first, second) => countOf((task) => task.to === second) - countOf((task) => task.to === first));
+    const goals = [...new Set([...data.plan.sections.map((section) => section.name), ...all.map((task) => task.goal)])].filter((goal) => goal !== data.words.noGoal && all.some((task) => task.goal === goal));
+    const option = (kind, value, label) => `<option value="${attribute(value)}" ${taskFilter[kind] === value ? "selected" : ""}>${escape(label)}</option>`;
+    const noGoal = all.some((task) => task.goal === data.words.noGoal) ? option("goal", data.words.noGoal, t("noGoalLane")) : "";
+
+    return `<div class="chips" role="group" aria-labelledby="filter-state-name"><span class="filter-name" id="filter-state-name">${t("filterState")}</span>${states.map(([value, label, keep]) => chip("state", value, label, countOf(keep))).join("")}</div>
+        <div class="chips" role="group" aria-labelledby="filter-priority-name"><span class="filter-name" id="filter-priority-name">${t("filterPriority")}</span>${priorities.join("")}</div>
+        <label>${t("filterWho")} <select id="filter-who" data-task-filter="who">${option("who", "all", t("anyone"))}${people.map((person) => option("who", person, person)).join("")}</select></label>
+        <label>${t("filterGoal")} <select id="filter-goal" data-task-filter="goal">${option("goal", "all", t("anyGoal"))}${goals.map((goal) => option("goal", goal, goal)).join("")}${noGoal}</select></label>`;
+}
+
+/** Every task the filters keep, as the panel orders them: in progress, to do, postponed, each by priority and then the oldest; the done
+ * last, the latest first. */
+function filteredTasks()
+{
+    const keep = (task) => {
+        const column = columnOf(task);
+        const state = taskFilter.state === "all" || (taskFilter.state === "open" ? column !== "done" : column === taskFilter.state);
+        return state && (taskFilter.priority === "all" || task.priority === taskFilter.priority) && (taskFilter.who === "all" || task.to === taskFilter.who) && (taskFilter.goal === "all" || task.goal === taskFilter.goal);
+    };
+    const closedLast = (first, second) => boardStates.indexOf(columnOf(first)) - boardStates.indexOf(columnOf(second));
+    const recent = (first, second) => (columnOf(first) === "done" ? (second.done ?? second.archived ?? "").localeCompare(first.done ?? first.archived ?? "") : 0);
+
+    return (data.board ?? []).filter(keep).sort((first, second) => closedLast(first, second) || recent(first, second) || taskOrder(first, second));
+}
+
+function taskListBody()
+{
+    const tasks = filteredTasks();
+    const rows = tasks.map(taskRow).join("");
+    const filtered = Object.entries(taskFilter).some(([kind, value]) => value !== (kind === "state" ? "open" : "all"));
+
+    return `<p class="found">${escape(t("listCount", tasks.length))}${filtered ? ` · <button type="button" id="filters-clear" data-clear-filters>${t("clearFilters")}</button>` : ""}</p>
+        <ul class="rows">${rows || `<li class="row"><span></span><span></span><span class="hint">${t("listNone")}</span></li>`}</ul>`;
+}
+
+function taskRow(task)
+{
+    const name = taskName(task);
+    const column = columnOf(task);
+    const held = column === "doing" ? data.holds?.[String(task.id)] : null;
+    const worker = held?.colleague ? data.colleagues.find((person) => person.id === held.colleague) : null;
+    const goal = task.goal && task.goal !== data.words.noGoal ? `<span>${escape(task.goal)}</span>` : "";
+    const when = column === "done" ? `<span>✓ ${escape(formatDay(task.done ?? task.archived))}</span>` : `<span data-tip="${attribute(escape(t("bornOn", formatDay(task.created))))}">${escape(age(task.created))}</span>`;
+    const work = worker || held?.colleague ? `<span class="work">⚒︎ ${escape((worker?.name ?? held.colleague).split(" ")[0])}</span>` : "";
+
+    return `<li class="row ${column}">
+            ${face(task)}
+            ${priorityControl(task, "list")}
+            <div>${expandButton(`list-${name}`, `<span class="id">${escape(name)}</span>${escape(task.text)}`)}
+                <div class="row-meta"><span class="row-state"><i class="column-mark ${column}"></i>${escape(stateName(column))}</span>${work}${goal}${when}</div>
+            </div>
+            ${effortMeter(task) || "<span></span>"}
+        </li>`;
+}
+
+/** Puts the board's hands on the page once: drags, the moves, the priorities, the texts that open, the filters and the search. */
+function setupBoard()
+{
+    const app = document.getElementById("app");
+
+    app.addEventListener("click", (event) => {
+        const target = event.target.closest?.("button");
+
+        if (!target) {
+            return;
+        }
+
+        if (target.dataset.move) {
+            moveTask(target.dataset.task, target.dataset.move, true);
+        } else if (target.dataset.priority) {
+            turnPriority(target.dataset.priority, target.dataset.next, target.id);
+        } else if (target.dataset.expand) {
+            toggleText(target);
+        } else if (target.dataset.taskFilter) {
+            taskFilter[target.dataset.taskFilter] = target.dataset.value;
+            refreshTaskList(target.id);
+        } else if (target.hasAttribute("data-clear-filters")) {
+            Object.assign(taskFilter, { state: "open", priority: "all", who: "all", goal: "all" });
+            refreshTaskList("filter-state-open");
+        } else if (target.dataset.document) {
+            openDocument(Number(target.dataset.document), target);
+        } else if (target.id === "decisions-more") {
+            const first = matchingDecisions()[decisionLimit];
+            decisionLimit += 100;
+            document.getElementById("decision-list").innerHTML = decisionListBody();
+            document.getElementById(first ? `decision-${first.number}` : "decision-search")?.focus();
+        }
+    });
+    app.addEventListener("change", (event) => {
+        if (event.target.matches?.("select[data-task-filter]")) {
+            taskFilter[event.target.dataset.taskFilter] = event.target.value;
+            refreshTaskList(event.target.id);
+        }
+    });
+    app.addEventListener("input", (event) => {
+        if (event.target.id === "decision-search") {
+            decisionQuery = event.target.value;
+            decisionLimit = decisionsShown;
+            document.getElementById("decision-list").innerHTML = decisionListBody();
+            const found = foundLine(matchingDecisions().length);
+            document.getElementById("decision-found").textContent = found;
+            announce(found, 600);
+        }
+    });
+    // A goal's lane, opened or closed by hand, stays so; toggle does not bubble, so it is caught on its way down.
+    app.addEventListener("toggle", (event) => {
+        if (event.target.matches?.("details.lane")) {
+            lanesOpen[event.target.dataset.lane] = event.target.open;
+            saveLanes();
+        }
+    }, true);
+    app.addEventListener("dragstart", (event) => {
+        const card = event.target.closest?.(".task[draggable]");
+
+        if (!card) {
+            return;
+        }
+
+        dragging = { card, id: card.dataset.task, lane: card.dataset.lane, from: card.dataset.column };
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", taskName({ id: card.dataset.task }));
+        requestAnimationFrame(() => card.classList.add("dragging"));
+        document.querySelectorAll(".cell").forEach((cell) => cell.classList.toggle("can-drop", cell.dataset.lane === dragging.lane && cell.dataset.state !== dragging.from));
+    });
+    app.addEventListener("dragover", (event) => {
+        const cell = dragging && event.target.closest?.(".cell.can-drop");
+
+        if (cell) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+        }
+
+        document.querySelectorAll(".cell.target").forEach((other) => other !== cell && other.classList.remove("target"));
+        cell?.classList.add("target");
+    });
+    app.addEventListener("drop", (event) => {
+        const cell = dragging && event.target.closest?.(".cell.can-drop");
+
+        if (!cell) {
+            return;
+        }
+
+        event.preventDefault();
+        dragging.card.classList.add("pending");
+        cell.querySelector(".cell-list").prepend(dragging.card);
+        dragging.dropped = cell.dataset.state;
+    });
+    app.addEventListener("dragend", () => {
+        const { card, id, dropped } = dragging ?? {};
+        card?.classList.remove("dragging");
+        document.querySelectorAll(".cell.can-drop, .cell.target").forEach((cell) => cell.classList.remove("can-drop", "target"));
+        dragging = null;
+
+        if (dropped) {
+            moveTask(id, dropped, false);
+        } else if (renderWaits) {
+            renderWaits = false;
+            render();
+        }
+    });
+}
+
+/** Moves a task to a column through the backlog's command; from the keys, the focus follows the card to its new column. */
+function moveTask(id, state, byKeys)
+{
+    const task = data.board.find((one) => String(one.id) === String(id));
+
+    if (!task || columnOf(task) === state) {
+        return;
+    }
+
+    const name = taskName(task);
+    focusAfter = byKeys ? { id: `board-${name}`, scroll: true } : null;
+    landed = task.id;
+    changeTask({ command: moveCommands[state], id: name }, t("moved", name, stateName(state)));
+}
+
+function turnPriority(id, next, buttonId)
+{
+    const name = taskName({ id });
+    focusAfter = { id: buttonId };
+    changeTask({ command: "set", id: name, priority: next }, t("priorityNow", name, priorityName(next)));
+}
+
+/** Asks the page's server to change the backlog; a refusal is shown with its message. The page reads the project again after. */
+async function changeTask(payload, done)
+{
+    let answer;
+
+    try {
+        const response = await fetch("/backlog", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+        answer = await response.json().catch(() => ({ ok: false, message: `${response.status} ${response.statusText}` }));
+    } catch (error) {
+        answer = { ok: false, message: String(error?.message ?? error) };
+    }
+
+    if (answer.ok) {
+        announce(done);
+    } else {
+        focusAfter = null;
+        landed = null;
+        alert(t("failed", answer.message));
+    }
+
+    renderWaits = false;
+    lastData = "";
+    await load();
+}
+
+function toggleText(button)
+{
+    const id = button.dataset.expand;
+    const open = !expanded.has(id);
+    open ? expanded.add(id) : expanded.delete(id);
+    button.setAttribute("aria-expanded", open);
+    button.closest(".task")?.classList.toggle("open", open);
+
+    // A decision's reasons show only while it is open.
+    if (id.startsWith("decision-")) {
+        document.getElementById("decision-list").innerHTML = decisionListBody();
+        document.getElementById(id)?.focus();
+    }
+}
+
+function refreshTaskList(focusId)
+{
+    document.getElementById("task-filters").innerHTML = taskFilters();
+    document.getElementById("task-list").innerHTML = taskListBody();
+    document.getElementById(focusId)?.focus();
+    announce(t("listCount", filteredTasks().length));
+}
+
+/** A priority as Crew draws it: a button that turns it, P1, P2, P3 and P1 again; only a mark on a task already done. */
+function priorityControl(task, where)
+{
+    const key = task.priority;
+    const name = priorityName(key);
+
+    if (columnOf(task) === "done" || !priorityMarks[key]) {
+        return `<span class="prio" role="img" aria-label="${attribute(name)}" data-tip="${attribute(escape(name))}">${priorityMark(key)}</span>`;
+    }
+
+    const next = nextPriority[key];
+    const id = `${where}-priority-${taskName(task)}`;
+
+    return `<button type="button" class="prio" id="${id}" data-priority="${task.id}" data-next="${next}" aria-label="${attribute(t("priorityTurn", taskName(task), name, priorityName(next)))}" data-tip="${attribute(`<b>${escape(name)}</b>${escape(t("priorityClick", priorityName(next)))}`)}">${priorityMark(key)}</button>`;
+}
+
+/** A priority's arrows, a drawing only: whatever holds it says the priority in words. */
+function priorityMark(key)
+{
+    const mark = priorityMarks[key];
+
+    return mark ? `<svg class="icon" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${mark}</svg>` : "";
+}
+
+/** «P1, high priority», in the project's words. */
+function priorityName(key)
+{
+    return key ? `${key}, ${t("priorityName", data.words.priorities[key] ?? key)}` : t("noPriority");
+}
+
+/** The effort a task needs as four bars, low to max; nothing for none. */
+function effortMeter(task)
+{
+    const filled = effortBars[task.effortKey];
+
+    if (!filled) {
+        return "";
+    }
+
+    const bars = [0, 1, 2, 3].map((index) => `<rect x="${index * 4}" y="1" width="3" height="10" rx="1" fill="currentColor" fill-opacity="${index < filled ? 1 : 0.3}"/>`).join("");
+    const label = t("effortName", task.effort);
+
+    return `<span class="effort" role="img" aria-label="${attribute(label)}" data-tip="${attribute(escape(label))}"><svg class="icon" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true">${bars}</svg></span>`;
+}
+
+/** Who holds a task: Claude's critter, a colleague's portrait or initials on their color, a person's initials in gray. */
+function face(task)
+{
+    const person = task.colleague ? data.colleagues.find((one) => one.id === task.colleague) : null;
+    const name = person?.name ?? task.to;
+    const tip = `data-tip="${attribute(`<b>${escape(name)}</b>${person ? escape(person.role) : ""}`)}"`;
+
+    if (task.to === "Claude") {
+        return `<span class="face" role="img" aria-label="Claude" ${tip}>${critter}</span>`;
+    }
+
+    if (person?.hasPortrait) {
+        return `<img class="face" src="/portrait/${attribute(person.id)}" alt="${attribute(name)}" ${tip}>`;
+    }
+
+    const initials = String(name).split(/\s+/).map((part) => part[0] ?? "").join("").slice(0, 2).toUpperCase();
+    const color = person ? tints[person.color] ?? "#6b6b67" : "#8a8a86";
+
+    return `<span class="face" role="img" aria-label="${attribute(name)}" style="background:${color}" ${tip}>${escape(initials)}</span>`;
+}
+
+/** Claude: an orange pixel critter on a round cream background, as Crew draws it. */
+function claudeCritter()
+{
+    const rows = [".X........X.", "..X......X..", "..XXXXXXXX..", ".XXXXXXXXXX.", ".XXEEXXEEXX.", "XXXEEXXEEXXX", "XXXXXXXXXXXX", ".XXXXXXXXXX.", "..X.X..X.X..", "..X.X..X.X.."];
+    const runs = rows.flatMap((row, y) => [...row.matchAll(/X+|E+/g)].map((run) => `<rect x="${run.index + 2}" y="${y + 3}" width="${run[0].length}" height="1" fill="${run[0][0] === "E" ? "#2B1D17" : "#D97757"}"/>`));
+
+    return `<svg viewBox="0 0 16 16" width="22" height="22" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="#F3E6DC"/><g shape-rendering="crispEdges">${runs.join("")}</g></svg>`;
+}
+
+/** The column a task sits in: an archived task is a done one. */
+function columnOf(task)
+{
+    return task.state === "archived" ? "done" : task.state;
+}
+
+function stateName(state)
+{
+    return data.words.states[state] ?? state;
+}
+
+function taskName(task)
+{
+    return `${data.prefixes.task}-${task.id}`;
+}
+
+/** The panel's order: by priority, then the oldest, then by number. */
+function taskOrder(first, second)
+{
+    return (priorityRank[first.priority] ?? 4) - (priorityRank[second.priority] ?? 4) || (first.created ?? "").localeCompare(second.created ?? "") || first.id - second.id;
+}
+
+/** How old a day is, «3 d», as the panel says it. */
+function age(day)
+{
+    return day ? t("ageDays", Math.max(0, Math.round((Date.parse(dayIso(0)) - Date.parse(day)) / 86400000))) : "";
+}
+
+/** Today, or so many days from it, as YYYY-MM-DD in the local calendar. */
+function dayIso(offset)
+{
+    const day = new Date();
+    day.setDate(day.getDate() + offset);
+
+    return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+}
+
+function searchTerms(query)
+{
+    return folded(query).split(/\s+/).filter(Boolean);
+}
+
+/** A text for searching: lower case, without accents. */
+function folded(text)
+{
+    return String(text).normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
+/** A text, escaped, with the search's words marked where they appear, accents and case aside. */
+function marked(text, terms)
+{
+    if (terms.length === 0) {
+        return escape(text);
+    }
+
+    // Folding keeps one character a letter, so a place in the folded text is the same place in the text.
+    const letters = [...String(text)];
+    const plain = letters.map((letter) => folded(letter));
+    const hits = new Array(letters.length).fill(false);
+
+    for (const term of terms) {
+        const whole = plain.join("");
+        let from = whole.indexOf(term);
+
+        while (from >= 0) {
+            let at = 0;
+
+            for (let index = 0; index < letters.length; index++) {
+                if (at >= from && at < from + term.length) {
+                    hits[index] = true;
+                }
+
+                at += plain[index].length;
+            }
+
+            from = whole.indexOf(term, from + term.length);
+        }
+    }
+
+    return letters.map((letter, index) => {
+        const open = hits[index] && !hits[index - 1] ? "<mark>" : "";
+        const close = hits[index] && !hits[index + 1] ? "</mark>" : "";
+        return `${open}${escape(letter)}${close}`;
+    }).join("");
+}
+
+/** The element that has the focus, by its id, with the caret of a field; null when nothing of the page's has it. */
+function focusedElement()
+{
+    const element = document.activeElement;
+
+    if (!element?.id || !element.closest?.("#app, #tabs")) {
+        return null;
+    }
+
+    return { id: element.id, start: element.selectionStart ?? null, end: element.selectionEnd ?? null };
+}
+
+function restoreFocus(focus)
+{
+    const element = focus && document.getElementById(focus.id);
+
+    if (!element) {
+        return;
+    }
+
+    element.focus({ preventScroll: !focus.scroll });
+
+    if (focus.start !== null && focus.start !== undefined && element.setSelectionRange) {
+        element.setSelectionRange(focus.start, focus.end);
+    }
+
+    if (focus.scroll) {
+        element.scrollIntoView({ block: "nearest" });
+    }
+}
+
+/** Says a change to a screen reader; with a delay, only the last of a quick run is said. */
+function announce(text, delay = 0)
+{
+    clearTimeout(announceTimer);
+    announceTimer = setTimeout(() => {
+        document.getElementById("announce").textContent = text;
+    }, delay);
+}
+
+/** The tabs' height, under which the board's column names stay. */
+function measureTabs()
+{
+    document.documentElement.style.setProperty("--tabs-height", `${document.getElementById("tabs").offsetHeight}px`);
+}
+
+function savedLanes()
+{
+    try {
+        return JSON.parse(localStorage.getItem("lanes") ?? "{}");
+    } catch {
+        return {};
+    }
+}
+
+function saveLanes()
+{
+    try {
+        localStorage.setItem("lanes", JSON.stringify(lanesOpen));
+    } catch {
+        // the choice lasts only this visit
+    }
 }
 
 function healthPanel()
@@ -1174,8 +2650,14 @@ function healthPanel()
 function documentsPanel()
 {
     const { documents, inbox } = data;
+    const key = data.keyDocuments ?? [];
+    const keyCards = key.length ? `<section class="card span-12">
+            <h2>${t("keyTitle")}</h2>
+            <p class="hint">${t("keyHint")}</p>
+            <div class="key-documents">${key.map((document, index) => keyDocumentCard(document, index, documents)).join("")}</div>
+        </section>` : "";
 
-    return `<section class="card span-12">
+    return `${keyCards}<section class="card span-12">
             <h2>${t("documentsTitle")}</h2>
             <p class="hint">${escape(t("documentsHint", data.docs))}${inbox ? ` ${escape(t("inboxEntries", inbox.name, inbox.count))}` : ""}</p>
             <table>
@@ -1183,6 +2665,203 @@ function documentsPanel()
                 <tbody>${documents.map(documentRow).join("")}</tbody>
             </table>
         </section>`;
+}
+
+/** A key document of the configuration: its name, where it is, when it changed and how long it is, and a button that opens it here. */
+function keyDocumentCard(document, index, documents)
+{
+    const known = documents.find((one) => `${data.docs.replace(/\/$/, "")}/${one.name}` === document.path);
+    const facts = known ? [t("docChanged", relative(known.modified)), t("docWords", known.words.toLocaleString(t("locale")))] : [];
+
+    if (!document.exists) {
+        return `<div class="key-document missing"><b>${escape(document.name)}</b><code title="${attribute(document.path)}">${escape(document.path)}</code><p>${t("docMissing")}</p></div>`;
+    }
+
+    return `<div class="key-document">
+            <b>${escape(document.name)}</b>
+            <code title="${attribute(document.path)}">${escape(document.path)}</code>
+            <p>${facts.map(escape).join(" · ")}</p>
+            <button type="button" class="action primary" id="open-document-${index}" data-document="${index}">${t("docOpen")}</button>
+        </div>`;
+}
+
+/** Opens a key document in the page's reader, its markdown made readable; the plain text stays a link away. */
+async function openDocument(index, opener)
+{
+    const document = data.keyDocuments?.[index];
+    const reader = window.document.getElementById("reader");
+
+    if (!document) {
+        return;
+    }
+
+    reader.querySelector("h2").textContent = document.name;
+    reader.querySelector(".reader-path").textContent = document.path;
+    reader.querySelector(".reader-plain").href = document.href;
+    reader.querySelector(".reader-plain").textContent = t("docPlain");
+    reader.querySelector(".reader-close").textContent = t("docClose");
+    const body = reader.querySelector(".reader-body");
+    body.innerHTML = `<p class="hint">${t("docLoading")}</p>`;
+    reader.returnFocus = opener;
+
+    if (!reader.open) {
+        reader.showModal();
+    }
+
+    try {
+        const response = await fetch(document.href);
+
+        if (!response.ok) {
+            throw new Error(`${response.status} ${await response.text()}`);
+        }
+
+        body.innerHTML = markdown(await response.text());
+        body.scrollTop = 0;
+    } catch (error) {
+        body.innerHTML = `<p class="hint">${escape(t("failed", error.message))}</p>`;
+    }
+}
+
+function setupReader()
+{
+    const reader = document.getElementById("reader");
+    reader.querySelector(".reader-close").addEventListener("click", () => reader.close());
+    reader.addEventListener("close", () => reader.returnFocus?.focus());
+    // A click on the backdrop, outside the reader's box, closes it.
+    reader.addEventListener("click", (event) => {
+        if (event.target === reader) {
+            reader.close();
+        }
+    });
+    // A link to another key document opens it here; any other link to a page of the docs has nowhere to go.
+    reader.addEventListener("click", (event) => {
+        const link = event.target.closest?.("a[data-document]");
+
+        if (link) {
+            event.preventDefault();
+            openDocument(Number(link.dataset.document), reader.returnFocus);
+        }
+    });
+}
+
+/** Markdown made readable, enough for the project's docs: headings, paragraphs, lists, quotes and callouts, tables, code, links. */
+function markdown(text)
+{
+    const lines = text.replace(/\r/g, "").split("\n");
+    const html = [];
+    let index = 0;
+
+    while (index < lines.length) {
+        const line = lines[index];
+
+        if (/^```/.test(line)) {
+            const code = [];
+
+            for (index++; index < lines.length && !/^```/.test(lines[index]); index++) {
+                code.push(lines[index]);
+            }
+
+            html.push(`<pre><code>${escape(code.join("\n"))}</code></pre>`);
+            index++;
+        } else if (/^#{1,6}\s/.test(line)) {
+            const level = Math.min(6, line.match(/^#+/)[0].length + 1);
+            html.push(`<h${level}>${inline(line.replace(/^#+\s*/, ""))}</h${level}>`);
+            index++;
+        } else if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+            html.push("<hr>");
+            index++;
+        } else if (/^>/.test(line)) {
+            const quote = [];
+
+            for (; index < lines.length && /^>/.test(lines[index]); index++) {
+                quote.push(lines[index].replace(/^>\s?/, ""));
+            }
+
+            const callout = /^\[!(\w+)\]\s*(.*)$/.exec(quote[0] ?? "");
+            const inner = callout ? [callout[2] ? `**${callout[2]}**` : "", ...quote.slice(1)] : quote;
+            html.push(`<blockquote${callout ? ` class="callout"` : ""}>${markdown(inner.join("\n"))}</blockquote>`);
+        } else if (/^\|.*\|\s*$/.test(line) && /^\|[\s:|-]+\|\s*$/.test(lines[index + 1] ?? "")) {
+            const cells = (row) => row.trim().replace(/^\||\|$/g, "").split("|").map((cell) => inline(cell.trim()));
+            const head = cells(line);
+            const rows = [];
+
+            for (index += 2; index < lines.length && /^\|/.test(lines[index]); index++) {
+                rows.push(cells(lines[index]));
+            }
+
+            html.push(`<div class="reader-table"><table><thead><tr>${head.map((cell) => `<th>${cell}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+        } else if (/^\s*([-*+]|\d+[.)])\s/.test(line)) {
+            html.push(list(lines, index));
+            index = list.end;
+        } else if (line.trim() === "") {
+            index++;
+        } else {
+            const paragraph = [];
+
+            for (; index < lines.length && lines[index].trim() !== "" && !/^(#{1,6}\s|>|```|\|)/.test(lines[index]) && !/^\s*([-*+]|\d+[.)])\s/.test(lines[index]); index++) {
+                paragraph.push(lines[index]);
+            }
+
+            html.push(`<p>${inline(paragraph.join(" "))}</p>`);
+        }
+    }
+
+    return html.join("\n");
+}
+
+/** A list from a line on, with the lists nested under it by their indent; list.end is the first line after it. */
+function list(lines, start)
+{
+    const indentOf = (line) => line.match(/^\s*/)[0].length;
+    const indent = indentOf(lines[start]);
+    const ordered = /^\s*\d+[.)]\s/.test(lines[start]);
+    const items = [];
+    let index = start;
+
+    while (index < lines.length) {
+        const line = lines[index];
+
+        if (/^\s*([-*+]|\d+[.)])\s/.test(line) && indentOf(line) === indent) {
+            items.push({ text: line.replace(/^\s*([-*+]|\d+[.)])\s+/, ""), nested: "" });
+            index++;
+        } else if (/^\s*([-*+]|\d+[.)])\s/.test(line) && indentOf(line) > indent && items.length) {
+            items.at(-1).nested += list(lines, index);
+            index = list.end;
+        } else if (line.trim() !== "" && indentOf(line) > indent && items.length) {
+            items.at(-1).text += ` ${line.trim()}`;
+            index++;
+        } else {
+            break;
+        }
+    }
+
+    list.end = index;
+    const tag = ordered ? "ol" : "ul";
+
+    return `<${tag}>${items.map((item) => `<li>${inline(item.text.replace(/^\[([ xX])\]\s/, (_, mark) => (mark === " " ? "☐ " : "☑ ")))}${item.nested}</li>`).join("")}</${tag}>`;
+}
+
+/** A line's inline markdown: code, bold, italics, links; a link to another key document opens it in the reader. */
+function inline(text)
+{
+    const codes = [];
+    let html = escape(text).replace(/`([^`]+)`/g, (_, code) => {
+        codes.push(`<code>${code}</code>`);
+        return `\u0000${codes.length - 1}\u0000`;
+    });
+    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^\w*])\*(?!\s)(.+?)\*(?!\w)/g, "$1<em>$2</em>").replace(/(^|[^\w])_(?!\s)(.+?)_(?!\w)/g, "$1<em>$2</em>");
+    html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, target) => {
+        const file = target.split("#")[0].split("/").at(-1);
+        const key = (data.keyDocuments ?? []).findIndex((document) => document.exists && file && document.path.split("/").at(-1) === file);
+
+        if (key >= 0) {
+            return `<a href="${data.keyDocuments[key].href}" data-document="${key}">${label}</a>`;
+        }
+
+        return /^https?:\/\//.test(target) ? `<a href="${target}" target="_blank" rel="noopener noreferrer">${label}</a>` : `<span class="reader-link" title="${target}">${label}</span>`;
+    });
+
+    return html.replace(/\u0000(\d+)\u0000/g, (_, number) => codes[Number(number)]);
 }
 
 async function loadTidy()

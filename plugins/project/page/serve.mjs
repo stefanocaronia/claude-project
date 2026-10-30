@@ -1,10 +1,11 @@
 // The project's page: node serve.mjs, from the project's folder or with CLAUDE_PROJECT_DIR; then http://localhost:<page.port>.
 // It serves the page, its data, the cleanup, the colleagues' portraits, and each extension's script and routes.
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isMain, loadProject } from "../scripts/project.mjs";
+import { isMain, loadProject, notePath } from "../scripts/project.mjs";
 import { context, loadExtensions } from "../scripts/extensions.mjs";
 import { collect } from "./collect.mjs";
 import { apply, propose, runFix, tidyState } from "./tidy.mjs";
@@ -41,6 +42,17 @@ export async function pageServer(from)
             } else if (request.method === "POST" && url.pathname === "/tidy/apply") {
                 const { ids } = JSON.parse((await body(request)) || "{}");
                 send(response, Array.isArray(ids) && apply(config, ids.map(String)) ? 200 : 409, "application/json", JSON.stringify(tidyState(config)));
+            } else if (request.method === "POST" && url.pathname === "/backlog") {
+                const answer = changeBacklog(config, JSON.parse((await body(request)) || "{}"));
+                send(response, answer.ok ? 200 : 400, "application/json", JSON.stringify(answer));
+            } else if (/^\/document\/\d+$/.test(url.pathname)) {
+                // A key document of the configuration, by its place in the list: never another file.
+                const document = config.documents[Number(url.pathname.split("/")[2])];
+                document && existsSync(document.path) ? send(response, 200, "text/plain; charset=utf-8", readFileSync(document.path)) : send(response, 404, "text/plain", "no such document");
+            } else if (/^\/note\/\d+$/.test(url.pathname)) {
+                // A task's note, by the task's number: never another file.
+                const path = notePath(config, Number(url.pathname.split("/")[2]));
+                existsSync(path) ? send(response, 200, "text/plain; charset=utf-8", readFileSync(path)) : send(response, 404, "text/plain", "no such note");
             } else if (url.pathname.startsWith("/portrait/")) {
                 const id = url.pathname.slice("/portrait/".length).replace(/[^a-z0-9-]/g, "");
                 const path = `${config.memory}/${id}/avatar-small.jpg`;
@@ -69,6 +81,24 @@ export async function listen(server, port)
     const second = createServer((request, response) => server.emit("request", request, response));
     second.on("error", () => undefined);
     second.listen(port, "::1");
+}
+
+/** A change of the backlog the page asks, through the backlog's own command line as the panel's buttons do: a task moved to a state
+ * (start, done, postpone, todo) or its priority set. Anything else is refused. */
+function changeBacklog(config, { command, id, priority })
+{
+    const task = /^[\w-]+-\d+$/.test(String(id)) ? String(id) : null;
+    const args = ["start", "done", "postpone", "todo"].includes(command) && task ? [command, task]
+        : command === "set" && task && /^P[1-3]$/.test(String(priority)) ? ["set", task, "--p", String(priority)]
+        : null;
+
+    if (!args) {
+        return { ok: false, message: "The page changes a task's state (start, done, postpone, todo) or its priority (set with P1, P2 or P3), by its id." };
+    }
+
+    const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...env } = process.env;
+    const run = spawnSync(process.execPath, [join(here, "..", "scripts", "backlog.mjs"), ...args], { cwd: config.root, encoding: "utf8", env: { ...env, CLAUDE_PROJECT_DIR: config.root }, windowsHide: true });
+    return { ok: run.status === 0, message: (run.status === 0 ? run.stdout : run.stderr).trim() };
 }
 
 /** A request this page may answer: addressed to a loopback name (a rebound DNS name is refused), and a change only from the page

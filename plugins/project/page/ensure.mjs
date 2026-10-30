@@ -1,13 +1,18 @@
-// Starts the project's page in the background unless it is already up; the plugin's SessionStart hook runs it. Silent in a folder
-// without .claude/project.yaml.
+// Starts the project's page in the background unless it is already up; the plugin's SessionStart hook runs it. In a git repo without
+// .claude/project.yaml it says once, the first time, how to set the project up, and is silent there after.
 import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findRoot, loadProject, ProjectError, projectName } from "../scripts/project.mjs";
+import { sayer } from "../lib/messages.mjs";
+import { findRoot, git, loadProject, ProjectError, projectName } from "../scripts/project.mjs";
 
 const from = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
-if (findRoot(from) !== null) {
+if (findRoot(from) === null) {
+    invite();
+} else {
     try {
         await ensure();
     } catch (error) {
@@ -33,6 +38,28 @@ async function ensure()
         : say("portOther", { port, owner });
     // The line is shown to the user at the start of the session, and given to Claude as context.
     console.log(JSON.stringify({ systemMessage: context === say("served", { url }) ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: context } }));
+}
+
+/** One line, once a repo: the plugin is here and /project:init sets it up. The repos already told are kept in the temporary folder. */
+function invite()
+{
+    const repo = git(from, ["rev-parse", "--show-toplevel"]).trim();
+
+    if (!repo) {
+        return;
+    }
+
+    const file = join(tmpdir(), "claude-project", "invited.json");
+    const told = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
+
+    if (told.includes(repo.toLowerCase())) {
+        return;
+    }
+
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify([...told, repo.toLowerCase()]));
+    const say = sayer(Intl.DateTimeFormat().resolvedOptions().locale.startsWith("it") ? "it" : "en");
+    console.log(JSON.stringify({ systemMessage: say("invite"), hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: say("inviteContext") } }));
 }
 
 /** The root of the project whose page answers on the port; "" when something else answers; null when nothing does. */

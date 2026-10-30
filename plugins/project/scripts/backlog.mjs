@@ -3,12 +3,15 @@
 //   node backlog.mjs add "text" [--goal "<goal of the plan>"] [--p P2] [--effort <word>] [--to <name>] [--state todo|doing|postponed|done]
 //   node backlog.mjs start|done|postpone|todo T-12 [T-13…]
 //   node backlog.mjs archive T-12… | archive --done
-//   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"]
+//   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"]
+//   node backlog.mjs note T-12   (its note, written when missing: the path)
 //   node backlog.mjs show T-12… | list [--state doing] [--to <name>] [--p P1] [--goal "…"] [--json] | find <words>… | goals
+import { existsSync } from "node:fs";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
+import { listOf, splitLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { stateKeys } from "../lib/words.mjs";
-import { assignees, isMain, loadProject, ProjectError, readBacklog, readGoals, runCli, shown, today, withBacklogLock, writeBacklog } from "./project.mjs";
+import { assignees, isMain, loadProject, notePath, ProjectError, readBacklog, readDecisions, readDependencies, readGoals, runCli, shown, taskLinks, today, withBacklogLock, write, writeBacklog } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
 const changes = ["add", "start", "done", "postpone", "todo", "archive", "set"];
@@ -36,8 +39,13 @@ export function backlogProblems(config, say)
         // An archived task keeps the goal it had, even one the plan no longer holds.
         const archivedGoals = task.state === "archived" ? [...goals, task.goal] : goals;
 
-        for (const error of taskErrors(task, { words: config.words, people, goals: archivedGoals, prefix, say })) {
+        for (const error of taskErrors(task, { words: config.words, people, goals: archivedGoals, prefix, decisionPrefix: config.prefixes.decision, say })) {
             problems.push({ ...at, message: `${id}: ${error}` });
+        }
+
+        // A link to a task that is in neither the backlog nor the archive; a decision's the check of the references says.
+        for (const cited of [...task.after, ...task.see].filter((one) => one.startsWith(`${prefix}-`) && !tasks.some((other) => `${prefix}-${other.id}` === one))) {
+            problems.push({ ...at, message: say("linkUnknown", { id, other: cited }) });
         }
 
         if (task.state === "done" && !task.done) {
@@ -80,9 +88,20 @@ function execute(command, options, words, config, say)
     }
 
     const find = (given) => tasks.find((task) => task.id === Number(String(given).replace(new RegExp(`^${escapeRegex(prefix)}-`, "i"), ""))) ?? fail(say("notFound", { id: given }));
+    // A task as it will be written, among all the others: right in itself, its links to tasks and decisions that exist, no cycle of waits.
     const checked = (task) => {
-        const errors = taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), prefix, say });
+        const all = [...tasks.filter((one) => one.id !== task.id), task];
+        const errors = [
+            ...taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), prefix, decisionPrefix: config.prefixes.decision, say }),
+            ...linkErrors(task, all, config, say),
+        ];
         return errors.length > 0 ? fail(errors.join("\n")) : task;
+    };
+    // The links of a text, `(after: …)` and `(see: …)` at its end, with those of the options on top: an option given replaces.
+    const linked = (given, old = { after: [], see: [] }) => {
+        const split = splitLinks(given ?? old.text);
+        const pick = (kind) => (options[kind] !== undefined && options[kind] !== true ? listOf(options[kind]) : given !== undefined && split[kind].length > 0 ? split[kind] : old[kind]);
+        return { text: split.text, after: pick("after"), see: pick("see") };
     };
     const save = (all, said) => {
         writeBacklog(config, all);
@@ -92,7 +111,7 @@ function execute(command, options, words, config, say)
     if (command === "next") {
         console.log(`${prefix}-${nextId(tasks)}`);
     } else if (command === "add") {
-        const text = words.join(" ").trim() || fail(say("noText"));
+        const given = words.join(" ").trim() || fail(say("noText"));
         const state = options.state ?? "todo";
         const task = checked({
             id: nextId(tasks),
@@ -101,7 +120,7 @@ function execute(command, options, words, config, say)
             to: options.to ?? config.people[0],
             created: today(),
             goal: options.goal ?? config.words.noGoal,
-            text,
+            ...linked(given),
             done: state === "done" ? today() : null,
             archived: null,
             state,
@@ -123,12 +142,22 @@ function execute(command, options, words, config, say)
             ...(options.effort ? { effort: options.effort } : {}),
             ...(options.to ? { to: options.to } : {}),
             ...(options.goal ? { goal: options.goal } : {}),
-            ...(options.text ? { text: options.text } : {}),
+            ...linked(typeof options.text === "string" ? options.text : undefined, task),
         });
         save(tasks.map((one) => (one.id === task.id ? changed : one)), line(changed));
+    } else if (command === "note") {
+        const task = find(words[0]);
+        const path = notePath(config, task.id);
+
+        if (!existsSync(path)) {
+            write(path, `# ${prefix}-${task.id} · ${task.text}\n`);
+        }
+
+        console.log(shown(config, path));
     } else if (command === "show") {
         const shownTasks = words.map(find);
-        print(shownTasks, options.json, (task) => `${line(task)}\n  ${say("stateLabel", { state: stateName(task) })}`);
+        const links = linksOf(tasks, config, say, stateName);
+        print(shownTasks, options.json, (task) => [line(task), `  ${say("stateLabel", { state: stateName(task) })}`, ...links(task).map((one) => `  ${one}`)].join("\n"));
     } else if (command === "list") {
         const shownTasks = tasks.filter((task) => (options.state ? task.state === options.state : task.state !== "archived" && task.state !== "done"))
             .filter((task) => !options.to || task.to === options.to)
@@ -148,6 +177,44 @@ function execute(command, options, words, config, say)
     } else {
         fail(say("backlogUsage"));
     }
+}
+
+/** What a task's links would break, among all the tasks: a task or a decision that does not exist, a wait that closes a cycle. */
+function linkErrors(task, all, config, say)
+{
+    const prefix = config.prefixes.task;
+    const id = `${prefix}-${task.id}`;
+    const tasks = new Set(all.map((one) => `${prefix}-${one.id}`));
+    const decisions = new Set(readDecisions(config).decided.map((row) => `${config.prefixes.decision}-${row.number}`));
+    const missing = [...task.after, ...task.see].filter((one) => (one.startsWith(`${prefix}-`) && !tasks.has(one)) || (one.startsWith(`${config.prefixes.decision}-`) && !decisions.has(one)));
+    const cycles = readDependencies(config, all).cycles().filter((cycle) => cycle.includes(id));
+    return [
+        ...missing.map((other) => say("linkUnknown", { id, other })),
+        ...cycles.map((cycle) => say("cycle", { ids: [...cycle, cycle[0]].join(" → ") })),
+    ];
+}
+
+/** The lines `show` adds under a task: what it waits for and its state, what waits for it, the chain to do first, its links both
+ * ways, its note. */
+function linksOf(tasks, config, say, stateName)
+{
+    const prefix = config.prefixes.task;
+    const graph = readDependencies(config, tasks);
+    const links = taskLinks(config, tasks);
+    const byId = new Map(tasks.map((task) => [`${prefix}-${task.id}`, task]));
+    const named = (one) => (byId.has(one) ? `${one} (${stateName(byId.get(one))})` : graph.known(one) ? `${one} (${say(graph.isOpen(one) ? "todoOpen" : "todoClosed")})` : `${one} (?)`);
+
+    return (task) => {
+        const { after, chain, waitedBy, see, seenFrom, note } = links.get(task.id);
+        return [
+            after.length > 0 ? say("waitsFor", { list: after.map(named).join(", ") }) : null,
+            chain.length > 0 ? say("chainFirst", { list: [...chain, `${prefix}-${task.id}`].join(" → ") }) : null,
+            waitedBy.length > 0 ? say("waitedBy", { list: waitedBy.join(", ") }) : null,
+            see.length > 0 ? say("seeLabel", { list: see.join(", ") }) : null,
+            seenFrom.length > 0 ? say("seenFrom", { list: seenFrom.join(", ") }) : null,
+            note ? say("noteLabel", { path: note }) : null,
+        ].filter(Boolean);
+    };
 }
 
 function print(tasks, json, line, footer)

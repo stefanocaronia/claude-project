@@ -8,7 +8,7 @@ import { configFile } from "../lib/config.mjs";
 import { plainMarkdown } from "../lib/text.mjs";
 import { check } from "./check.mjs";
 import { extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
-import { colleagues, findRoot, isMain, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readGoals, runCli, today, todoFiles } from "./project.mjs";
+import { colleagues, findRoot, isMain, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readGoals, runCli, taskLinks, today, todoFiles } from "./project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 const recentDecisions = 3;
@@ -29,6 +29,7 @@ export async function snapshot(config, say, withHealth = true)
     const findings = withHealth ? check(config, say) : null;
     const page = `http://localhost:${config.page.port}`;
     const extensions = await loadExtensions(config);
+    const links = taskLinks(config, tasks);
 
     return {
         project: projectName(config),
@@ -40,8 +41,18 @@ export async function snapshot(config, say, withHealth = true)
         links: await panelLinks(config, say, extensions, page),
         problems: extensionErrors(extensions),
         people: config.people,
+        // The key documents, each opened through the project's page.
+        documents: config.documents.map((document, index) => ({ name: document.name, href: `${page}/document/${index}`, exists: existsSync(document.path) })),
         colleagues: team,
-        tasks: tasks.filter((task) => openStates.includes(task.state)).map(({ file, line, archived, done, ...task }) => ({ ...task, text: plainMarkdown(task.text), effortKey: effortKey(task.effort, config.words) ?? "none", colleague: idOf.get(task.to) ?? null })),
+        // Each with its links: what it waits for, still open, and the chain to do first; what points to it; its note.
+        tasks: tasks.filter((task) => openStates.includes(task.state)).map(({ file, line, archived, done, ...task }) => ({
+            ...task,
+            ...links.get(task.id),
+            text: plainMarkdown(task.text),
+            effortKey: effortKey(task.effort, config.words) ?? "none",
+            colleague: idOf.get(task.to) ?? null,
+            noteHref: links.get(task.id).note ? `${page}/note/${task.id}` : null,
+        })),
         plan: {
             updated: planUpdated(read(config.files.plan), config.words),
             goals: goals.map((goal) => {
@@ -57,7 +68,7 @@ export async function snapshot(config, say, withHealth = true)
             recent: decided.slice().sort((first, second) => second.number - first.number).slice(0, recentDecisions).map((decision) => ({ number: decision.number, text: plainMarkdown(decision.text), why: plainMarkdown(decision.why) })),
         },
         // The files whose change makes the panel read the project again.
-        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, ...todoFiles(config).map((one) => one.file)],
+        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.notes, ...todoFiles(config).map((one) => one.file)],
         health: findings && { errors: count(findings, "error"), warnings: count(findings, "warning"), notes: count(findings, "note") },
     };
 }

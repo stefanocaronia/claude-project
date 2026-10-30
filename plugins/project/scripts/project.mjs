@@ -9,7 +9,8 @@ import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
 import { parseDecisions } from "../lib/decisions.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { planGoals } from "../lib/plan.mjs";
-import { firstName } from "../lib/todos.mjs";
+import { dependencies, seenFrom, todoLinks } from "../lib/links.mjs";
+import { firstName, parseTodo } from "../lib/todos.mjs";
 
 const lockWait = 10_000;
 const lockStale = 30_000;
@@ -167,6 +168,66 @@ export function todoFiles(config)
 {
     const ids = existsSync(config.memory) ? readdirSync(config.memory) : [];
     return ids.map((id) => ({ id, name: firstName(id), file: `${config.memory}/${id}/todo.md` })).filter((one) => existsSync(one.file));
+}
+
+/** Every task line of the colleagues' todos with its id and what it waits for: { colleague, file, line, done, text, id, after }. */
+export function readTodos(config)
+{
+    return todoFiles(config).flatMap(({ id: colleague, file }) => read(file).split(/\r?\n/).flatMap((text, index) => {
+        const task = parseTodo(text);
+        return task ? [{ colleague, file, line: index + 1, done: task.done, text: task.text, ...todoLinks(task.text, config.prefixes.task) }] : [];
+    }));
+}
+
+/** The ids a colleague's todo ever gave, open, ticked or moved to their done and archived notes, as Crew keeps them. */
+export function todoIdsEver(config)
+{
+    const ids = new Set(readTodos(config).map((todo) => todo.id).filter(Boolean));
+
+    for (const { id } of todoFiles(config)) {
+        for (const name of ["todo-done.md", "todo-archive.md"]) {
+            for (const match of read(`${config.memory}/${id}/notes/${name}`).matchAll(/ · (#[\w-]+-\d+) · /g)) {
+                ids.add(match[1]);
+            }
+        }
+    }
+
+    return ids;
+}
+
+/** The dependencies of the backlog and the todos together; the tasks given, or the backlog's as it is. */
+export function readDependencies(config, tasks = readBacklog(config).tasks)
+{
+    return dependencies(tasks, readTodos(config), config.prefixes.task);
+}
+
+/** What the panel and the page show of each task's links, by its number: what it waits for and what of that is still open, the chain
+ * to do first, who waits for it, what it points to and what points to it, its note's path when it has one. */
+export function taskLinks(config, tasks = readBacklog(config).tasks)
+{
+    const prefix = config.prefixes.task;
+    const graph = readDependencies(config, tasks);
+    const from = seenFrom(tasks, prefix);
+    const notes = new Set(existsSync(config.files.notes) ? readdirSync(config.files.notes) : []);
+
+    return new Map(tasks.map((task) => {
+        const id = `${prefix}-${task.id}`;
+        return [task.id, {
+            after: task.after,
+            see: task.see,
+            blockedBy: graph.blockers(id),
+            chain: graph.chain(id),
+            waitedBy: tasks.filter((other) => other.after.includes(id)).map((other) => `${prefix}-${other.id}`),
+            seenFrom: from.get(id) ?? [],
+            note: notes.has(`${id}.md`) ? shown(config, notePath(config, task.id)) : null,
+        }];
+    }));
+}
+
+/** Where a task's note is, `<docs>/tasks/T-12.md`, whether it is written or not. */
+export function notePath(config, id)
+{
+    return `${config.files.notes}/${config.prefixes.task}-${id}.md`;
 }
 
 /** The text files under the configured places a decision may be cited in, a `*` in a part of a path matching any name; a file reached

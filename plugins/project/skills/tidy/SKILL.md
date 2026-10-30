@@ -24,7 +24,7 @@ A numbered list, the most important first: what, why, what changes. Applied only
 
 - **Superseded decisions**: the row keeps its number, reduced to `| 412 | <superseded marker> D-427: <three or four words>. | |`. A number is never deleted or reused: code cites it. Superseded means revised whole; a revision in part leaves the row as it is.
 - **Old proposals** under "to decide": decide them, or remove them if a decision already closed them (say which).
-- **Tasks**: priorities that no longer fit, tasks a later decision or piece of work already closed (`backlog.mjs done` or `archive`), a colleague's todo line citing a task closed or missing.
+- **Tasks**: priorities that no longer fit, tasks a later decision or piece of work already closed (`backlog.mjs done` or `archive`), a colleague's todo line citing a task closed or missing; a cycle of waits or a link to a task that is not there (`backlog.mjs set T-n --after …` / `--see …`), the note of a task long archived.
 - **Docs outside the index**: into it, or into the archive folder if the work is closed.
 - **Heavy files**: the superseded rows first, then the lines that repeat what another already says.
 

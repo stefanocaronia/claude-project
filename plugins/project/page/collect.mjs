@@ -1,17 +1,21 @@
 // Reads the project into one object for the page: the plan by phases and goals, the decisions and their days, the tasks of the backlog
 // and of the colleagues' todos, the docs, the health, the commits by day, and what each extension adds.
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { dirname } from "node:path";
-import { numbering } from "../lib/decisions.mjs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { effortKey } from "../lib/backlog.mjs";
+import { numbering, proposalOf } from "../lib/decisions.mjs";
 import { planPhases, planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { check } from "../scripts/check.mjs";
 import { context } from "../scripts/extensions.mjs";
-import { colleagues, git, profileOf, projectName, read, readBacklog, readDecisions, readGoals, realPath, shown, todoFiles } from "../scripts/project.mjs";
+import { colleagues, git, profileOf, projectName, read, readBacklog, readDecisions, readGoals, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 const lastDecisions = 8;
+// How many days of done tasks the board shows in its last column.
+const boardDays = 14;
 
 /** Everything the page shows, read fresh from the files; each extension's data under its id. */
 export async function collect(config, say, extensions = [])
@@ -38,9 +42,13 @@ export async function collect(config, say, extensions = [])
         plan,
         decisions: readDecisionsData(config),
         documents: readDocuments(config),
+        keyDocuments: config.documents.map((document, index) => ({ name: document.name, path: shown(config, document.path), href: `/document/${index}`, exists: existsSync(document.path) })),
         inbox: readInbox(config),
         colleagues: readColleagues(config),
         tasks: readTasks(config),
+        board: readBoard(config),
+        boardDays,
+        holds: readHolds(config),
         health: check(config, say),
         activity: activity(config),
         extensions: extensions.map((extension) => ({ id: extension.id, script: extension.script ? `/extension/${extension.id}/page.js` : null })),
@@ -61,7 +69,7 @@ function readPlan(config)
     const sections = [...goals, ...unplanned].map((goal) => {
         const own = tasks.filter((task) => task.goal === goal.name);
         const items = own.map((task) => ({ id: task.id, text: clean(`${prefix}-${task.id} · ${task.text}`), priority: task.priority, created: task.created, done: task.done !== null, state: task.state, to: task.to }));
-        return { title: titled(goal), name: goal.name, phase: goal.phase, items, done: items.filter((item) => item.done).length, total: items.length };
+        return { title: titled(goal), name: goal.name, phase: goal.phase, isUnplanned: goal.isUnplanned === true, items, done: items.filter((item) => item.done).length, total: items.length };
     }).filter((section) => section.total > 0);
     const phases = planPhases(text).map((phase) => {
         const own = sections.filter((section) => section.phase === phase.number);
@@ -73,12 +81,15 @@ function readPlan(config)
         finishedByDay[task.done] = (finishedByDay[task.done] ?? 0) + 1;
     }
 
+    // The page shows the plan's goals, and the tasks without one while some are open: the goals of archived tasks that the plan no
+    // longer has are history, counted in their phases only.
+    const shown = sections.filter((section) => !section.isUnplanned || (section.name === config.words.noGoal && section.items.some((item) => !item.done)));
     return {
         updated: planUpdated(text, config.words),
         phases,
-        sections,
-        done: sections.reduce((sum, section) => sum + section.done, 0),
-        total: sections.reduce((sum, section) => sum + section.total, 0),
+        sections: shown,
+        done: shown.reduce((sum, section) => sum + section.done, 0),
+        total: shown.reduce((sum, section) => sum + section.total, 0),
         finishedByDay,
     };
 }
@@ -104,11 +115,67 @@ function readDecisionsData(config)
         count: decided.length,
         last: decided.slice(-lastDecisions).reverse().map((row) => ({ number: row.number, text: clean(row.text) })),
         open: open.map((point) => clean(point.text)),
+        // Every decision, the newest first, with the day it was taken; the points to decide with their priority and day, for the lists.
+        all: decided.slice().reverse().map((row) => ({ number: row.number, text: clean(row.text), why: clean(row.why), day: firstSeen.get(row.number) ?? null })),
+        proposals: open.map((point) => {
+            const proposal = proposalOf(point.text, config.words, today());
+            return { ...proposal, text: clean(proposal.text), whole: point.text, line: point.line };
+        }),
         byDay,
         byPerson,
         duplicates: twice,
         missing,
     };
+}
+
+/** Who holds each task in progress now, as the chats of the project write it in the system's temporary folder (the panel's holds):
+ * the colleague at work, or a chat; by task number. */
+function readHolds(config)
+{
+    const folder = join(tmpdir(), "claude-project");
+    const holds = {};
+
+    if (!existsSync(folder)) {
+        return holds;
+    }
+
+    for (const name of readdirSync(folder).filter((one) => /^held-.+\.json$/.test(one))) {
+        try {
+            const content = JSON.parse(read(join(folder, name)));
+
+            if (String(content.root).toLowerCase() === config.root.toLowerCase() && Date.now() - content.at < 24 * 3_600_000) {
+                for (const [id, one] of Object.entries(content.tasks ?? {})) {
+                    holds[id] = { colleague: one.colleague ?? null };
+                }
+            }
+        } catch {
+            // a file being written: the next reading has it
+        }
+    }
+
+    return holds;
+}
+
+/** The backlog for the board and the lists: every task not archived, and those archived within the board's days, with who holds it. */
+function readBoard(config)
+{
+    const since = today(new Date(Date.now() - boardDays * 86_400_000));
+    const ids = new Map(colleagues(config).map((colleague) => [colleague.name, colleague.id]));
+    const { tasks } = readBacklog(config);
+    const planned = new Set(readGoals(config).map((goal) => goal.name));
+    const links = taskLinks(config, tasks);
+    // Each with its links, as the panel has them: after, see, blockedBy, chain, waitedBy, seenFrom; its note's path, and where the page serves it.
+    return tasks
+        // An archived task whose goal the plan no longer has is history: the board's rows are the plan's goals.
+        .filter((task) => task.state !== null && (task.state !== "archived" || ((task.done ?? task.archived ?? "") >= since && (task.goal === config.words.noGoal || planned.has(task.goal)))))
+        .map(({ file, line, ...task }) => ({
+            ...task,
+            ...links.get(task.id),
+            text: clean(task.text),
+            effortKey: effortKey(task.effort, config.words) ?? "none",
+            colleague: ids.get(task.to) ?? null,
+            noteHref: links.get(task.id).note ? `/note/${task.id}` : null,
+        }));
 }
 
 /** The day each decision number first appears in the decisions' file, from the history of the repo that holds it. */
