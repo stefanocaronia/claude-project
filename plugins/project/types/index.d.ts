@@ -25,7 +25,8 @@ export type Task = {
     noteHref: string | null;
 };
 
-export type Goal = { name: string; phase: number | null; done: number; total: number; isDoing: boolean };
+/** A goal of the plan with its tasks counted; `closed`, the day it closed, out of the open bars. */
+export type Goal = { name: string; phase: number | null; done: number; total: number; isDoing: boolean; closed?: string | null };
 
 export type Proposal = { priority: string | null; day: string | null; text: string; whole: string; line: number };
 

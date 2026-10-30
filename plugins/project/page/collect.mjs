@@ -69,7 +69,7 @@ function readPlan(config)
     const sections = [...goals, ...unplanned].map((goal) => {
         const own = tasks.filter((task) => task.goal === goal.name);
         const items = own.map((task) => ({ id: task.id, text: clean(`${prefix}-${task.id} · ${task.text}`), priority: task.priority, created: task.created, done: task.done !== null, state: task.state, to: task.to }));
-        return { title: titled(goal), name: goal.name, phase: goal.phase, isUnplanned: goal.isUnplanned === true, items, done: items.filter((item) => item.done).length, total: items.length };
+        return { title: titled(goal), name: goal.name, phase: goal.phase, description: clean(goal.description ?? ""), closed: goal.closed ?? null, isUnplanned: goal.isUnplanned === true, items, done: items.filter((item) => item.done).length, total: items.length };
     }).filter((section) => section.total > 0);
     const phases = planPhases(text).map((phase) => {
         const own = sections.filter((section) => section.phase === phase.number);

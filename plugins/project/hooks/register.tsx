@@ -77,16 +77,21 @@ export const register: Register = (on) => {
         return spawned;
     });
 
-    // A task this chat starts or closes through the backlog's command line: this chat holds it, or no longer does.
+    // A task this chat starts or closes through the backlog's command line: this chat holds it, or no longer does. Any change through
+    // the plugin's commands shows at once, not only when the turn ends: a task Claude starts is in progress while it works on it.
     on("tool.call", async ($, e, next) => {
         const result = await next(e);
-        const command = !e.agentId && typeof (e as { command?: unknown }).command === "string" ? (e as { command: string }).command : "";
-        const change = /backlog\.mjs["']?\s+(start|done|postpone|todo|archive)\b/.exec(command);
+        const command = typeof (e as { command?: unknown }).command === "string" ? (e as { command: string }).command : "";
+        const change = e.agentId ? null : /backlog\.mjs["']?\s+(start|done|postpone|todo|archive)\b/.exec(command);
 
         if (change) {
             const { snapshot } = await read($, board);
             const ids = citedTasks(command, snapshot?.prefixes.task ?? "T");
             await hold($, (held) => applyHold(held, ids, change[1] === "start" ? { colleague: null, agentId: null } : null)).catch(() => undefined);
+        }
+
+        if (/(backlog|plan)\.mjs["']?\s/.test(command)) {
+            await refresh($, false).catch(() => undefined);
         }
 
         return result;
@@ -287,6 +292,9 @@ export const register: Register = (on) => {
             more(key, tasks.length, "showAllTasks"),
         ]);
 
+        // The goals still open have their bars; those closed only a count, the page has them.
+        const openGoals = snapshot.plan.goals.filter((goal) => !goal.closed);
+        const closedGoals = snapshot.plan.goals.length - openGoals.length;
         // A goal: its name, a bar as wide as the card, its tasks done of all; open, its open tasks.
         const goalRow = (goal: Goal) => {
             const key = `goal-${goal.name}`;
@@ -407,6 +415,7 @@ export const register: Register = (on) => {
                         : <Button key="next-task" variant="primary" label={words("nextTask", { id: `${prefix}-${nextTask.id}` })} onPress={() => startTask($, snapshot, nextTask, byName.get(nextTask.to))} />
                     : null}
                 {nextProposal ? <Button key="next-decision" label={words("nextDecision")} onPress={() => submit($, words("promptChoice", { line: nextProposal.line, text: nextProposal.whole }))} /> : null}
+                <Button key="where-we-stand" label={words("whereWeStand")} onPress={() => submit($, words("promptWhereWeStand"))} />
                 <Button key="tidy-docs" label={words("tidyDocs")} onPress={() => submit($, words("promptTidy"))} />
             </Box>
         );
@@ -478,9 +487,10 @@ export const register: Register = (on) => {
                     : null}
                 {taskSection("doing", "⚒︎", words("sectionDoing"), doing, words("noneDoing"))}
                 {taskSection("rest", "☰", words("sectionRest"), rest, words("noneRest"))}
-                {section("goals", "⚑︎", `${words("sectionGoals")} · ${snapshot.plan.goals.length}`, [
-                    card("goals-card", limited("goals", snapshot.plan.goals).map(goalRow)),
-                    more("goals", snapshot.plan.goals.length, "showAllTasks"),
+                {section("goals", "⚑︎", `${words("sectionGoals")} · ${openGoals.length}`, [
+                    card("goals-card", limited("goals", openGoals).map(goalRow)),
+                    more("goals", openGoals.length, "showAllTasks"),
+                    closedGoals > 0 ? <Link key="goals-closed" href={`${snapshot.page}/#overview`}>{`✓ ${words("goalsClosed", { count: closedGoals })}`}</Link> : null,
                 ], isDesktop && snapshot.plan.updated ? <Text dimColor>{words("planOf", { date: snapshot.plan.updated })}</Text> : null)}
                 {section("decisions", "⚖︎", `${words("sectionDecisions")} · ${words("decisionsCount", { count: proposals.length })}`, [
                     <Text key="to-decide" dimColor>{words("toDecide")}</Text>,
@@ -698,6 +708,11 @@ async function startTask($: EngineInterface, snapshot: Snapshot, task: Task, mem
         }
 
         return;
+    }
+
+    // Claude's own task is in progress from the press, as a colleague's is from their start: the panel moves it before asking.
+    if (!isGoingOn) {
+        await backlog($, ["start", id]);
     }
 
     await hold($, (held) => applyHold(held, [task.id], { colleague: null, agentId: null })).catch(() => undefined);

@@ -91,7 +91,10 @@ function execute(command, options, words, config, say)
     // A task as it will be written, among all the others: right in itself, its links to tasks and decisions that exist, no cycle of waits.
     const checked = (task) => {
         const all = [...tasks.filter((one) => one.id !== task.id), task];
+        // A goal given now must be open; a task keeps the goal it had, closed or not.
+        const closed = typeof options.goal === "string" ? readGoals(config).find((goal) => goal.name === options.goal && goal.closed) : undefined;
         const errors = [
+            ...(closed ? [say("goalIsClosed", { value: closed.name, day: closed.closed })] : []),
             ...taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), prefix, decisionPrefix: config.prefixes.decision, say }),
             ...linkErrors(task, all, config, say),
         ];

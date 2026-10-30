@@ -38,7 +38,7 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 
 ## The plan
 
-Phases in its table (`| 2. Name | at the end you can… |`), goals as `### Name (phase 2)` under the goals heading, the line "updated on YYYY-MM-DD" kept true. The plan says where the project goes; the tasks say what is left.
+Phases in its table (`| 2. Name | at the end you can… |`), goals as `### Name (phase 2)` under the goals heading, the line "updated on YYYY-MM-DD" kept true. A goal whose tasks are all done or archived closes with `plan.mjs close "<goal>"`: its heading gets its day, `· done 2026-10-30`, it leaves the open bars and takes no new tasks; `plan.mjs open "<goal>"` opens it again, `plan.mjs goals` lists them. The plan says where the project goes; the tasks say what is left.
 
 ## Health: `check.mjs`
 

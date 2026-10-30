@@ -25,7 +25,7 @@ const snapshot = {
         { id: 70, priority: "P1", effort: "medio", effortKey: "medium", to: "Stefano", colleague: null, created: "2026-10-28", goal: "—", text: "Il login di npm", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
         { id: 71, priority: "P3", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-28", goal: "Revisione", text: "Più avanti", state: "postponed", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
     ],
-    plan: { updated: "2026-10-29", goals: [{ name: "Revisione", phase: null, done: 6, total: 9, isDoing: true }, { name: "La 5e", phase: 4, done: 0, total: 3, isDoing: false }] },
+    plan: { updated: "2026-10-29", goals: [{ name: "Revisione", phase: null, done: 6, total: 9, isDoing: true }, { name: "La 5e", phase: 4, done: 0, total: 3, isDoing: false }, { name: "Il nucleo", phase: 1, done: 5, total: 5, isDoing: false, closed: "2026-10-20" }] },
     decisions: {
         open: [
             { priority: "P3", day: null, text: "Le cariche degli oggetti", whole: "P3 · Le cariche degli oggetti", line: 553 },
@@ -110,6 +110,9 @@ test("the panel shows the project's numbers, the tasks in progress and the P1 to
         expect(await ui.find({ type: "Text", text: "▸ I pacchetti nei loro repo" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /^▸ Revisione/ })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /6\/9/ })).toBeDefined();
+        // A closed goal has no bar: only the count of the closed ones, a link to the page.
+        expect(await ui.find({ type: "Text", text: /^▸ Il nucleo/ })).toBeUndefined();
+        expect((await ui.find({ type: "Link", text: "✓ 1 traguardi chiusi" }))?.props.href).toBe("http://localhost:5790/#overview");
         // Stefano's own task has no ▶: nobody starts it but him.
         expect(await ui.find({ key: "start-61" })).toBeDefined();
         expect(await ui.find({ key: "start-70" })).toBeUndefined();
@@ -291,5 +294,34 @@ test("the next-task button skips a blocked task, and taking up a task with a not
     expect((await ui.find({ key: "next-task" }))?.props.label).toBe("▶ Prossimo compito (T-61)");
     await ui.press({ key: "start-143" });
     expect(prompts[0]).toMatch(/^Riprendi T-143: .* La sua nota, col contesto e dove è arrivato il lavoro: docs\/compiti\/T-143\.md; leggila prima\.$/);
+    await ui.unmount();
+});
+
+test("▶ on Claude's own task moves it to in progress before asking, and a change Claude makes through the commands shows at once", async ($, on) => {
+    const { runs, prompts, stamp } = world(on);
+    on("tool.call", () => ({ result: "ran" }) as never);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
+    runs.length = 0;
+    await ui.press({ key: "start-71" });
+    expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "start", "T-71"]]);
+    expect(prompts[0]).toBe("Lavora a T-71: Più avanti");
+    await ui.unmount();
+
+    // A command of the backlog run in the chat reads the project again, without waiting for the turn to end.
+    const reads = () => runs.filter((args) => args[0] === "snapshot.mjs").length;
+    const before = reads();
+    stamp.mtimeMs = 2;
+    await $.tool.call({ tool: "Bash", command: "node scripts/backlog.mjs start T-61" } as never);
+    expect(reads()).toBe(before + 1);
+});
+
+test("the button for where the project stands asks Claude for a short report", async ($, on) => {
+    const { prompts } = world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    expect((await ui.find({ key: "where-we-stand" }))?.props.label).toBe("◎ Il punto della situazione");
+    await ui.press({ key: "where-we-stand" });
+    expect(prompts[0]).toMatch(/^Fammi il punto della situazione del progetto, in al massimo 30 righe/);
     await ui.unmount();
 });

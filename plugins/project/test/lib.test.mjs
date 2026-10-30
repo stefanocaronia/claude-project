@@ -5,7 +5,7 @@ import { citedTasks, effortKey, formatLine, moveTasks, nextId, parseBacklog, par
 import { defaultPort, readConfig, relativeTo, resolve } from "../lib/config.mjs";
 import { citedDecisions, nextDecision, numbering, parseDecisions } from "../lib/decisions.mjs";
 import { sayer } from "../lib/messages.mjs";
-import { planGoals, planPhases, planUpdated } from "../lib/plan.mjs";
+import { closeGoal, planGoals, planPhases, planUpdated } from "../lib/plan.mjs";
 import { firstName, formatTodo, parseTodo } from "../lib/todos.mjs";
 import { wordsOf } from "../lib/words.mjs";
 
@@ -122,10 +122,20 @@ test("the plan gives its goals with their phases, its phases' table and the day 
         "",
         "### Non è un traguardo",
     ].join("\n");
-    assert.deepEqual(planGoals(plan, it), [{ name: "Ruoli e sessioni", phase: 2, description: "" }, { name: "Revisione e pulizia", phase: null, description: "" }]);
+    assert.deepEqual(planGoals(plan, it), [{ name: "Ruoli e sessioni", phase: 2, description: "", closed: null }, { name: "Revisione e pulizia", phase: null, description: "", closed: null }]);
     assert.deepEqual(planPhases(plan), [{ number: 0, name: "Progettazione", outcome: "approvare" }, { number: 2, name: "Ruoli e sessioni", outcome: "giocare" }]);
     assert.equal(planUpdated(plan, it), "2026-10-29");
-    assert.deepEqual(planGoals("## Goals\n\n### Ship (phase 1)\n\nThe first release.\n\n### Grow\n", en), [{ name: "Ship", phase: 1, description: "The first release." }, { name: "Grow", phase: null, description: "" }]);
+    assert.deepEqual(planGoals("## Goals\n\n### Ship (phase 1)\n\nThe first release.\n\n### Grow\n", en), [{ name: "Ship", phase: 1, description: "The first release.", closed: null }, { name: "Grow", phase: null, description: "", closed: null }]);
+});
+
+test("a goal closes with its day at the end of its heading, opens again, and keeps its name and phase", () => {
+    const plan = "# Plan\n\n## Goals\n\n### Ship (phase 1)\n\nThe first release.\n\n### Grow\n";
+    const closed = closeGoal(plan, en, "Ship", "2026-10-30");
+    assert.equal(closed, "# Plan\n\n## Goals\n\n### Ship (phase 1) · done 2026-10-30\n\nThe first release.\n\n### Grow\n");
+    assert.deepEqual(planGoals(closed, en).map((goal) => [goal.name, goal.phase, goal.closed]), [["Ship", 1, "2026-10-30"], ["Grow", null, null]]);
+    assert.equal(closeGoal(closed, en, "Ship", null), plan);
+    assert.equal(closeGoal(plan, en, "Elsewhere", "2026-10-30"), null);
+    assert.equal(planGoals("## Traguardi\n\n### Il nucleo (fase 1) · fatto 2026-10-01\n", it)[0].closed, "2026-10-01");
 });
 
 test("the decisions give their rows with the why, the open points, and their numbering", () => {

@@ -7,7 +7,7 @@ import { planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { backlogProblems } from "./backlog.mjs";
-import { citingFiles, isMain, loadProject, read, readBacklog, readDecisions, readDependencies, readTodos, runCli, shown, today, todoFiles, todoIdsEver } from "./project.mjs";
+import { citingFiles, isMain, loadProject, read, readBacklog, readDecisions, readDependencies, readGoals, readTodos, runCli, shown, today, todoFiles, todoIdsEver } from "./project.mjs";
 
 /** Every finding about the docs, from errors that must be fixed to notes for the cleanup: { severity, kind, file, line, message }. */
 export function check(config, say)
@@ -238,6 +238,18 @@ function checkPlan(config, say, add)
 
     if (!existsSync(path)) {
         return;
+    }
+
+    // A goal closed while some of its tasks are still open.
+    const { tasks } = readBacklog(config);
+    const prefix = config.prefixes.task;
+
+    for (const goal of readGoals(config).filter((one) => one.closed)) {
+        const open = tasks.filter((task) => task.goal === goal.name && ["doing", "todo", "postponed"].includes(task.state));
+
+        if (open.length > 0) {
+            add("warning", "plan", path, null, say("closedGoalOpen", { goal: goal.name, day: goal.closed, list: open.map((task) => `${prefix}-${task.id}`).join(", ") }));
+        }
     }
 
     const text = read(path);

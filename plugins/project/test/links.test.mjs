@@ -191,3 +191,21 @@ async function pageChecks(port)
     assert.deepEqual([two.after, two.blockedBy, two.waitedBy, two.note, two.noteHref], [["T-3"], ["T-3"], [], "docs/tasks/T-2.md", "/note/2"]);
     assert.deepEqual(data.board.find((task) => task.id === 3).see, ["T-50", "T-1"]);
 }
+
+test("a goal closes once its tasks are closed, refuses new tasks while closed, opens again, and the check says when a closed goal has open ones", () => {
+    const plan = (...args) => spawnSync(process.execPath, [join(scripts, "plan.mjs"), ...args], { cwd: root, encoding: "utf8", env: environment() });
+    put("docs/PLAN.md", "# Plan\n\n## Goals\n\n### Core (phase 1)\n\n### Later\n");
+    assert.match(plan("close", "Core").stderr, /«Core» still has open tasks: T-1, T-2, T-3, T-4/);
+    assert.match(plan("close", "Later").stdout, /«Later» closed on \d{4}-\d{2}-\d{2}\./);
+    assert.match(read("docs/PLAN.md"), /^### Later · done \d{4}-\d{2}-\d{2}$/m);
+    assert.match(plan("goals").stdout, /Core: 4 open, 0 done\nLater: closed on \d{4}-\d{2}-\d{2}, 0 done/);
+    assert.match(fails("add", "more", "--goal", "Later"), /The goal «Later» closed on .*plan\.mjs open "Later"/);
+
+    writeFileSync(join(root, "docs/TASKS.md"), read("docs/TASKS.md").replace("· Core · the log", "· Later · the log"));
+    const findings = JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: root, encoding: "utf8", env: environment() }).stdout);
+    assert.ok(findings.some((finding) => finding.kind === "plan" && /«Later» closed on .* but T-3 are still open/.test(finding.message)));
+
+    assert.match(plan("open", "Later").stdout, /«Later» open again/);
+    assert.match(read("docs/PLAN.md"), /^### Later$/m);
+    assert.match(plan("close", "Elsewhere").stderr, /The goal «Elsewhere» is not in the plan/);
+});
