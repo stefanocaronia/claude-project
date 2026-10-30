@@ -138,10 +138,13 @@ export const register: Register = (on) => {
         const now = await $.clock.now();
         const prefix = snapshot.prefixes.task;
         const byName = new Map(snapshot.colleagues.map((colleague) => [colleague.name, colleague]));
-        const doing = snapshot.tasks.filter((task) => task.state === "doing");
+        // A part shows under its large task, whatever its state; on its own only when its large task is not open.
+        const shownIds = new Set(snapshot.tasks.map((task) => `${snapshot.prefixes.task}-${task.id}`));
+        const isGrouped = (task: Task) => Boolean(task.parent && shownIds.has(task.parent));
+        const doing = snapshot.tasks.filter((task) => task.state === "doing" && !isGrouped(task));
         // Everything still to do, as Crew's backlog lists it: by priority, then the oldest; the postponed after.
         const order = (task: Task) => `${task.state === "postponed" ? 1 : 0}${task.priority}${task.created}`;
-        const rest = snapshot.tasks.filter((task) => task.state === "todo" || task.state === "postponed").sort((first, second) => order(first).localeCompare(order(second)));
+        const rest = snapshot.tasks.filter((task) => (task.state === "todo" || task.state === "postponed") && !isGrouped(task)).sort((first, second) => order(first).localeCompare(order(second)));
         const todoOf = (priority: string) => snapshot.tasks.filter((task) => task.state === "todo" && task.priority === priority).length;
         const isOpen = (section: string) => panel.sections[section] ?? openAtStart[section] ?? false;
         const toggle = (section: string) => () => update($, view, (old) => ({ ...old, sections: { ...old.sections, [section]: !(old.sections[section] ?? openAtStart[section] ?? false) } }));
@@ -281,12 +284,21 @@ export const register: Register = (on) => {
             (task.see ?? []).length > 0 ? words("seeLabel", { list: task.see.join(", ") }) : null,
             (task.seenFrom ?? []).length > 0 ? words("seenFrom", { list: task.seenFrom.join(", ") }) : null,
         ].filter((line): line is string => Boolean(line)).map((line, index) => <Text key={`link-${task.id}-${index}`} dimColor>{line}</Text>);
+        // A task's card; a large task's holds its open parts under it, those in progress first, then as the lists order them.
         const taskRow = (task: Task) => {
+            const parts = snapshot.tasks.filter((part) => part.parent === `${prefix}-${task.id}`)
+                .sort((first, second) => Number(second.state === "doing") - Number(first.state === "doing") || order(first).localeCompare(order(second)));
+            return card(`task-${task.id}`, [
+                ...taskLines(task),
+                ...parts.map((part) => <Box key={`part-${part.id}`} flexDirection="column" paddingLeft={isDesktop ? 4 : 2}>{taskLines(part)}</Box>),
+            ]);
+        };
+        const taskLines = (task: Task) => {
             const key = `task-${task.id}`;
             const isExpanded = panel.expanded === key;
             const member = byName.get(task.to);
             const facts = [`${prefix}-${task.id}`, `${task.priority} ${words("priorityLabel", { name: snapshot.words.priorities[task.priority] ?? "" })}`, `${words("effort")} ${task.effort}`, member?.fullName ?? task.to, task.goal === snapshot.words.noGoal ? null : task.goal, words("born", { date: task.created })];
-            return card(key, [
+            return [
                 <Box key={`row-${task.id}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
                     {face(task.to, 24)}
                     {priorityMark(task)}
@@ -313,7 +325,7 @@ export const register: Register = (on) => {
                         </Box>
                     )
                     : null,
-            ]);
+            ];
         };
         const taskSection = (key: "doing" | "rest", icon: string, title: string, tasks: Task[], none: string) => section(key, icon, `${title} · ${tasks.length}`, [
             ...(tasks.length === 0 ? [<Text key={`none-${key}`} dimColor>{none}</Text>] : limited(key, tasks).map(taskRow)),

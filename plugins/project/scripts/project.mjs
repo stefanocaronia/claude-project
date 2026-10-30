@@ -92,7 +92,8 @@ export function withBacklogLock(config, change)
             closeSync(openSync(lock, "wx"));
             break;
         } catch (error) {
-            if (error.code !== "EEXIST") {
+            // On Windows a lock another command is deleting refuses to open (EPERM) until it is gone: busy, as one that exists.
+            if (error.code !== "EEXIST" && error.code !== "EPERM") {
                 throw error;
             }
 

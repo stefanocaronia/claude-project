@@ -1072,6 +1072,12 @@
         opacity: 0.7;
     }
 
+    /* A part under its large task, a step in, with a rule on its left */
+    .task.part, .row.part {
+        margin-left: 18px;
+        border-left: 2px solid var(--axis);
+    }
+
     /* The board: a column by state, a lane by goal */
     .board-head, .lane-cells {
         display: grid;
@@ -2582,17 +2588,18 @@ function laneBlock(lane)
 function laneCell(lane, state)
 {
     const recent = (first, second) => (second.done ?? second.archived ?? "").localeCompare(first.done ?? first.archived ?? "") || second.id - first.id;
-    const own = lane.own.filter((task) => columnOf(task) === state).sort(state === "done" ? recent : taskOrder);
+    const own = withPartsUnder(lane.own.filter((task) => columnOf(task) === state).sort(state === "done" ? recent : taskOrder));
+    const here = new Set(own.map((task) => taskName(task)));
     const label = `${stateName(state)} · ${lane.name || t("noGoalLane")}`;
 
     return `<div class="cell" data-state="${state}" data-lane="${attribute(lane.name)}">
             <div class="cell-name column-name" aria-hidden="true"><i class="column-mark ${state}"></i>${escape(stateName(state))}<span class="badge">${own.length}</span></div>
-            <ul class="cell-list" aria-label="${attribute(label)}">${own.map((task) => taskCard(task, lane.name)).join("")}</ul>
+            <ul class="cell-list" aria-label="${attribute(label)}">${own.map((task) => taskCard(task, lane.name, Boolean(task.parent && here.has(task.parent)))).join("")}</ul>
         </div>`;
 }
 
 /** A task on the board: its priority, number, effort and who holds it; its text, which opens; where it can move, once it has the focus. */
-function taskCard(task, lane)
+function taskCard(task, lane, isUnder = false)
 {
     const name = taskName(task);
     const column = columnOf(task);
@@ -2604,7 +2611,7 @@ function taskCard(task, lane)
     const moves = boardStates.filter((state) => state !== column)
         .map((state) => `<button type="button" id="move-${name}-${state}" data-move="${state}" data-task="${task.id}" aria-label="${attribute(t("moveTo", name, stateName(state)))}">${escape(stateName(state))}</button>`).join("");
 
-    return `<li class="task ${column} ${expanded.has(`board-${name}`) ? "open" : ""} ${landed === task.id ? "landed" : ""}" draggable="true" data-task="${task.id}" data-lane="${attribute(lane)}" data-column="${column}">
+    return `<li class="task ${column} ${isUnder ? "part" : ""} ${expanded.has(`board-${name}`) ? "open" : ""} ${landed === task.id ? "landed" : ""}" draggable="true" data-task="${task.id}" data-lane="${attribute(lane)}" data-column="${column}">
             <div class="task-top">${priorityControl(task, "board")}<span class="id">${escape(name)}</span><span class="grow"></span>${effortMeter(task)}${face(task)}</div>
             ${expandButton(`board-${name}`, escape(task.text))}
             ${taskLinks(task)}
@@ -2644,20 +2651,30 @@ function filteredTasks()
     const closedLast = (first, second) => boardStates.indexOf(columnOf(first)) - boardStates.indexOf(columnOf(second));
     const recent = (first, second) => (columnOf(first) === "done" ? (second.done ?? second.archived ?? "").localeCompare(first.done ?? first.archived ?? "") : 0);
 
-    return (data.board ?? []).filter(keep).sort((first, second) => closedLast(first, second) || recent(first, second) || taskOrder(first, second));
+    return withPartsUnder((data.board ?? []).filter(keep).sort((first, second) => closedLast(first, second) || recent(first, second) || taskOrder(first, second)));
+}
+
+/** The tasks in their order with each part moved right under its large task, when that is among them: the parts in progress first. */
+function withPartsUnder(tasks)
+{
+    const ids = new Set(tasks.map((task) => taskName(task)));
+    const isUnder = (task) => Boolean(task.parent && ids.has(task.parent));
+    const partsOf = (task) => tasks.filter((part) => part.parent === taskName(task)).sort((first, second) => Number(second.state === "doing") - Number(first.state === "doing"));
+    return tasks.filter((task) => !isUnder(task)).flatMap((task) => [task, ...partsOf(task)]);
 }
 
 function taskListBody()
 {
     const tasks = filteredTasks();
-    const rows = tasks.map(taskRow).join("");
+    const ids = new Set(tasks.map((task) => taskName(task)));
+    const rows = tasks.map((task) => taskRow(task, Boolean(task.parent && ids.has(task.parent)))).join("");
     const filtered = Object.entries(taskFilter).some(([kind, value]) => value !== (kind === "state" ? "open" : "all"));
 
     return `<p class="found">${escape(t("listCount", tasks.length))}${filtered ? ` · <button type="button" id="filters-clear" data-clear-filters>${t("clearFilters")}</button>` : ""}</p>
         <ul class="rows">${rows || `<li class="row"><span></span><span></span><span class="hint">${t("listNone")}</span></li>`}</ul>`;
 }
 
-function taskRow(task)
+function taskRow(task, isUnder = false)
 {
     const name = taskName(task);
     const column = columnOf(task);
@@ -2667,7 +2684,7 @@ function taskRow(task)
     const when = column === "done" ? `<span>✓ ${escape(formatDay(task.done ?? task.archived))}</span>` : waitOrAge(task);
     const work = worker || held?.colleague ? `<span class="work">⚒︎ ${escape((worker?.name ?? held.colleague).split(" ")[0])}</span>` : "";
 
-    return `<li class="row ${column}">
+    return `<li class="row ${column} ${isUnder ? "part" : ""}">
             ${face(task)}
             ${priorityControl(task, "list")}
             <div>${expandButton(`list-${name}`, `<span class="id">${escape(name)}</span>${escape(task.text)}`)}
