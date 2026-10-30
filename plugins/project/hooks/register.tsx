@@ -18,9 +18,9 @@ const board = atom({ plugin: "project", key: "board" } as const, { snapshot: nul
 const holdsLast = 24 * 3_600_000;
 const view = atom({ plugin: "project", key: "view" } as const, { sections: {}, expanded: null, whole: {}, starting: {} }, { shape: "view-1" });
 // The sections open at the start, as Joseph's sketch has them: the decisions closed, the tile above says how many wait.
-const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, issues: true, goals: true, decisions: false };
+const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, goals: true, decisions: false };
 // How many rows a section shows before "show all".
-const rows: Record<string, number> = { doing: 5, rest: 10, issues: 5, goals: 5, open: 3, recent: 3 };
+const rows: Record<string, number> = { doing: 5, rest: 10, postponed: 5, issues: 5, goals: 5, open: 3, recent: 3 };
 const proposalLength = 400;
 // Crew's marks: a priority as an issue tracker draws it, the green of work, the purple of decisions, the red of errors.
 const priorities = { P1: { glyph: "⇈", color: "#E5493A" }, P2: { glyph: "=", color: "#E2852B" }, P3: { glyph: "↓", color: "#4C8FE0" } } as const;
@@ -46,6 +46,9 @@ const effortMeters: Record<string, string> = { low: "▮▯▯▯", medium: "▮
 const noProject = 3;
 // How long a start asked from the panel shows on its button, at most, while Claude starts the work.
 const startingFor = 120_000;
+// Whether this module has read the project since it was loaded: a reload of the plugins keeps the panel's state, not this, so the first
+// drawing after one reads the project again, as a new session would.
+let hasRead = false;
 
 export const register: Register = (on) => {
     on("session.start", async ($, e, next) => {
@@ -123,6 +126,11 @@ export const register: Register = (on) => {
     });
 
     on("ui.render", { component: "Pane", requestId: pane }, async ($, e) => {
+        if (!hasRead) {
+            hasRead = true;
+            void refresh($, true).catch(() => undefined);
+        }
+
         const ui = $.ui.resolve(e);
         const { Box, Text, Button, Link } = ui;
         const current = await read($, board);
@@ -155,7 +163,9 @@ export const register: Register = (on) => {
             const own = [task, ...snapshot.tasks.filter((part) => part.parent === `${snapshot.prefixes.task}-${task.id}`)].map((one) => `${one.priority}${one.created}`).sort()[0];
             return `${task.state === "postponed" ? 1 : 0}${own}`;
         };
-        const rest = snapshot.tasks.filter((task) => (task.state === "todo" || task.state === "postponed") && !isGrouped(task)).sort((first, second) => order(first).localeCompare(order(second)));
+        const rest = snapshot.tasks.filter((task) => task.state === "todo" && !isGrouped(task)).sort((first, second) => order(first).localeCompare(order(second)));
+        // The postponed in a section of their own, after the tasks to do, in the same order.
+        const postponed = snapshot.tasks.filter((task) => task.state === "postponed" && !isGrouped(task)).sort((first, second) => order(first).localeCompare(order(second)));
         const todoOf = (priority: string) => snapshot.tasks.filter((task) => task.state === "todo" && task.priority === priority).length;
         const isOpen = (section: string) => panel.sections[section] ?? openAtStart[section] ?? false;
         const toggle = (section: string) => () => update($, view, (old) => ({ ...old, sections: { ...old.sections, [section]: !(old.sections[section] ?? openAtStart[section] ?? false) } }));
@@ -380,20 +390,10 @@ export const register: Register = (on) => {
                     : null,
             ];
         };
-        // The tasks to do come first, by priority and age; the postponed after them, under a line that says so.
-        const taskSection = (key: "doing" | "rest", icon: string, title: string, tasks: Task[], none: string) => {
-            const shown = limited(key, tasks);
-            const firstPostponed = shown.findIndex((task) => task.state === "postponed");
-            const postponed = tasks.filter((task) => task.state === "postponed").length;
-            const rowsShown = shown.flatMap((task, index) => [
-                ...(index === firstPostponed ? [<Text key={`postponed-${key}`} dimColor>{`⏸ ${snapshot.words.states.postponed} · ${postponed}`}</Text>] : []),
-                taskRow(task),
-            ]);
-            return section(key, icon, `${title} · ${tasks.length}`, [
-                ...(tasks.length === 0 ? [<Text key={`none-${key}`} dimColor>{none}</Text>] : rowsShown),
-                more(key, tasks.length, "showAllTasks"),
-            ]);
-        };
+        const taskSection = (key: "doing" | "rest" | "postponed", icon: string, title: string, tasks: Task[], none: string) => section(key, icon, `${title} · ${tasks.length}`, [
+            ...(tasks.length === 0 ? [<Text key={`none-${key}`} dimColor>{none}</Text>] : limited(key, tasks).map(taskRow)),
+            more(key, tasks.length, "showAllTasks"),
+        ]);
 
         // The goals still open have their bars; those closed only a count, the page has them.
         const openGoals = snapshot.plan.goals.filter((goal) => !goal.closed);
@@ -592,6 +592,7 @@ export const register: Register = (on) => {
                     : null}
                 {taskSection("doing", "⚒︎", words("sectionDoing"), doing, words("noneDoing"))}
                 {taskSection("rest", "☰", words("sectionRest"), rest, words("noneRest"))}
+                {postponed.length > 0 ? taskSection("postponed", "⏸", snapshot.words.states.postponed, postponed, "") : null}
                 {(snapshot.issues ?? []).length > 0
                     ? section("issues", "◉", `${words("sectionIssues")} · ${(snapshot.issues ?? []).length}`, [
                         <Text key="issues-hint" dimColor>{words("issuesHint")}</Text>,

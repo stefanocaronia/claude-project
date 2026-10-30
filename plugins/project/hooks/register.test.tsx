@@ -110,7 +110,7 @@ test("the panel shows the project's numbers, the tasks in progress and the P1 to
         expect((await ui.find({ key: "toggle-documents" }))?.props.label).toBe("▾ 📄 Documenti");
         expect((await ui.find({ key: "toggle-doing" }))?.props.label).toBe("▾ ⚒︎ In corso · 2");
         expect((await ui.find({ key: "toggle-goals" }))?.props.label).toBe("▾ ⚑︎ Piano · 2");
-        expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 5");
+        expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 4");
         expect((await ui.find({ key: "toggle-decisions" }))?.props.label).toBe("▸ ⚖︎ Decisioni · 2 da decidere");
         expect(await ui.find({ type: "Text", text: "▸ I pacchetti nei loro repo" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /^▸ Revisione/ })).toBeDefined();
@@ -122,8 +122,8 @@ test("the panel shows the project's numbers, the tasks in progress and the P1 to
         expect(await ui.find({ key: "start-61" })).toBeDefined();
         expect(await ui.find({ key: "start-70" })).toBeUndefined();
         expect(await ui.find({ type: "Text", text: "I temi da installare" })).toBeUndefined();
-        // The postponed come after the tasks to do, under a line that says so.
-        expect(await ui.find({ type: "Text", text: "⏸ Rimandati · 1" })).toBeDefined();
+        // The postponed in a section of their own after the tasks to do, closed at the start.
+        expect((await ui.find({ key: "toggle-postponed" }))?.props.label).toBe("▸ ⏸ Rimandati · 1");
         await ui.unmount();
     }
 });
@@ -320,6 +320,7 @@ test("▶ on Claude's own task moves it to in progress before asking, and a chan
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
     const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
     runs.length = 0;
+    await ui.press({ key: "toggle-postponed" });
     await ui.press({ key: "start-71" });
     expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "start", "T-71"]]);
     expect(prompts[0]).toBe("Lavora a T-71: Più avanti");
@@ -349,7 +350,7 @@ test("a large task shows its parts closed in place of its age, its ▶ starts th
     const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
     expect(await ui.find({ type: "Text", text: "1/2 parti" })).toBeDefined();
     // The part is drawn under its large task, not on its own: To do counts the large task only.
-    expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 5");
+    expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 4");
     expect(await ui.find({ key: "part-81" })).toBeDefined();
     await ui.press({ key: "open-81" });
     expect(await ui.find({ type: "Text", text: "parte di: T-80" })).toBeDefined();
