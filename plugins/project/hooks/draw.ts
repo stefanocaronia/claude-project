@@ -53,6 +53,7 @@ export function typeSvg(type: string, color: string): string
         feature: `<path d="M4.5 3.5h5v7L7 8.6 4.5 10.5z" fill="#ffffff"/>`,
         chore: `<path d="M4 7.2l2 2 4-4.4" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
         research: `<circle cx="6.3" cy="6.3" r="2.4" fill="none" stroke="#ffffff" stroke-width="1.5"/><path d="M8.1 8.1l2.2 2.2" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/>`,
+        test: `<path d="M5.4 3.2h3.2M6 3.2v2.9L3.7 10.2a.7.7 0 0 0 .6 1h5.4a.7.7 0 0 0 .6-1L8 6.1V3.2" fill="none" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>`,
     };
     const sign = signs[type] ?? `<text x="7" y="10" text-anchor="middle" font-family="${font}" font-size="8" font-weight="700" fill="#ffffff">${xml(type.slice(0, 1).toUpperCase())}</text>`;
     return svg(14, 14, `<rect x="0.5" y="0.5" width="13" height="13" rx="3" fill="${color}"/>${sign}`, false);

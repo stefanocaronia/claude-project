@@ -18,7 +18,7 @@ export function isStale(task, isHeld, today, limit)
 }
 
 /** The colors of the task types, as Jira's issue types: a bug red, a feature green, a chore blue, a research purple; others gray. */
-export const typeColors = { bug: "#E5493A", feature: "#36B37E", chore: "#4C9AFF", research: "#8777D9" };
+export const typeColors = { bug: "#E5493A", feature: "#36B37E", chore: "#4C9AFF", research: "#8777D9", test: "#E2852B" };
 
 export function typeColor(type)
 {

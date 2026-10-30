@@ -47,8 +47,8 @@ test("a line keeps its due day, its type and the day it started; start sets the 
     assert.equal(moveTasks([started], [1], "postponed", "2026-11-02").tasks[0].started, null);
 });
 
-test("a project's types are the language's four and its own; decisions and tasks tie both ways", () => {
-    assert.deepEqual(readConfig("language: it\ntypes: { design: Design }\n", "/p").types, { bug: "bug", feature: "funzione", chore: "manutenzione", research: "ricerca", design: "Design" });
+test("a project's types are the language's five and its own; decisions and tasks tie both ways", () => {
+    assert.deepEqual(readConfig("language: it\ntypes: { design: Design }\n", "/p").types, { bug: "bug", feature: "funzione", chore: "manutenzione", research: "ricerca", test: "prova", design: "Design" });
     const { byTask, byDecision } = decisionLinks([{ id: 1, see: ["D-2", "D-9"] }, { id: 3, see: [] }], [{ number: 2, text: "Real dice.", why: "" }, { number: 5, text: "As T-3 asks", why: "and T-99" }], { task: "T", decision: "D" });
     assert.deepEqual([...byTask.entries()], [["T-1", ["D-2"]], ["T-3", ["D-5"]]]);
     assert.deepEqual([...byDecision.entries()], [["D-2", ["T-1"]], ["D-5", ["T-3"]]]);
@@ -68,7 +68,7 @@ after(() => rmSync(root, { recursive: true, force: true }));
 test("set takes a due day and a type by its key or its name, refuses a type the project lacks; show, list and the check say them", () => {
     assert.match(run("set", "T-2", "--due", "2026-01-02", "--type", "funzione"), /· i dadi \(due: 2026-01-02\) \(type: feature\)$/m);
     assert.match(run("set", "T-2", "--type", "design"), /\(type: design\)$/m);
-    assert.match(fails("set", "T-2", "--type", "estetica"), /Il tipo «estetica» non è del progetto: bug, feature, chore, research, design/);
+    assert.match(fails("set", "T-2", "--type", "estetica"), /Il tipo «estetica» non è del progetto: bug, feature, chore, research, test, design/);
     assert.match(fails("set", "T-2", "--due", "domani"), /Un due nomina un giorno/);
 
     const shown = run("show", "T-2", "T-1");

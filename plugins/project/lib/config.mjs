@@ -62,7 +62,7 @@ export function readConfig(text, root)
         limits: { ...defaults.limits, ...(given.limits ?? {}) },
         page: { port: defaultPort(root), ...defaults.page, ...(given.page ?? {}) },
         extensions: list(given.extensions, defaults.extensions).map((path) => resolve(root, path)),
-        // The task types, by key: the language's four (bug, feature, chore, research) and those the project adds, `types: { design: Design }`.
+        // The task types, by key: the language's five (bug, feature, chore, research, test: a test or a playtest) and those the project adds, `types: { design: Design }`.
         types: { ...words.types, ...(isMap(given.types) ? Object.fromEntries(Object.entries(given.types).map(([key, name]) => [key, String(name)])) : {}) },
         // The project's key documents (a game's GDD, a business plan, a specification), the first to read: { name, path }.
         documents: (Array.isArray(given.documents) ? given.documents : []).map((document) => ({ name: String(document.name ?? document.path), path: resolve(root, String(document.path)) })),

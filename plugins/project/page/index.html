@@ -2147,7 +2147,7 @@ const expanded = new Set();
 const lanesOpen = savedLanes();
 const taskFilter = { state: "open", priority: "all", type: "all", who: "all", goal: "all" };
 // The colors of the task types, as Jira's issue types (lib/schedule.mjs).
-const typeColors = { bug: "#E5493A", feature: "#36B37E", chore: "#4C9AFF", research: "#8777D9" };
+const typeColors = { bug: "#E5493A", feature: "#36B37E", chore: "#4C9AFF", research: "#8777D9", test: "#E2852B" };
 let words = pageWords.en;
 let data = null;
 let lastData = "";
@@ -2896,6 +2896,7 @@ function typeIcon(task)
         feature: `<path d="M4.5 3.5h5v7L7 8.6 4.5 10.5z" fill="#fff"/>`,
         chore: `<path d="M4 7.2l2 2 4-4.4" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
         research: `<circle cx="6.3" cy="6.3" r="2.4" fill="none" stroke="#fff" stroke-width="1.5"/><path d="M8.1 8.1l2.2 2.2" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>`,
+        test: `<path d="M5.4 3.2h3.2M6 3.2v2.9L3.7 10.2a.7.7 0 0 0 .6 1h5.4a.7.7 0 0 0 .6-1L8 6.1V3.2" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>`,
     };
     const name = data.types?.[task.type] ?? task.type;
     const sign = signs[task.type] ?? `<text x="7" y="10" text-anchor="middle" font-size="8" font-weight="700" fill="#fff">${escape(task.type.slice(0, 1).toUpperCase())}</text>`;
