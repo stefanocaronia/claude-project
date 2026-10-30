@@ -34,7 +34,7 @@ const errorColor = "#D0453F";
 const outline = "#8080803d";
 const stateLayer = "#80808014";
 // A task's card, faintly in its priority's color, a little more under the pointer, as Crew's.
-const tinted = (color?: string) => (color ? { backgroundColor: `${color}0a`, hover: { backgroundColor: `${color}14` } } : { hover: { backgroundColor: stateLayer } });
+const tinted = (color?: string) => (color ? { backgroundColor: `${color}05`, hover: { backgroundColor: `${color}0a` } } : { hover: { backgroundColor: stateLayer } });
 const quietColor = "#888780";
 const effortMeters: Record<string, string> = { low: "▮▯▯▯", medium: "▮▮▯▯", high: "▮▮▮▯", xhigh: "▮▮▮▮", max: "▮▮▮▮", none: "" };
 // The exit code of snapshot.mjs in a folder with no project above it.
