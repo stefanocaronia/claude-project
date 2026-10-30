@@ -46,4 +46,4 @@ Phases in its table (`| 2. Name | at the end you can… |`), goals as `### Name 
 
 ## The panel and the page
 
-The panel beside the chat (`/project-panel` shows or hides it) has the tasks in progress and the P1 to do, each with ▶ (a blocked one shows «⛓ T-62» and its ▶ asks for the whole chain), the goals with their bars, the decisions to take. The page with the charts is served at `http://localhost:<page.port>` (5790 by default) from the start of a session.
+The panel beside the chat (`/project-panel` shows or hides it) has the tasks in progress and the P1 to do, each with ▶ (a blocked one shows «⛓ T-62» and its ▶ asks for the whole chain), the goals with their bars, the decisions to take. The page with the charts is served at `http://localhost:<page.port>` (without it, a port of 5800–5999 that the project's folder gives; the start of a session says it) from the start of a session.

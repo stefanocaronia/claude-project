@@ -16,7 +16,7 @@ export const defaults = {
     cites: [],
     skip: ["node_modules", ".git", "dist", "tmp", "sandbox", ".codegraph", "worktrees"],
     limits: { tokens: 25000, proposalDays: 14, planDays: 3, todoOpen: 15, closedStep: 400 },
-    page: { port: 5790 },
+    page: {},
     extensions: [],
 };
 
@@ -60,13 +60,26 @@ export function readConfig(text, root)
         markdown: given.markdown === undefined ? undefined : list(given.markdown, []).map((path) => resolve(root, path)),
         skip: [...new Set([...list(given.skip, defaults.skip), files.archiveFolder])],
         limits: { ...defaults.limits, ...(given.limits ?? {}) },
-        page: { ...defaults.page, ...(given.page ?? {}) },
+        page: { port: defaultPort(root), ...defaults.page, ...(given.page ?? {}) },
         extensions: list(given.extensions, defaults.extensions).map((path) => resolve(root, path)),
         // The project's key documents (a game's GDD, a business plan, a specification), the first to read: { name, path }.
         documents: (Array.isArray(given.documents) ? given.documents : []).map((document) => ({ name: String(document.name ?? document.path), path: resolve(root, String(document.path)) })),
     };
 
     return config;
+}
+
+/** The page's port when the configuration names none: one of 5800–5999, the same for a folder every time, so that two projects open
+ * at once seldom meet on one port; page: { port } in the configuration picks another. */
+export function defaultPort(root)
+{
+    let hash = 2166136261;
+
+    for (const char of clean(root).toLowerCase()) {
+        hash = Math.imul(hash ^ char.codePointAt(0), 16777619) >>> 0;
+    }
+
+    return 5800 + (hash % 200);
 }
 
 /** A path against a folder, unless it is absolute; ".." and "." folded away. */

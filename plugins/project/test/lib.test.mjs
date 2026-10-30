@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { citedTasks, effortKey, formatLine, moveTasks, nextId, parseBacklog, parseLine, renderArchive, renderBacklog, taskErrors } from "../lib/backlog.mjs";
-import { readConfig, relativeTo, resolve } from "../lib/config.mjs";
+import { defaultPort, readConfig, relativeTo, resolve } from "../lib/config.mjs";
 import { citedDecisions, nextDecision, numbering, parseDecisions } from "../lib/decisions.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { planGoals, planPhases, planUpdated } from "../lib/plan.mjs";
@@ -122,10 +122,10 @@ test("the plan gives its goals with their phases, its phases' table and the day 
         "",
         "### Non è un traguardo",
     ].join("\n");
-    assert.deepEqual(planGoals(plan, it), [{ name: "Ruoli e sessioni", phase: 2 }, { name: "Revisione e pulizia", phase: null }]);
+    assert.deepEqual(planGoals(plan, it), [{ name: "Ruoli e sessioni", phase: 2, description: "" }, { name: "Revisione e pulizia", phase: null, description: "" }]);
     assert.deepEqual(planPhases(plan), [{ number: 0, name: "Progettazione", outcome: "approvare" }, { number: 2, name: "Ruoli e sessioni", outcome: "giocare" }]);
     assert.equal(planUpdated(plan, it), "2026-10-29");
-    assert.deepEqual(planGoals("## Goals\n\n### Ship (phase 1)\n", en), [{ name: "Ship", phase: 1 }]);
+    assert.deepEqual(planGoals("## Goals\n\n### Ship (phase 1)\n\nThe first release.\n\n### Grow\n", en), [{ name: "Ship", phase: 1, description: "The first release." }, { name: "Grow", phase: null, description: "" }]);
 });
 
 test("the decisions give their rows with the why, the open points, and their numbering", () => {
@@ -176,6 +176,14 @@ test("the configuration fills the defaults, resolves the paths and takes the lan
     assert.equal(plain.language, "en");
     assert.equal(plain.files.decisions, "/home/me/app/project/DECISIONS.md");
     assert.throws(() => readConfig("- a\n- b\n", "/x"), /must be a map/);
+});
+
+test("each project's page has a port of its own from its folder, the same every time, unless the configuration names one", () => {
+    const port = readConfig("", "F:/work/engine").page.port;
+    assert.ok(port >= 5800 && port < 6000);
+    assert.equal(readConfig("", "f:\\work\\engine\\").page.port, port);
+    assert.notEqual(defaultPort("F:/work/other"), port);
+    assert.equal(readConfig("page: { port: 5790 }\n", "F:/work/engine").page.port, 5790);
 });
 
 test("paths resolve against a folder, absolute ones stay, and show relative to the root", () => {

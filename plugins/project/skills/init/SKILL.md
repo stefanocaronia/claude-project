@@ -39,7 +39,7 @@ Then propose the migration as one numbered list, one decision per point, with wh
    - `cites:` the survey's parts, plus sibling repos that cite the same numbers (`../app-*/src`).
    - `files:` names the survey did not guess, and the idea inbox.
    - `words:` headings that differ from the language's.
-   - `page.port` when another page holds 5790.
+   - `page.port` only when the project wants a port of its own choosing: without it, each project gets its own, from its folder.
    - `extensions:` for the parts of an old page that belong to this project alone.
    - `documents:` the project's key documents (a GDD, a specification, a business plan), from its README and docs' index.
 2b. **Decisions in another format**: a numbered list under a heading (`72. **Title** text`) moves into the table with `init.mjs adopt --decisions <file> "<heading>"`, the numbers kept, so every citation stays true; the list leaves a link in its place. Proposals still open go under the table's heading of what is to decide, by hand.
@@ -68,7 +68,7 @@ cites: [private/project, .claude, src, docs]   # where a decision number may be 
 markdown: [private/project]  # the folders whose .md the check looks after (default: the docs and their subfolders)
 files: { decisions: DECISIONI.md, inbox: IDEE.md }   # names other than the language's
 repos: [{ name: app, path: . }, { name: docs, path: private }]   # the commits the page counts
-page: { port: 5790 }         # one port per project
+page: { port: 5790 }         # optional: by default a port of 5800–5999 from the project's folder
 extensions: []               # modules that add the project's own parts to the page and links to the panel
 documents: [{ name: GDD, path: private/project/GDD.md }]   # the key documents, in the panel and the page
 words: {}                    # any heading or marker of the language, overridden

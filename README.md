@@ -16,7 +16,7 @@ One plugin, `project`:
 - **The decisions**: a numbered table and the points still to decide, in `DECISIONS.md`. `decisions.mjs` gives the next free number (past every number cited anywhere, so two sessions never take the same), shows, finds and says where one is cited.
 - **The docs' health**: `check.mjs` reports numbers twice or missing, decisions cited that do not exist, task lines that do not read, links to tasks that do not exist and cycles of waits, old proposals, broken links, docs outside their index, heavy files; `--fix` mends whitespace. The `tidy` skill fixes what is mechanical and proposes the rest.
 - **The panel** beside the chat: tiles with the counts; buttons for the next task (by priority, then the oldest, past the blocked ones), the next decision and the docs' tidying; the project's links; the tasks in progress, each with ▶ to go on with it (in the chat that holds it, or here), and the tasks to do by priority, each with ▶ to start it (a task that waits shows «⛓ T-62» in place of its age, and its ▶ asks Claude for the whole chain with one yes), its links and its note when opened, Done and Postpone, the priority turned with a press; the plan's goals with their bars; the decisions to take, one brought to the chat as a choice, and the latest. `/project-panel` shows or hides it.
-- **The page** with the charts, served at `http://localhost:5790` from the start of a session: overview, rhythm, decisions, tasks, health with the cleanup, docs. A project adds parts of its own as extensions.
+- **The page** with the charts, served on localhost from the start of a session, each project on its own port: overview, rhythm, decisions, tasks, health with the cleanup, docs. A project adds parts of its own as extensions.
 
 The files speak the project's language: English and Italian come built in, any word can be overridden.
 
@@ -51,7 +51,7 @@ language: en                 # en, it; another one starts from en with its words
 docs: project                # the docs' folder, from the project's root
 people: [Claude, Ann]        # who holds tasks besides Crew's colleagues
 cites: [project, .claude, src, docs]   # where a decision number may be cited
-page: { port: 5790 }         # one port per project
+page: { port: 5790 }         # optional: by default a port of 5800–5999 from the project's folder
 extensions: []               # modules that add the project's own parts to the page
 words: {}                    # any heading or marker, overridden: { states: { postponed: Later } }
 ```
