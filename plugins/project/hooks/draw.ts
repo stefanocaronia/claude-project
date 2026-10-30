@@ -44,6 +44,20 @@ export function prioritySvg(priority: string): string | undefined
     return mark ? svg(14, 14, mark, false) : undefined;
 }
 
+/** A task's type as Jira draws an issue type: a rounded square in its color with a white sign, a bug a dot, a feature a bookmark, a
+ * chore a tick, a research a lens; a type of the project's own its first letter. */
+export function typeSvg(type: string, color: string): string
+{
+    const signs: Record<string, string> = {
+        bug: `<circle cx="7" cy="7" r="2.6" fill="#ffffff"/>`,
+        feature: `<path d="M4.5 3.5h5v7L7 8.6 4.5 10.5z" fill="#ffffff"/>`,
+        chore: `<path d="M4 7.2l2 2 4-4.4" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
+        research: `<circle cx="6.3" cy="6.3" r="2.4" fill="none" stroke="#ffffff" stroke-width="1.5"/><path d="M8.1 8.1l2.2 2.2" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/>`,
+    };
+    const sign = signs[type] ?? `<text x="7" y="10" text-anchor="middle" font-family="${font}" font-size="8" font-weight="700" fill="#ffffff">${xml(type.slice(0, 1).toUpperCase())}</text>`;
+    return svg(14, 14, `<rect x="0.5" y="0.5" width="13" height="13" rx="3" fill="${color}"/>${sign}`, false);
+}
+
 /** The effort a task needs as four gray bars, low to max; undefined for none or a level it does not know. */
 export function effortSvg(level: string): string | undefined
 {

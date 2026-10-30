@@ -6,7 +6,8 @@ import type { EngineInterface, Register } from "claude-code";
 
 import type { Board, Goal, Member, Proposal, Pull, Snapshot, Task, View } from "../types";
 
-import { barEndSvg, claudeSvg, effortSvg, faceSvg, prioritySvg, wideBarSvg } from "./draw.ts";
+import { barEndSvg, claudeSvg, effortSvg, faceSvg, prioritySvg, typeSvg, wideBarSvg } from "./draw.ts";
+import { typeColor } from "../lib/schedule.mjs";
 import { citedTasks } from "../lib/backlog.mjs";
 import { sayer } from "../lib/messages.mjs";
 
@@ -36,6 +37,7 @@ const stateLayer = "#80808014";
 // Every card's faint gray, the same for all, as Crew's.
 const cardTint = "#80808003";
 const quietColor = "#888780";
+const warningColor = "#E2852B";
 // A hint in Material's inverse colors, which read on both themes, as Crew's.
 const tooltipBackground = "#2b2b29";
 const tooltipText = "#f4f4f1";
@@ -148,7 +150,11 @@ export const register: Register = (on) => {
             return task.state === "doing" && held && held.session === current.session && !held.colleague;
         });
         // Everything still to do, as Crew's backlog lists it: by priority, then the oldest; the postponed after.
-        const order = (task: Task) => `${task.state === "postponed" ? 1 : 0}${task.priority}${task.created}`;
+        // A large task stands where the most urgent of its open parts would: their priority, then the oldest.
+        const order = (task: Task) => {
+            const own = [task, ...snapshot.tasks.filter((part) => part.parent === `${snapshot.prefixes.task}-${task.id}`)].map((one) => `${one.priority}${one.created}`).sort()[0];
+            return `${task.state === "postponed" ? 1 : 0}${own}`;
+        };
         const rest = snapshot.tasks.filter((task) => (task.state === "todo" || task.state === "postponed") && !isGrouped(task)).sort((first, second) => order(first).localeCompare(order(second)));
         const todoOf = (priority: string) => snapshot.tasks.filter((task) => task.state === "todo" && task.priority === priority).length;
         const isOpen = (section: string) => panel.sections[section] ?? openAtStart[section] ?? false;
@@ -264,14 +270,30 @@ export const register: Register = (on) => {
         };
         // In place of its age, a blocked task shows what it waits for: «⛓ T-62», and how many more; a large task, its parts closed. On the
         // desktop a hint under the pointer says it in words.
+        // After those, a due day near or past, «⏰ 3 g», red when late; a task stuck in progress, «⏸ 4 g», in the color of a warning.
         const ageOrWait = (task: Task) => {
             const blockers = task.blockedBy ?? [];
-            const label = isLarge(task) ? words("partsCount", { done: task.partsDone, total: task.parts.length })
-                : blockers.length > 0 ? `⛓ ${blockers[0]}${blockers.length > 1 ? ` +${blockers.length - 1}` : ""}`
-                : age(task.created);
-            const hint = isLarge(task) ? words("partsTip", { done: task.partsDone, total: task.parts.length }) : blockers.length > 0 ? words("blockedTip", { list: blockers.join(", ") }) : null;
-            const cell = <Box key={`age-${task.id}`} flexShrink={0}><Text dimColor wrap="truncate">{label}</Text></Box>;
+            const due = task.dueInfo && (task.dueInfo.isLate || task.dueInfo.isNear) ? task.dueInfo : null;
+            const [label, hint, color] = isLarge(task) ? [words("partsCount", { done: task.partsDone, total: task.parts.length }), words("partsTip", { done: task.partsDone, total: task.parts.length }), undefined]
+                : blockers.length > 0 ? [`⛓ ${blockers[0]}${blockers.length > 1 ? ` +${blockers.length - 1}` : ""}`, words("blockedTip", { list: blockers.join(", ") }), undefined]
+                : due ? [`⏰ ${dueWords(due)}`, words("dueTip", { day: due.day }), due.isLate ? errorColor : warningColor]
+                : task.stale && task.started ? [`⏸ ${age(task.started)}`, words("staleTip", { day: task.started }), warningColor]
+                : [age(task.created), null, undefined];
+            const cell = <Box key={`age-${task.id}`} flexShrink={0}><Text dimColor={!color} color={color} wrap="truncate">{label}</Text></Box>;
             return hint ? tip(`age-${task.id}`, hint, cell) : cell;
+        };
+        const dueWords = (due: NonNullable<Task["dueInfo"]>) => (due.isLate ? words("dueLate", { days: -due.days }) : due.days === 0 ? words("dueToday") : words("dueIn", { days: due.days }));
+        // A task's type as Jira draws it, its name under the pointer; nothing for a task without one.
+        const typeMark = (task: Task) => {
+            if (!task.type) {
+                return null;
+            }
+
+            const name = snapshot.types?.[task.type] ?? task.type;
+            const mark = Svg
+                ? <Box key={`type-${task.id}`} flexShrink={0}><Svg source={typeSvg(task.type, typeColor(task.type))} alt={name} width={14} height={14} /></Box>
+                : <Box key={`type-${task.id}`} flexShrink={0}><Text color={typeColor(task.type)}>■</Text></Box>;
+            return tip(`type-${task.id}`, name, mark);
         };
         // A hint under the pointer, above the control so that the card does not cut it; the terminal draws none.
         const tip = (key: string, hint: string, control: JSX.Element) => (isDesktop
@@ -286,6 +308,10 @@ export const register: Register = (on) => {
             : control);
         // A task's links, both ways, under its facts: what it waits for and what waits for it, what it points to and what points to it.
         const linkLines = (task: Task) => [
+            task.type ? words("typeLabel", { name: snapshot.types?.[task.type] ?? task.type }) : null,
+            task.due ? words("dueLabel", { day: task.due }) : null,
+            task.started && task.state === "doing" ? words(task.stale ? "staleTip" : "startedLabel", { day: task.started }) : null,
+            (task.decisions ?? []).length > 0 ? words("decisionsOf", { list: (task.decisions ?? []).join(", ") }) : null,
             task.parent ? words("partOf", { id: task.parent }) : null,
             isLarge(task) ? words("partsLabel", { done: task.partsDone, total: task.parts.length, list: task.parts.join(", ") }) : null,
             (task.after ?? []).length > 0 ? words("waitsFor", { list: task.after.join(", ") }) : null,
@@ -326,6 +352,7 @@ export const register: Register = (on) => {
             return [
                 <Box key={`row-${task.id}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
                     {face(task.to, isPart ? 18 : 24)}
+                    {typeMark(task)}
                     {priorityMark(task)}
                     <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
                         <Button key={`open-${task.id}`} plain onPress={expand(key)}>
@@ -353,10 +380,20 @@ export const register: Register = (on) => {
                     : null,
             ];
         };
-        const taskSection = (key: "doing" | "rest", icon: string, title: string, tasks: Task[], none: string) => section(key, icon, `${title} · ${tasks.length}`, [
-            ...(tasks.length === 0 ? [<Text key={`none-${key}`} dimColor>{none}</Text>] : limited(key, tasks).map(taskRow)),
-            more(key, tasks.length, "showAllTasks"),
-        ]);
+        // The tasks to do come first, by priority and age; the postponed after them, under a line that says so.
+        const taskSection = (key: "doing" | "rest", icon: string, title: string, tasks: Task[], none: string) => {
+            const shown = limited(key, tasks);
+            const firstPostponed = shown.findIndex((task) => task.state === "postponed");
+            const postponed = tasks.filter((task) => task.state === "postponed").length;
+            const rowsShown = shown.flatMap((task, index) => [
+                ...(index === firstPostponed ? [<Text key={`postponed-${key}`} dimColor>{`⏸ ${snapshot.words.states.postponed} · ${postponed}`}</Text>] : []),
+                taskRow(task),
+            ]);
+            return section(key, icon, `${title} · ${tasks.length}`, [
+                ...(tasks.length === 0 ? [<Text key={`none-${key}`} dimColor>{none}</Text>] : rowsShown),
+                more(key, tasks.length, "showAllTasks"),
+            ]);
+        };
 
         // The goals still open have their bars; those closed only a count, the page has them.
         const openGoals = snapshot.plan.goals.filter((goal) => !goal.closed);
@@ -460,6 +497,7 @@ export const register: Register = (on) => {
                         <Box key={`decision-details-${decision.number}`} flexDirection="column" gap={1} paddingLeft={2}>
                             <Text>{decision.text}</Text>
                             {decision.why ? <Text dimColor>{decision.why}</Text> : null}
+                            {(decision.tasks ?? []).length > 0 ? <Text dimColor>{words("tasksOf", { list: (decision.tasks ?? []).join(", ") })}</Text> : null}
                         </Box>
                     )
                     : null,

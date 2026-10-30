@@ -15,7 +15,7 @@ export const defaults = {
     prefixes: { task: "T", decision: "D" },
     cites: [],
     skip: ["node_modules", ".git", "dist", "tmp", "sandbox", ".codegraph", "worktrees"],
-    limits: { tokens: 25000, proposalDays: 14, planDays: 3, todoOpen: 15, closedStep: 400 },
+    limits: { tokens: 25000, proposalDays: 14, planDays: 3, todoOpen: 15, closedStep: 400, staleDays: 3 },
     page: {},
     extensions: [],
 };
@@ -62,6 +62,8 @@ export function readConfig(text, root)
         limits: { ...defaults.limits, ...(given.limits ?? {}) },
         page: { port: defaultPort(root), ...defaults.page, ...(given.page ?? {}) },
         extensions: list(given.extensions, defaults.extensions).map((path) => resolve(root, path)),
+        // The task types, by key: the language's four (bug, feature, chore, research) and those the project adds, `types: { design: Design }`.
+        types: { ...words.types, ...(isMap(given.types) ? Object.fromEntries(Object.entries(given.types).map(([key, name]) => [key, String(name)])) : {}) },
         // The project's key documents (a game's GDD, a business plan, a specification), the first to read: { name, path }.
         documents: (Array.isArray(given.documents) ? given.documents : []).map((document) => ({ name: String(document.name ?? document.path), path: resolve(root, String(document.path)) })),
     };
@@ -121,6 +123,11 @@ function clean(path)
     }
 
     return head + parts.join("/");
+}
+
+function isMap(value)
+{
+    return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function list(value, fallback)

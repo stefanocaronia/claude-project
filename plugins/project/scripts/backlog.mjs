@@ -3,7 +3,7 @@
 //   node backlog.mjs add "text" [--goal "<goal of the plan>"] [--p P2] [--effort <word>] [--to <name>] [--state todo|doing|postponed|done]
 //   node backlog.mjs start|done|postpone|todo T-12 [T-13…]
 //   node backlog.mjs archive T-12… | archive --done
-//   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34]
+//   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34] [--due 2026-11-15] [--type bug]
 //   node backlog.mjs add --issue 34 ["text"]   (a task from a GitHub issue, its title the text when none is given)
 //   node backlog.mjs issue-close T-12   (closes its GitHub issue with a comment: only on the user's yes)
 //   node backlog.mjs note T-12   (its note, written when missing: the path)
@@ -43,7 +43,7 @@ export function backlogProblems(config, say)
         // An archived task keeps the goal it had, even one the plan no longer holds.
         const archivedGoals = task.state === "archived" ? [...goals, task.goal] : goals;
 
-        for (const error of taskErrors(task, { words: config.words, people, goals: archivedGoals, prefix, decisionPrefix: config.prefixes.decision, say })) {
+        for (const error of taskErrors(task, { words: config.words, people, goals: archivedGoals, types: Object.keys(config.types), prefix, decisionPrefix: config.prefixes.decision, say })) {
             problems.push({ ...at, message: `${id}: ${error}` });
         }
 
@@ -107,20 +107,28 @@ function execute(command, options, words, config, say)
         const errors = [
             ...(closed ? [say("goalIsClosed", { value: closed.name, day: closed.closed })] : []),
             ...(taken ? [say("issueTaken", { issue: task.issue, id: `${prefix}-${taken.id}` })] : []),
-            ...taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), prefix, decisionPrefix: config.prefixes.decision, say }),
+            ...taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), types: Object.keys(config.types), prefix, decisionPrefix: config.prefixes.decision, say }),
             ...linkErrors(task, all, config, say),
         ];
         return errors.length > 0 ? fail(errors.join("\n")) : task;
     };
-    // The links of a text, `(after: …)`, `(see: …)`, `(in: …)` and `(issue: …)` at its end, with those of the options on top: an option
-    // given replaces.
-    const linked = (given, old = { after: [], see: [], parent: null, issue: null }) => {
+    // The suffixes of a text, `(after: …)`, `(see: …)`, `(in: …)`, `(issue: …)`, `(due: …)` and `(type: …)` at its end, with the options
+    // on top: an option given replaces, "" clears.
+    const linked = (given, old = {}) => {
         const split = splitLinks(given ?? old.text);
         const isGiven = (kind) => options[kind] !== undefined && options[kind] !== true;
-        const pick = (kind) => (isGiven(kind) ? listOf(options[kind]) : given !== undefined && split[kind].length > 0 ? split[kind] : old[kind]);
-        const parent = isGiven("in") ? (listOf(options.in)[0] ?? null) : given !== undefined && split.parent ? split.parent : (old.parent ?? null);
-        const issue = isGiven("issue") ? (listOf(options.issue)[0]?.replace(/^#?/, "#") ?? null) : given !== undefined && split.issue ? split.issue : (old.issue ?? null);
-        return { text: split.text, after: pick("after"), see: pick("see"), parent, issue };
+        const pick = (kind) => (isGiven(kind) ? listOf(options[kind]) : given !== undefined && split[kind].length > 0 ? split[kind] : old[kind] ?? []);
+        const single = (option, field, shape = (value) => value) => (isGiven(option) ? (listOf(options[option]).map(shape)[0] ?? null) : given !== undefined && split[field] ? split[field] : (old[field] ?? null));
+        return {
+            text: split.text,
+            after: pick("after"),
+            see: pick("see"),
+            parent: single("in", "parent"),
+            issue: single("issue", "issue", (value) => value.replace(/^#?/, "#")),
+            due: single("due", "due"),
+            // A type by its key or by its name in the project's language: --type funzione is feature.
+            type: single("type", "type", (value) => Object.entries(config.types).find(([, name]) => name.toLowerCase() === value.toLowerCase())?.[0] ?? value.toLowerCase()),
+        };
     };
     const issueNumber = () => Number(String(options.issue).replace(/^#/, ""));
     const save = (all, said) => {
@@ -220,8 +228,14 @@ function execute(command, options, words, config, say)
         // As the panel shows them: a blocked task with what it still waits for, a large task with its parts closed.
         const links = taskLinks(config, tasks);
         const marked = (task) => {
-            const { blockedBy, parts, partsDone } = links.get(task.id);
-            return `${line(task)}${blockedBy.length > 0 ? `  ⛓ ${blockedBy.join(", ")}` : ""}${parts.length > 0 ? `  ${say("partsCount", { done: partsDone, total: parts.length })}` : ""}`;
+            const { blockedBy, parts, partsDone, dueInfo, stale } = links.get(task.id);
+            const marks = [
+                blockedBy.length > 0 ? `⛓ ${blockedBy.join(", ")}` : null,
+                parts.length > 0 ? say("partsCount", { done: partsDone, total: parts.length }) : null,
+                dueInfo && (dueInfo.isLate || dueInfo.isNear) ? `⏰ ${dueText(dueInfo, say)}` : null,
+                stale ? `⏸ ${say("staleTip", { day: task.started })}` : null,
+            ].filter(Boolean);
+            return `${line(task)}${marks.map((mark) => `  ${mark}`).join("")}`;
         };
         print(shownTasks, options.json, marked, say("count", { count: shownTasks.length }));
     } else if (command === "find" && words.length > 0) {
@@ -268,8 +282,12 @@ function linksOf(tasks, config, say, stateName)
     const named = (one) => (byId.has(one) ? `${one} (${stateName(byId.get(one))})` : graph.known(one) ? `${one} (${say(graph.isOpen(one) ? "todoOpen" : "todoClosed")})` : `${one} (?)`);
 
     return (task) => {
-        const { after, chain, waitedBy, see, seenFrom, note, parent, parts, partsDone, nextPart } = links.get(task.id);
+        const { after, chain, waitedBy, see, seenFrom, note, parent, parts, partsDone, nextPart, decisions, dueInfo, stale } = links.get(task.id);
         return [
+            task.type ? say("typeLabel", { name: config.types[task.type] ?? task.type }) : null,
+            task.due ? `${say("dueLabel", { day: task.due })}${dueInfo && (dueInfo.isLate || dueInfo.isNear) ? ` (${dueText(dueInfo, say)})` : ""}` : null,
+            task.started && task.state === "doing" ? say(stale ? "staleTip" : "startedLabel", { day: task.started }) : null,
+            decisions.length > 0 ? say("decisionsOf", { list: decisions.join(", ") }) : null,
             parent ? say("partOf", { id: named(parent) }) : null,
             parts.length > 0 ? say("partsLabel", { done: partsDone, total: parts.length, list: parts.map(named).join(", ") }) : null,
             nextPart ? say("nextPart", { id: nextPart }) : null,
@@ -281,6 +299,12 @@ function linksOf(tasks, config, say, stateName)
             note ? say("noteLabel", { path: note }) : null,
         ].filter(Boolean);
     };
+}
+
+/** A due day said from today: late by some days, today, or in some days. */
+export function dueText(dueInfo, say)
+{
+    return dueInfo.isLate ? say("dueLate", { days: -dueInfo.days }) : dueInfo.days === 0 ? say("dueToday") : say("dueIn", { days: dueInfo.days });
 }
 
 /** The lines `show` adds for a task's code: how many commits cite it and the latest, each pull request that cites it and its state. */

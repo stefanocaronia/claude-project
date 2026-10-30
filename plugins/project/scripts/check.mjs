@@ -9,7 +9,7 @@ import { codeView, issueOf } from "../lib/code.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { readCode, readIssues } from "./code.mjs";
 import { backlogProblems } from "./backlog.mjs";
-import { citingFiles, isMain, loadProject, read, readBacklog, readDecisions, readDependencies, readGoals, readTodos, runCli, shown, today, todoFiles, todoIdsEver } from "./project.mjs";
+import { citingFiles, isMain, loadProject, read, readBacklog, readDecisions, readDependencies, readGoals, readTodos, runCli, shown, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
 
 /** Every finding about the docs, from errors that must be fixed to notes for the cleanup: { severity, kind, file, line, message }. */
 export function check(config, say)
@@ -25,6 +25,7 @@ export function check(config, say)
     checkBacklog(config, say, add);
     checkLinks(config, say, add);
     checkCode(config, say, add);
+    checkTime(config, say, add);
     checkPlan(config, say, add);
     checkOpen(config, say, add);
     checkMarkdown(config, say, add);
@@ -274,6 +275,27 @@ function checkCode(config, say, add)
             add("note", "code", task.file, task.line, say("issueDoneOpen", { id: `${prefix}-${task.id}`, issue: task.issue }));
         } else if (issue?.state === "closed" && !isClosed) {
             add("note", "code", task.file, task.line, say("issueClosedTaskOpen", { id: `${prefix}-${task.id}`, issue: task.issue, day: issue.closed ?? "?" }));
+        }
+    }
+}
+
+/** Tasks past their due day, and tasks in progress for days that nobody holds. */
+function checkTime(config, say, add)
+{
+    const prefix = config.prefixes.task;
+    const { tasks } = readBacklog(config);
+    const links = taskLinks(config, tasks);
+
+    for (const task of tasks) {
+        const { dueInfo, stale } = links.get(task.id);
+        const id = `${prefix}-${task.id}`;
+
+        if (dueInfo?.isLate) {
+            add("warning", "time", task.file, task.line, say("overdue", { id, day: task.due }));
+        }
+
+        if (stale) {
+            add("warning", "time", task.file, task.line, say("staleTask", { id, day: task.started }));
         }
     }
 }

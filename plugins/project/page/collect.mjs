@@ -1,18 +1,18 @@
 // Reads the project into one object for the page: the plan by phases and goals, the decisions and their days, the tasks of the backlog
 // and of the colleagues' todos, the docs, the health, the commits by day, and what each extension adds.
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { effortKey } from "../lib/backlog.mjs";
 import { numbering, proposalOf } from "../lib/decisions.mjs";
 import { planPhases, planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
+import { decisionLinks } from "../lib/links.mjs";
 import { check } from "../scripts/check.mjs";
 import { readCode, readIssues } from "../scripts/code.mjs";
 import { context } from "../scripts/extensions.mjs";
-import { colleagues, git, profileOf, projectName, read, readBacklog, readDecisions, projectRepos, readGoals, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
+import { colleagues, git, profileOf, projectName, read, readBacklog, readDecisions, projectRepos, readGoals, readHolds, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 const lastDecisions = 8;
@@ -39,6 +39,7 @@ export async function collect(config, say, extensions = [])
         language: config.language,
         words: { states: config.words.states, priorities: config.words.priorities, noGoal: config.words.noGoal },
         prefixes: config.prefixes,
+        types: config.types,
         docs: shown(config, config.docs),
         files: Object.fromEntries(Object.entries(config.files).filter(([, path]) => path).map(([key, path]) => [key, path.split("/").at(-1)])),
         plan,
@@ -114,12 +115,14 @@ function readDecisionsData(config)
     // How many decisions name each person who decided them, «(Stefano, 12 october)».
     const byPerson = Object.fromEntries(config.people.map((person) => [person, decided.filter((row) => new RegExp(`\\(${escapeRegex(person)}(?![\\p{L}\\p{N}])`, "u").test(row.text)).length]));
     const { twice, missing } = numbering(decided);
+    // The tasks each decision is tied to, both ways.
+    const tasksOf = decisionLinks(readBacklog(config).tasks, decided, config.prefixes).byDecision;
     return {
         count: decided.length,
         last: decided.slice(-lastDecisions).reverse().map((row) => ({ number: row.number, text: clean(row.text) })),
         open: open.map((point) => clean(point.text)),
         // Every decision, the newest first, with the day it was taken; the points to decide with their priority and day, for the lists.
-        all: decided.slice().reverse().map((row) => ({ number: row.number, text: clean(row.text), why: clean(row.why), day: firstSeen.get(row.number) ?? null })),
+        all: decided.slice().reverse().map((row) => ({ number: row.number, text: clean(row.text), why: clean(row.why), day: firstSeen.get(row.number) ?? null, tasks: tasksOf.get(`${config.prefixes.decision}-${row.number}`) ?? [] })),
         proposals: open.map((point) => {
             const proposal = proposalOf(point.text, config.words, today());
             return { ...proposal, text: clean(proposal.text), whole: point.text, line: point.line };
@@ -129,34 +132,6 @@ function readDecisionsData(config)
         duplicates: twice,
         missing,
     };
-}
-
-/** Who holds each task in progress now, as the chats of the project write it in the system's temporary folder (the panel's holds):
- * the colleague at work, or a chat; by task number. */
-function readHolds(config)
-{
-    const folder = join(tmpdir(), "claude-project");
-    const holds = {};
-
-    if (!existsSync(folder)) {
-        return holds;
-    }
-
-    for (const name of readdirSync(folder).filter((one) => /^held-.+\.json$/.test(one))) {
-        try {
-            const content = JSON.parse(read(join(folder, name)));
-
-            if (String(content.root).toLowerCase() === config.root.toLowerCase() && Date.now() - content.at < 24 * 3_600_000) {
-                for (const [id, one] of Object.entries(content.tasks ?? {})) {
-                    holds[id] = { colleague: one.colleague ?? null };
-                }
-            }
-        } catch {
-            // a file being written: the next reading has it
-        }
-    }
-
-    return holds;
 }
 
 /** The backlog for the board and the lists: every task not archived, and those archived within the board's days, with who holds it. */

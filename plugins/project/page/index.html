@@ -1089,6 +1089,37 @@
         font-size: 13px;
     }
 
+    /* A task's type icon, a due day near or past, a task stuck in progress */
+    svg.type-icon {
+        display: inline-block;
+        flex: none;
+        width: 14px;
+        height: 14px;
+        vertical-align: -2px;
+    }
+
+    svg.type-icon text {
+        fill: #fff;
+        font-size: 8px;
+    }
+
+    /* The type and the priority of a task in the list, the priority always in the same place */
+    .marks {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
+    }
+
+    .wait.late {
+        color: var(--critical);
+        font-weight: 600;
+    }
+
+    .wait.near, .wait.stale {
+        color: var(--warning);
+    }
+
     /* A part under its large task, a step in, with a rule on its left */
     .task.part, .row.part {
         margin-left: 18px;
@@ -1492,7 +1523,7 @@
 
     .row {
         display: grid;
-        grid-template-columns: 22px 22px minmax(0, 1fr) 16px;
+        grid-template-columns: 22px 40px minmax(0, 1fr) 16px;
         gap: 10px;
         align-items: start;
         padding: 10px 4px;
@@ -2042,7 +2073,9 @@ const extensions = [];
 const loadedScripts = new Set();
 const expanded = new Set();
 const lanesOpen = savedLanes();
-const taskFilter = { state: "open", priority: "all", who: "all", goal: "all" };
+const taskFilter = { state: "open", priority: "all", type: "all", who: "all", goal: "all" };
+// The colors of the task types, as Jira's issue types (lib/schedule.mjs).
+const typeColors = { bug: "#E5493A", feature: "#36B37E", chore: "#4C9AFF", research: "#8777D9" };
 let words = pageWords.en;
 let data = null;
 let lastData = "";
@@ -2490,7 +2523,8 @@ function decisionRow(row, terms)
     const id = `decision-${row.number}`;
     const open = expanded.has(id);
     const why = open && row.why ? `<p class="why"><b>${t("why")}</b> ${marked(row.why, terms)}</p>` : "";
-    const day = row.day ? `<div class="row-meta"><span>${escape(formatDay(row.day))}</span></div>` : "";
+    const tasks = row.tasks?.length ? `<span><b>${escape(t("decisionTasks"))}</b> ${escape(row.tasks.join(", "))}</span>` : "";
+    const day = row.day || tasks ? `<div class="row-meta">${row.day ? `<span>${escape(formatDay(row.day))}</span>` : ""}${tasks}</div>` : "";
 
     return `<li class="row decision">
             <span class="tag">${escape(data.prefixes.decision)}-${row.number}</span>
@@ -2638,7 +2672,7 @@ function taskCard(task, lane, isUnder = false)
         .map((state) => `<button type="button" id="move-${name}-${state}" data-move="${state}" data-task="${task.id}" aria-label="${attribute(t("moveTo", name, stateName(state)))}">${escape(stateName(state))}</button>`).join("");
 
     return `<li class="task ${column} ${isUnder ? "part" : ""} ${expanded.has(`board-${name}`) ? "open" : ""} ${landed === task.id ? "landed" : ""}" draggable="true" data-task="${task.id}" data-lane="${attribute(lane)}" data-column="${column}">
-            <div class="task-top">${priorityControl(task, "board")}<span class="id">${escape(name)}</span><span class="grow"></span>${effortMeter(task)}${face(task)}</div>
+            <div class="task-top">${typeIcon(task)}${priorityControl(task, "board")}<span class="id">${escape(name)}</span><span class="grow"></span>${effortMeter(task)}${face(task)}</div>
             ${expandButton(`board-${name}`, escape(task.text))}
             ${taskLinks(task)}
             <div class="task-foot">${foot}</div>
@@ -2653,6 +2687,7 @@ function taskFilters()
     const countOf = (keep) => all.filter(keep).length;
     const chip = (kind, value, label, count) => `<button type="button" id="filter-${kind}-${value}" data-task-filter="${kind}" data-value="${value}" aria-pressed="${taskFilter[kind] === value}">${label}${count === undefined ? "" : `<span class="count">${count}</span>`}</button>`;
     const states = [["open", t("filterOpenTasks"), (task) => columnOf(task) !== "done"], ...boardStates.map((state) => [state, escape(stateName(state)), (task) => columnOf(task) === state]), ["all", t("filterEvery"), () => true]];
+    const types = [...new Set(all.map((task) => task.type).filter(Boolean))].sort();
     const priorities = [chip("priority", "all", t("filterAnyPriority")), ...["P1", "P2", "P3"].map((key) => chip("priority", key, `${priorityMark(key)}${escape(key)}`, countOf((task) => task.priority === key && columnOf(task) !== "done")))];
     const people = [...new Set(all.map((task) => task.to))].sort((first, second) => countOf((task) => task.to === second) - countOf((task) => task.to === first));
     const goals = [...new Set([...data.plan.sections.map((section) => section.name), ...all.map((task) => task.goal)])].filter((goal) => goal !== data.words.noGoal && all.some((task) => task.goal === goal));
@@ -2661,6 +2696,7 @@ function taskFilters()
 
     return `<div class="chips" role="group" aria-labelledby="filter-state-name"><span class="filter-name" id="filter-state-name">${t("filterState")}</span>${states.map(([value, label, keep]) => chip("state", value, label, countOf(keep))).join("")}</div>
         <div class="chips" role="group" aria-labelledby="filter-priority-name"><span class="filter-name" id="filter-priority-name">${t("filterPriority")}</span>${priorities.join("")}</div>
+        ${types.length ? `<div class="chips" role="group" aria-labelledby="filter-type-name"><span class="filter-name" id="filter-type-name">${t("filterType")}</span>${chip("type", "all", t("anyType"))}${types.map((type) => chip("type", type, `${typeIcon({ type })}${escape(data.types?.[type] ?? type)}`, countOf((task) => task.type === type && columnOf(task) !== "done"))).join("")}</div>` : ""}
         <label>${t("filterWho")} <select id="filter-who" data-task-filter="who">${option("who", "all", t("anyone"))}${people.map((person) => option("who", person, person)).join("")}</select></label>
         <label>${t("filterGoal")} <select id="filter-goal" data-task-filter="goal">${option("goal", "all", t("anyGoal"))}${goals.map((goal) => option("goal", goal, goal)).join("")}${noGoal}</select></label>`;
 }
@@ -2672,7 +2708,7 @@ function filteredTasks()
     const keep = (task) => {
         const column = columnOf(task);
         const state = taskFilter.state === "all" || (taskFilter.state === "open" ? column !== "done" : column === taskFilter.state);
-        return state && (taskFilter.priority === "all" || task.priority === taskFilter.priority) && (taskFilter.who === "all" || task.to === taskFilter.who) && (taskFilter.goal === "all" || task.goal === taskFilter.goal);
+        return state && (taskFilter.type === "all" || task.type === taskFilter.type) && (taskFilter.priority === "all" || task.priority === taskFilter.priority) && (taskFilter.who === "all" || task.to === taskFilter.who) && (taskFilter.goal === "all" || task.goal === taskFilter.goal);
     };
     const closedLast = (first, second) => boardStates.indexOf(columnOf(first)) - boardStates.indexOf(columnOf(second));
     const recent = (first, second) => (columnOf(first) === "done" ? (second.done ?? second.archived ?? "").localeCompare(first.done ?? first.archived ?? "") : 0);
@@ -2712,7 +2748,7 @@ function taskRow(task, isUnder = false)
 
     return `<li class="row ${column} ${isUnder ? "part" : ""}">
             ${face(task)}
-            ${priorityControl(task, "list")}
+            <span class="marks">${typeIcon(task)}${priorityControl(task, "list")}</span>
             <div>${expandButton(`list-${name}`, `<span class="id">${escape(name)}</span>${escape(task.text)}`)}
                 <div class="row-meta"><span class="row-state"><i class="column-mark ${column}"></i>${escape(stateName(column))}</span>${work}${goal}${when}</div>
                 ${taskLinks(task)}
@@ -2738,7 +2774,38 @@ function waitOrAge(task)
         return `<span class="wait blocked" data-tip="${attribute(escape(words))}"><span aria-hidden="true">⛓ ${escape(blockers[0])}${blockers.length > 1 ? ` +${blockers.length - 1}` : ""}</span><span class="visually-hidden">${escape(words)}</span></span>`;
     }
 
+    const due = task.dueInfo && (task.dueInfo.isLate || task.dueInfo.isNear) ? task.dueInfo : null;
+
+    if (due) {
+        const when = due.isLate ? t("dueLate", -due.days) : due.days === 0 ? t("dueToday") : t("dueIn", due.days);
+        return `<span class="wait ${due.isLate ? "late" : "near"}" data-tip="${attribute(escape(t("dueTip", formatDay(due.day))))}"><span aria-hidden="true">⏰ </span>${escape(when)}</span>`;
+    }
+
+    if (task.stale && task.started) {
+        const words = t("staleTip", formatDay(task.started));
+        return `<span class="wait stale" data-tip="${attribute(escape(words))}"><span aria-hidden="true">⏸ ${escape(age(task.started))}</span><span class="visually-hidden">${escape(words)}</span></span>`;
+    }
+
     return `<span data-tip="${attribute(escape(t("bornOn", formatDay(task.created))))}">${escape(age(task.created))}</span>`;
+}
+
+/** A task's type as Jira draws an issue type: a rounded square in its color with a white sign, its name under the pointer and to a
+ * screen reader; nothing without one. */
+function typeIcon(task)
+{
+    if (!task.type) {
+        return "";
+    }
+
+    const signs = {
+        bug: `<circle cx="7" cy="7" r="2.6" fill="#fff"/>`,
+        feature: `<path d="M4.5 3.5h5v7L7 8.6 4.5 10.5z" fill="#fff"/>`,
+        chore: `<path d="M4 7.2l2 2 4-4.4" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
+        research: `<circle cx="6.3" cy="6.3" r="2.4" fill="none" stroke="#fff" stroke-width="1.5"/><path d="M8.1 8.1l2.2 2.2" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>`,
+    };
+    const name = data.types?.[task.type] ?? task.type;
+    const sign = signs[task.type] ?? `<text x="7" y="10" text-anchor="middle" font-size="8" font-weight="700" fill="#fff">${escape(task.type.slice(0, 1).toUpperCase())}</text>`;
+    return `<svg class="type-icon" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="${attribute(name)}" data-tip="${attribute(escape(name))}"><rect x="0.5" y="0.5" width="13" height="13" rx="3" fill="${typeColors[task.type] ?? "#8993A4"}"/>${sign}</svg>`;
 }
 
 /** A task's links in words, both ways, under its text: the large task it is a part of, what it waits for, what waits for it, what it
@@ -2747,6 +2814,9 @@ function taskLinks(task)
 {
     const line = (label, list) => (list?.length ? `<span><b>${escape(label)}</b> ${escape(list.join(", "))}</span>` : "");
     const parts = [
+        task.due ? `<span><b>${escape(t("linkDue"))}</b> ${escape(formatDay(task.due))}</span>` : "",
+        task.started && task.state === "doing" ? `<span><b>${escape(t("linkStarted"))}</b> ${escape(formatDay(task.started))}</span>` : "",
+        line(t("linkDecisions"), task.decisions),
         line(t("linkPartOf"), task.parent ? [task.parent] : []),
         line(t("linkParts"), task.parts),
         line(t("linkWaitsFor"), task.after),
@@ -2816,7 +2886,7 @@ function setupBoard()
             taskFilter[target.dataset.taskFilter] = target.dataset.value;
             refreshTaskList(target.id);
         } else if (target.hasAttribute("data-clear-filters")) {
-            Object.assign(taskFilter, { state: "open", priority: "all", who: "all", goal: "all" });
+            Object.assign(taskFilter, { state: "open", priority: "all", type: "all", who: "all", goal: "all" });
             refreshTaskList("filter-state-open");
         } else if (target.dataset.takeIssue) {
             changeTask({ command: "issue", issue: target.dataset.takeIssue, title: target.dataset.title }, t("issueTaken", target.dataset.takeIssue));
@@ -3071,7 +3141,15 @@ function taskName(task)
 /** The panel's order: by priority, then the oldest, then by number. */
 function taskOrder(first, second)
 {
-    return (priorityRank[first.priority] ?? 4) - (priorityRank[second.priority] ?? 4) || (first.created ?? "").localeCompare(second.created ?? "") || first.id - second.id;
+    const [one, other] = [mostUrgent(first), mostUrgent(second)];
+    return (priorityRank[one.priority] ?? 4) - (priorityRank[other.priority] ?? 4) || (one.created ?? "").localeCompare(other.created ?? "") || first.id - second.id;
+}
+
+/** A task, or for a large task the most urgent of it and its open parts: a large task stands where that part would. */
+function mostUrgent(task)
+{
+    const parts = (data.board ?? []).filter((part) => part.parent === taskName(task) && columnOf(part) !== "done");
+    return [task, ...parts].sort((first, second) => (priorityRank[first.priority] ?? 4) - (priorityRank[second.priority] ?? 4) || (first.created ?? "").localeCompare(second.created ?? ""))[0];
 }
 
 /** How old a day is, «3 d», as the panel says it. */

@@ -32,10 +32,10 @@ test("add, start, done, set and archive change the backlog; show and list read i
     assert.match(run("backlog.mjs", "add", "il registro", "--goal", "Nucleo", "--to", "Stefano", "--effort", "basso", "--p", "P3"), /T-2 aggiunto: - T-2 · P3 · basso · Stefano · \d{4}-\d{2}-\d{2} · Nucleo · il registro/);
     assert.match(run("backlog.mjs", "start", "T-1"), /T-1: In corso/);
     assert.match(run("backlog.mjs", "done", "t-2"), /T-2: Fatti/);
-    assert.match(run("backlog.mjs", "set", "T-1", "--text", "i dadi e i tiri"), /· i dadi e i tiri$/m);
+    assert.match(run("backlog.mjs", "set", "T-1", "--text", "i dadi e i tiri"), /· i dadi e i tiri · iniziato \d{4}-\d{2}-\d{2}$/m);
 
     const tasks = readFileSync(join(root, "docs/TASKS.md"), "utf8");
-    assert.ok(tasks.startsWith("# Backlog\n\nI compiti.\n\n## In corso\n\n- T-1 · P1 · alto · Matteo · 2026-10-01 · Nucleo · i dadi e i tiri\n"));
+    assert.match(tasks, /^# Backlog\n\nI compiti\.\n\n## In corso\n\n- T-1 · P1 · alto · Matteo · 2026-10-01 · Nucleo · i dadi e i tiri · iniziato \d{4}-\d{2}-\d{2}\n/);
     assert.match(tasks, /## Fatti\n\n- T-2 · .* · il registro · fatto \d{4}-\d{2}-\d{2}\n/);
 
     const listed = JSON.parse(run("backlog.mjs", "list", "--json"));

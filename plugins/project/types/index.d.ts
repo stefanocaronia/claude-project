@@ -33,6 +33,14 @@ export type Task = {
     commitCount: number;
     pulls: Pull[];
     mergedPull: Pull | null;
+    /** Its type `(type: bug)`, its due day `(due: 2026-11-15)` and how far it is, the day it started, whether it is stuck: in progress for
+     * days with nobody holding it; the decisions it is tied to, both ways. */
+    type?: string | null;
+    due?: string | null;
+    dueInfo?: { day: string; days: number; isLate: boolean; isNear: boolean } | null;
+    started?: string | null;
+    stale?: boolean;
+    decisions?: string[];
     /** Its GitHub issue, `(issue: #34)`, as GitHub has it; null without one, or without gh. */
     issue?: string | null;
     issueInfo?: { number: number; title: string; state: string; url: string | null; closed: string | null } | null;
@@ -45,7 +53,7 @@ export type Goal = { name: string; phase: number | null; done: number; total: nu
 
 export type Proposal = { priority: string | null; day: string | null; text: string; whole: string; line: number };
 
-export type Decision = { number: number; text: string; why: string };
+export type Decision = { number: number; text: string; why: string; tasks?: string[] };
 
 export type Member = { id: string; name: string; fullName: string; role: string; color: string; portrait?: string };
 
@@ -55,6 +63,8 @@ export type Snapshot = {
     language: string;
     words: { states: Record<string, string>; priorities: Record<string, string>; noGoal: string };
     prefixes: { task: string; decision: string };
+    /** The task types by key, each with its name in the project's language. */
+    types?: Record<string, string>;
     today: string;
     page: string;
     /** The extensions' links: a page to open, or a path of the project's page to POST to. */

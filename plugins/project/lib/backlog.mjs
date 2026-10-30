@@ -1,4 +1,4 @@
-// The backlog's lines: `- T-12 · P2 · medium · Matteo · 2026-10-29 · <goal> · text · done 2026-10-30 · archived 2026-10-31`, one task a
+// The backlog's lines: `- T-12 · P2 · medium · Matteo · 2026-10-29 · <goal> · text · started 2026-10-29 · done 2026-10-30`, one task a
 // line under the heading of its state. Pure: the text in, the text out, in the project's words.
 import { badLinks, joinLinks, splitLinks } from "./links.mjs";
 import { escapeRegex } from "./text.mjs";
@@ -17,19 +17,18 @@ export function parseLine(line, state, words, prefix = "T")
     }
 
     const [, id, priority, effort, to, created, goal, rest] = match;
-    const marks = new RegExp(`^(.*?)(?: · ${escapeRegex(words.doneMarker)} (\\d{4}-\\d{2}-\\d{2}))?(?: · ${escapeRegex(words.archivedMarker)} (\\d{4}-\\d{2}-\\d{2}))?$`);
-    const [, whole, done, archived] = marks.exec(rest);
-    const { text, after, see, parent, issue } = splitLinks(whole);
-    return { id: Number(id), priority, effort: effort.trim(), to: to.trim(), created, goal: goal.trim(), text, after, see, parent, issue, done: done ?? null, archived: archived ?? null, state };
+    const day = "(\\d{4}-\\d{2}-\\d{2})";
+    const marks = new RegExp(`^(.*?)(?: · ${escapeRegex(words.startedMarker)} ${day})?(?: · ${escapeRegex(words.doneMarker)} ${day})?(?: · ${escapeRegex(words.archivedMarker)} ${day})?$`);
+    const [, whole, started, done, archived] = marks.exec(rest);
+    return { id: Number(id), priority, effort: effort.trim(), to: to.trim(), created, goal: goal.trim(), ...splitLinks(whole), started: started ?? null, done: done ?? null, archived: archived ?? null, state };
 }
 
-/** The task as a line again, its links at the end of its text. */
+/** The task as a line again, its links at the end of its text, then the days it started, was done and archived. */
 export function formatLine(task, words, prefix = "T")
 {
-    const done = task.done ? `${separator}${words.doneMarker} ${task.done}` : "";
-    const archived = task.archived ? `${separator}${words.archivedMarker} ${task.archived}` : "";
-    const text = joinLinks(task.text, task.after, task.see, task.parent, task.issue);
-    return `- ${prefix}-${task.id}${separator}${[task.priority, task.effort, task.to, task.created, task.goal, text].join(separator)}${done}${archived}`;
+    const mark = (marker, day) => (day ? `${separator}${marker} ${day}` : "");
+    const text = joinLinks(task.text, task);
+    return `- ${prefix}-${task.id}${separator}${[task.priority, task.effort, task.to, task.created, task.goal, text].join(separator)}${mark(words.startedMarker, task.started)}${mark(words.doneMarker, task.done)}${mark(words.archivedMarker, task.archived)}`;
 }
 
 /** The tasks of a backlog's text, each with its line and the state of its heading, and the lines that do not read as a task. What comes
@@ -95,7 +94,9 @@ export function moveTasks(tasks, ids, state, today)
 {
     const wanted = new Set(ids.map(Number));
     const missing = [...wanted].filter((id) => !tasks.some((task) => task.id === id));
-    const moved = tasks.map((task) => (wanted.has(task.id) ? { ...task, state, done: state === "done" ? (task.done ?? today) : null, archived: null } : task));
+    // The day it started: set when it goes into progress, kept while it is and once it is done, gone when it waits again.
+    const started = (task) => (state === "doing" ? (task.state === "doing" && task.started ? task.started : today) : state === "done" ? task.started ?? null : null);
+    const moved = tasks.map((task) => (wanted.has(task.id) ? { ...task, state, started: started(task), done: state === "done" ? (task.done ?? today) : null, archived: null } : task));
     return { tasks: moved, missing };
 }
 
@@ -112,7 +113,7 @@ export function nextId(tasks)
 }
 
 /** What makes a task wrong before it is written, as messages; empty when it is right. */
-export function taskErrors(task, { words, people, goals, prefix = "T", decisionPrefix = "D", say })
+export function taskErrors(task, { words, people, goals, types = Object.keys(words.types ?? {}), prefix = "T", decisionPrefix = "D", say })
 {
     const errors = [];
     const efforts = Object.values(words.efforts);
@@ -141,10 +142,11 @@ export function taskErrors(task, { words, people, goals, prefix = "T", decisionP
         errors.push(say("badText", { prefix }));
     }
 
-    const lists = { after: task.after ?? [], see: task.see ?? [], in: task.parent ? [task.parent] : [], issue: task.issue ? [task.issue] : [] };
-    const messages = { after: "badAfter", see: "badSee", in: "badIn", issue: "badIssue" };
+    const one = (value) => (value ? [value] : []);
+    const lists = { after: task.after ?? [], see: task.see ?? [], in: one(task.parent), issue: one(task.issue), due: one(task.due), type: one(task.type) };
+    const messages = { after: "badAfter", see: "badSee", in: "badIn", issue: "badIssue", due: "badDue", type: "badType" };
 
-    for (const kind of ["after", "see", "in", "issue"]) {
+    for (const kind of Object.keys(lists)) {
         const bad = badLinks(kind, lists[kind], { task: prefix, decision: decisionPrefix });
 
         if (bad.length > 0) {
@@ -158,6 +160,10 @@ export function taskErrors(task, { words, people, goals, prefix = "T", decisionP
 
     if (task.parent === `${prefix}-${task.id}`) {
         errors.push(say("inItself", { id: `${prefix}-${task.id}` }));
+    }
+
+    if (task.type && !types.includes(task.type)) {
+        errors.push(say("unknownType", { value: task.type, list: types.join(", ") }));
     }
 
     return errors;

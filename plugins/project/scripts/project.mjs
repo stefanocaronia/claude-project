@@ -2,6 +2,7 @@
 // decisions read and written through the pure modules of lib/.
 import { execFileSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseBacklog, renderArchive, renderBacklog } from "../lib/backlog.mjs";
@@ -9,7 +10,8 @@ import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
 import { parseDecisions } from "../lib/decisions.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { planGoals } from "../lib/plan.mjs";
-import { dependencies, partsOf, seenFrom, todoLinks } from "../lib/links.mjs";
+import { decisionLinks, dependencies, partsOf, seenFrom, todoLinks } from "../lib/links.mjs";
+import { dueOf, isStale } from "../lib/schedule.mjs";
 import { firstName, parseTodo } from "../lib/todos.mjs";
 
 const lockWait = 10_000;
@@ -214,6 +216,9 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
     const parts = partsOf(tasks, prefix);
     const byId = new Map(tasks.map((task) => [`${prefix}-${task.id}`, task]));
     const isClosed = (task) => task.state === "done" || task.state === "archived";
+    const decisions = decisionLinks(tasks, readDecisions(config).decided, config.prefixes).byTask;
+    const holds = readHolds(config);
+    const now = today();
 
     return new Map(tasks.map((task) => {
         const id = `${prefix}-${task.id}`;
@@ -232,8 +237,39 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
             waitedBy: tasks.filter((other) => other.after.includes(id)).map((other) => `${prefix}-${other.id}`),
             seenFrom: from.get(id) ?? [],
             note: notes.has(`${id}.md`) ? shown(config, notePath(config, task.id)) : null,
+            decisions: decisions.get(id) ?? [],
+            dueInfo: isClosed(task) ? null : dueOf(task.due, now),
+            stale: isStale(task, Boolean(holds[String(task.id)]), now, config.limits.staleDays),
         }];
     }));
+}
+
+/** Who holds each task in progress now, as the chats of the project write it in the system's temporary folder (the panel's holds):
+ * the colleague at work, or a chat; by task number. */
+export function readHolds(config)
+{
+    const folder = join(tmpdir(), "claude-project");
+    const holds = {};
+
+    if (!existsSync(folder)) {
+        return holds;
+    }
+
+    for (const name of readdirSync(folder).filter((one) => /^held-.+\.json$/.test(one))) {
+        try {
+            const content = JSON.parse(read(join(folder, name)));
+
+            if (String(content.root).toLowerCase() === config.root.toLowerCase() && Date.now() - content.at < 24 * 3_600_000) {
+                for (const [id, one] of Object.entries(content.tasks ?? {})) {
+                    holds[id] = { colleague: one.colleague ?? null };
+                }
+            }
+        } catch {
+            // a file being written: the next reading has it
+        }
+    }
+
+    return holds;
 }
 
 /** Where a task's note is, `<docs>/tasks/T-12.md`, whether it is written or not. */

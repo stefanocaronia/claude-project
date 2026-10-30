@@ -7,6 +7,7 @@ import { planUpdated } from "../lib/plan.mjs";
 import { configFile } from "../lib/config.mjs";
 import { plainMarkdown } from "../lib/text.mjs";
 import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
+import { decisionLinks } from "../lib/links.mjs";
 import { check } from "./check.mjs";
 import { readCode, readIssues } from "./code.mjs";
 import { extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
@@ -34,11 +35,15 @@ export async function snapshot(config, say, withHealth = true)
     const links = taskLinks(config, tasks);
     const code = readCode(config);
     const issues = readIssues(config);
+    // The tasks each decision is tied to, both ways.
+    const tasksOf = decisionLinks(tasks, readDecisions(config).decided, config.prefixes).byDecision;
 
     return {
         project: projectName(config),
         language: config.language,
         words: { states: config.words.states, priorities: config.words.priorities, noGoal: config.words.noGoal },
+        // The task types by key, each with its name in the project's language.
+        types: config.types,
         prefixes: config.prefixes,
         today: now,
         page,
@@ -73,7 +78,7 @@ export async function snapshot(config, say, withHealth = true)
                 const proposal = proposalOf(point.text, config.words, now);
                 return { ...proposal, text: plainMarkdown(proposal.text), line: point.line, whole: point.text };
             }),
-            recent: decided.slice().sort((first, second) => second.number - first.number).slice(0, recentDecisions).map((decision) => ({ number: decision.number, text: plainMarkdown(decision.text), why: plainMarkdown(decision.why) })),
+            recent: decided.slice().sort((first, second) => second.number - first.number).slice(0, recentDecisions).map((decision) => ({ number: decision.number, text: plainMarkdown(decision.text), why: plainMarkdown(decision.why), tasks: tasksOf.get(`${config.prefixes.decision}-${decision.number}`) ?? [] })),
         },
         // The files whose change makes the panel read the project again.
         watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.notes, ...todoFiles(config).map((one) => one.file)],

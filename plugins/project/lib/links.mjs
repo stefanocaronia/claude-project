@@ -1,31 +1,65 @@
 // What a task waits for and what it points to, written as Crew writes them at the end of a line: `(after: T-62, #giulia-1)` names
 // the tasks this one waits for, a backlog task or a colleague's todo line by its id; `(see: T-12, D-2)` names tasks and decisions to
-// read with it; `(in: T-23)` names the large task this one is a part of; `(issue: #34)`, the GitHub issue it does. A todo line that is a colleague's part of a backlog task
-// carries the task's number where Crew puts its id. Pure.
+// read with it; `(in: T-23)` names the large task this one is a part of; `(issue: #34)`, the GitHub issue it does; `(due: 2026-11-15)`,
+// the day it is due; `(type: bug)`, its label. A todo line that is a colleague's part of a backlog task carries the task's number where
+// Crew puts its id. Pure.
 import { escapeRegex } from "./text.mjs";
 
-const kinds = ["after", "see", "in", "issue"];
+// The suffixes that name several things, and those that name one, by the field a task keeps it in; written back in this order.
+const lists = ["after", "see"];
+const singles = { in: "parent", issue: "issue", due: "due", type: "type" };
+const kinds = [...lists, ...Object.keys(singles)];
 
-/** A text without its `(after: …)`, `(see: …)` and `(in: …)` at the end, in any order, and what they name: lists, and the large task
- * it is a part of or null. */
+/** A text without its suffixes at the end, in any order, and what they name: { text, after, see, parent, issue, due, type }, lists
+ * empty and the others null when it has none. */
 export function splitLinks(text)
 {
     let rest = String(text);
-    const found = { after: [], see: [], in: [], issue: [] };
+    const found = Object.fromEntries(kinds.map((kind) => [kind, []]));
 
     for (let match = suffixOf(rest); match; match = suffixOf(rest)) {
         found[match.kind] = [...new Set([...listOf(match.items), ...found[match.kind]])];
         rest = rest.slice(0, match.index);
     }
 
-    return { text: rest.trim(), after: found.after, see: found.see, parent: found.in[0] ?? null, issue: found.issue[0] ?? null };
+    return { text: rest.trim(), after: found.after, see: found.see, ...Object.fromEntries(Object.entries(singles).map(([kind, field]) => [field, found[kind][0] ?? null])) };
 }
 
-/** The text with its links at the end again, after, see, in, then issue, each only when it names something. */
-export function joinLinks(text, after = [], see = [], parent = null, issue = null)
+/** The text with its suffixes at the end again, in their order, each only when it names something. */
+export function joinLinks(text, links = {})
 {
     const suffix = (kind, items) => (items.length > 0 ? ` (${kind}: ${items.join(", ")})` : "");
-    return `${text}${suffix("after", after)}${suffix("see", see)}${suffix("in", parent ? [parent] : [])}${suffix("issue", issue ? [issue] : [])}`;
+    return `${text}${lists.map((kind) => suffix(kind, links[kind] ?? [])).join("")}${Object.entries(singles).map(([kind, field]) => suffix(kind, links[field] ? [links[field]] : [])).join("")}`;
+}
+
+/** The decisions and the tasks that name each other, both ways: a task's `(see: D-2)` and a decision whose text or why names a task.
+ * { byTask: task id → its decisions, byDecision: decision id → its tasks }, ids as `T-12` and `D-2`. */
+export function decisionLinks(tasks, decisions, prefixes)
+{
+    const byTask = new Map();
+    const byDecision = new Map();
+    const tie = (task, decision) => {
+        byTask.set(task, [...new Set([...(byTask.get(task) ?? []), decision])]);
+        byDecision.set(decision, [...new Set([...(byDecision.get(decision) ?? []), task])]);
+    };
+    const known = new Set(tasks.map((task) => `${prefixes.task}-${task.id}`));
+    const decided = new Set(decisions.map((row) => `${prefixes.decision}-${row.number}`));
+
+    for (const task of tasks) {
+        for (const decision of (task.see ?? []).filter((one) => decided.has(one))) {
+            tie(`${prefixes.task}-${task.id}`, decision);
+        }
+    }
+
+    for (const row of decisions) {
+        for (const match of `${row.text} ${row.why ?? ""}`.matchAll(new RegExp(`\\b${escapeRegex(prefixes.task)}-(\\d+)\\b`, "g"))) {
+            if (known.has(`${prefixes.task}-${match[1]}`)) {
+                tie(`${prefixes.task}-${match[1]}`, `${prefixes.decision}-${row.number}`);
+            }
+        }
+    }
+
+    return { byTask, byDecision };
 }
 
 /** The parts one level too deep: a task whose large task is itself a part, as { id, parent }. A large task holds parts, never parts of
@@ -54,11 +88,12 @@ export function listOf(given)
     return [...new Set(String(given ?? "").split(/[,\s]+/).filter((item) => item !== "" && item !== "-"))];
 }
 
-/** The names a list gives that are no task or todo id (in after), no task or decision (in see), no task (in in), no issue number (in issue). */
+/** The names a suffix gives that are no task or todo id (in after), no task or decision (in see), no task (in in), no issue number (in
+ * issue), no day (in due), no word (in type). */
 export function badLinks(kind, items, prefixes)
 {
     const task = `${escapeRegex(prefixes.task)}-\\d+`;
-    const patterns = { after: `^(${task}|#[\\w-]+-\\d+)$`, see: `^(${task}|${escapeRegex(prefixes.decision)}-\\d+)$`, in: `^${task}$`, issue: "^#\\d+$" };
+    const patterns = { after: `^(${task}|#[\\w-]+-\\d+)$`, see: `^(${task}|${escapeRegex(prefixes.decision)}-\\d+)$`, in: `^${task}$`, issue: "^#\\d+$", due: "^\\d{4}-\\d{2}-\\d{2}$", type: "^[a-z][\\w-]*$" };
     return items.filter((item) => !new RegExp(patterns[kind]).test(item));
 }
 

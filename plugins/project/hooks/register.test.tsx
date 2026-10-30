@@ -10,6 +10,7 @@ const snapshot = {
     language: "it",
     words: { states: { doing: "In corso", todo: "Da fare", postponed: "Rimandati", done: "Fatti" }, priorities: { P1: "alta", P2: "normale", P3: "bassa" }, noGoal: "—" },
     prefixes: { task: "T", decision: "D" },
+    types: { bug: "bug", feature: "funzione", chore: "manutenzione", research: "ricerca" },
     today: "2026-10-30",
     page: "http://localhost:5790",
     links: [{ label: "↗ betasim 1280", href: "http://localhost:5790/extension/game/betasim/1280/latest/index.html" }, { label: "▶ Demo · 5e", post: "http://localhost:5790/extension/game/demo/5e/start" }],
@@ -18,7 +19,7 @@ const snapshot = {
     issues: [{ number: 40, title: "Il login fallisce", url: "https://github.com/a/b/issues/40" }],
     colleagues: [{ id: "matteo-conti", name: "Matteo", fullName: "Matteo Conti", role: "code review", color: "red" }],
     tasks: [
-        { id: 62, priority: "P1", effort: "alto", effortKey: "high", to: "Matteo", colleague: "matteo-conti", created: "2026-10-28", goal: "Revisione", text: "I pacchetti nei loro repo", state: "doing", after: [], blockedBy: [], chain: [], waitedBy: ["T-72"], see: [], seenFrom: [], note: null, noteHref: null },
+        { id: 62, priority: "P1", effort: "alto", effortKey: "high", to: "Matteo", colleague: "matteo-conti", created: "2026-10-28", goal: "Revisione", text: "I pacchetti nei loro repo", state: "doing", started: "2026-10-24", stale: true, after: [], blockedBy: [], chain: [], waitedBy: ["T-72"], see: [], seenFrom: [], note: null, noteHref: null },
         { id: 143, priority: "P2", effort: "alto", effortKey: "high", to: "Claude", colleague: null, created: "2026-10-29", goal: "—", text: "Il plugin claude-project", state: "doing", after: [], blockedBy: [], chain: [], waitedBy: [], see: ["D-541"], seenFrom: ["T-61"], note: "docs/compiti/T-143.md", noteHref: "http://localhost:5790/note/143", commits: [{ hash: "759cf6f", day: "2026-10-30", subject: "Project 0.3.0", repo: "progetto", url: "https://github.com/a/b/commit/759cf6f" }], commitCount: 3, pulls: [{ number: 12, title: "Il plugin", state: "merged", url: "https://github.com/a/b/pull/12", merged: "2026-10-30" }], mergedPull: { number: 12, title: "Il plugin", state: "merged", url: "https://github.com/a/b/pull/12", merged: "2026-10-30" } },
         { id: 61, priority: "P1", effort: "alto", effortKey: "high", to: "Matteo", colleague: "matteo-conti", created: "2026-10-28", goal: "Revisione", text: "La plancia, in tre parti", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: ["T-143"], seenFrom: [], note: null, noteHref: null },
         // The oldest P1 to do, but it waits for T-62, still in progress: the next-task button skips it.
@@ -26,7 +27,7 @@ const snapshot = {
         // A large task, the oldest P1, is done through its parts: the next-task button skips it, its ▶ starts its next part.
         { id: 80, priority: "P1", effort: "alto", effortKey: "high", to: "Claude", colleague: null, created: "2026-10-01", goal: "Revisione", text: "I sotto-compiti", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null, parent: null, parts: ["T-81", "T-82"], partsDone: 1, nextPart: "T-81" },
         { id: 81, priority: "P2", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-02", goal: "Revisione", text: "Il formato", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null, parent: "T-80", parts: [], partsDone: 0, nextPart: null },
-        { id: 70, priority: "P1", effort: "medio", effortKey: "medium", to: "Stefano", colleague: null, created: "2026-10-28", goal: "—", text: "Il login di npm", state: "todo", issue: "#33", issueInfo: { number: 33, title: "npm login", state: "open", url: "https://github.com/a/b/issues/33", closed: null }, after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
+        { id: 70, priority: "P1", effort: "medio", effortKey: "medium", to: "Stefano", colleague: null, created: "2026-10-28", goal: "—", text: "Il login di npm", state: "todo", type: "bug", due: "2026-10-28", dueInfo: { day: "2026-10-28", days: -2, isLate: true, isNear: false }, issue: "#33", issueInfo: { number: 33, title: "npm login", state: "open", url: "https://github.com/a/b/issues/33", closed: null }, after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
         { id: 71, priority: "P3", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-28", goal: "Revisione", text: "Più avanti", state: "postponed", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
     ],
     plan: { updated: "2026-10-29", goals: [{ name: "Revisione", phase: null, done: 6, total: 9, isDoing: true }, { name: "La 5e", phase: 4, done: 0, total: 3, isDoing: false }, { name: "Il nucleo", phase: 1, done: 5, total: 5, isDoing: false, closed: "2026-10-20" }] },
@@ -35,7 +36,7 @@ const snapshot = {
             { priority: "P3", day: null, text: "Le cariche degli oggetti", whole: "P3 · Le cariche degli oggetti", line: 553 },
             { priority: null, day: "2026-10-27", text: "I temi da installare", whole: "I temi da installare (Stefano, 27 ottobre)", line: 560 },
         ],
-        recent: [{ number: 541, text: "Il PLAN tiene le fasi.", why: "Stefano, 29 ottobre." }],
+        recent: [{ number: 541, text: "Il PLAN tiene le fasi.", why: "Stefano, 29 ottobre.", tasks: ["T-61"] }],
     },
     watch: ["/p/docs/TASKS.md"],
     problems: [],
@@ -121,6 +122,8 @@ test("the panel shows the project's numbers, the tasks in progress and the P1 to
         expect(await ui.find({ key: "start-61" })).toBeDefined();
         expect(await ui.find({ key: "start-70" })).toBeUndefined();
         expect(await ui.find({ type: "Text", text: "I temi da installare" })).toBeUndefined();
+        // The postponed come after the tasks to do, under a line that says so.
+        expect(await ui.find({ type: "Text", text: "⏸ Rimandati · 1" })).toBeDefined();
         await ui.unmount();
     }
 });
@@ -372,4 +375,25 @@ test("the open GitHub issues no task does yet show apart and go into the backlog
     expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "add", "Il login fallisce", "--issue", "40"], ["backlog.mjs", "done", "T-70"]]);
     expect(prompts[0]).toMatch(/^T-70 è fatto e la sua issue #33 su GitHub è ancora aperta: chiedimi se chiuderla/);
     await ui.unmount();
+});
+
+test("a task's type as Jira draws it, its due day near or late, a task stuck in progress, and the tasks a decision is tied to", async ($, on) => {
+    world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+
+    for (const surface of surfaces) {
+        const ui = await $.ui.mount({ plugin, surface, component: "Pane", requestId: "project", props });
+        expect(await ui.find({ type: "Text", text: "⏰ in ritardo di 2 g" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: /^⏸ 6.g$/ })).toBeDefined();
+        await ui.press({ key: "open-70" });
+        expect(await ui.find({ type: "Text", text: "tipo: bug" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: "scade il 2026-10-28" })).toBeDefined();
+        await ui.press({ key: "open-70" });
+        await ui.press({ key: "toggle-decisions" });
+        await ui.press({ key: "open-decision-541" });
+        expect(await ui.find({ type: "Text", text: "compiti: T-61" })).toBeDefined();
+        await ui.press({ key: "open-decision-541" });
+        await ui.press({ key: "toggle-decisions" });
+        await ui.unmount();
+    }
 });

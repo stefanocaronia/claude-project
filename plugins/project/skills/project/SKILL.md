@@ -19,7 +19,7 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 |---|---|
 | `add "text" --goal "<goal>" [--p P1\|P2\|P3] [--effort <word>] [--to <name>] [--state todo\|doing\|postponed\|done]` | a new task, numbered, dated today |
 | `start`, `done`, `postpone`, `todo` `T-12 [T-13…]` | moves tasks to that state; done carries today's date |
-| `set T-12 [--p …] [--effort …] [--to …] [--goal …] [--text …] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23]` | changes a task; `--after ""` clears; a wait that closes a cycle, or a number that does not exist, is refused |
+| `set T-12 [--p …] [--effort …] [--to …] [--goal …] [--text …] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34] [--due 2026-11-15] [--type bug]` | changes a task; `--after ""` clears; a wait that closes a cycle, or a number that does not exist, is refused |
 | `add --issue 34 ["text"]`, `issue-close T-12` | a task from a GitHub issue; the issue closed on GitHub, only on the user's yes |
 | `note T-12` | the task's note, `<docs>/tasks/T-12.md`, written when missing: its path |
 | `archive T-12…` or `archive --done` | moves tasks to the archive |
@@ -30,6 +30,9 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 - **Who**: the people of the configuration and, when the project has Crew, its colleagues by first name. A colleague's real work is a task assigned to them; their `todo.md` cites it by number.
 - **Goal**: one of the plan's goals, as the plan's `###` heading names it without its phase, or the project's "no goal" mark.
 - **Waits**: a task blocked by one still open waits; start the chain from its first link, on one yes from the user (`show` gives it in order). A colleague's todo line that is their part of a backlog task carries its number where Crew puts its id: `- [ ] P1 · 2026-10-28 · T-61 · text`.
+- **Type and due day**: `(type: bug)` (bug, feature, chore, research, or a type of the project's `types:`; `--type` takes the key or its name in the project's language) and `(due: 2026-11-15)`, with `set --type` and `--due`. A due day near or past shows on the task; the check warns when it is past.
+- **Started**: `start` writes the day a task started at the end of its line (`· started 2026-10-30`); the check warns about a task in progress for more than three days that no chat and no colleague holds: take it up again, or put it back to do.
+- **Decisions and tasks**: a task's `(see: D-7)` and a decision whose text names `T-12` tie them both ways: `show`, the panel and the page list a task's decisions and a decision's tasks.
 - **Large tasks**: work too big for one task, not a goal, is a task whose parts each end with `(in: T-23)`, one level deep. A part started starts the large task; when its last part closes, the command says so and done is yours to say. Start the work from its next part (`show` names it); `list --atomic` leaves the large tasks out.
 - **The code**: a commit or a pull request that does a task cites its number in its message or title (`… (T-12)`): `show`, the panel and the page list them on the task, and the check notes a task still open that a merged pull request cites.
 - **GitHub issues** (with `gh` and a repo on GitHub): `add --issue 34` makes a task of an issue, its title the text unless one is given, ending with `(issue: #34)`; one task an issue. When a task with an open issue is done, the command says so: ask the user once whether to close it on GitHub, and only on a yes run `issue-close T-12`, which closes it with a comment naming the task and its commits.
