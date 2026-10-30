@@ -46,7 +46,7 @@ Then open a new chat and type `/project:init`, or ask "set up the plan and tasks
 `.claude/project.yaml`, written by `/project:init`:
 
 ```yaml
-name: My app
+name: My app                 # the title of the README when left out
 language: en                 # en, it; another one starts from en with its words below
 docs: project                # the docs' folder, from the project's root
 people: [Claude, Ann]        # who holds tasks besides Crew's colleagues

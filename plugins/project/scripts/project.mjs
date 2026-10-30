@@ -144,6 +144,18 @@ export function profileOf(config, id, name)
     return { fullName: comma > 0 ? sentence.slice(0, comma) : name, role: comma > 0 ? sentence.slice(comma + 2) : "", color: /^color: (\w+)/m.exec(profile)?.[1] ?? "gray" };
 }
 
+/** The project's name: the configuration's, else the title of its README, else its folder's. */
+export function projectName(config)
+{
+    return config.name ?? readmeTitle(config.root) ?? config.root.split("/").at(-1);
+}
+
+/** The first `# ` heading of a folder's README, as its project calls itself; null without one. */
+export function readmeTitle(folder)
+{
+    return /^# (.+)$/m.exec(read(join(folder, "README.md")))?.[1]?.trim() ?? null;
+}
+
 /** Who may hold a task: the people of the configuration and the colleagues, by their first names. */
 export function assignees(config)
 {

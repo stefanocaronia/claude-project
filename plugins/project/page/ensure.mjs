@@ -3,7 +3,7 @@
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findRoot, loadProject, ProjectError } from "../scripts/project.mjs";
+import { findRoot, loadProject, ProjectError, projectName } from "../scripts/project.mjs";
 
 const from = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
@@ -32,7 +32,7 @@ async function ensure()
         : owner === "" ? say("portBusy", { port })
         : say("portOther", { port, owner });
     // The line is shown to the user at the start of the session, and given to Claude as context.
-    console.log(JSON.stringify({ systemMessage: context === say("served", { url }) ? `${config.name ?? config.root.split("/").at(-1)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: context } }));
+    console.log(JSON.stringify({ systemMessage: context === say("served", { url }) ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: context } }));
 }
 
 /** The root of the project whose page answers on the port; "" when something else answers; null when nothing does. */

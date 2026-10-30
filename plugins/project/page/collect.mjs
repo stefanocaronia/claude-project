@@ -1,14 +1,14 @@
 // Reads the project into one object for the page: the plan by phases and goals, the decisions and their days, the tasks of the backlog
 // and of the colleagues' todos, the docs, the health, the commits by day, and what each extension adds.
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { basename, dirname } from "node:path";
+import { dirname } from "node:path";
 import { numbering } from "../lib/decisions.mjs";
 import { planPhases, planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { check } from "../scripts/check.mjs";
 import { context } from "../scripts/extensions.mjs";
-import { colleagues, git, profileOf, read, readBacklog, readDecisions, readGoals, realPath, shown, todoFiles } from "../scripts/project.mjs";
+import { colleagues, git, profileOf, projectName, read, readBacklog, readDecisions, readGoals, realPath, shown, todoFiles } from "../scripts/project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 const lastDecisions = 8;
@@ -29,7 +29,7 @@ export async function collect(config, say, extensions = [])
 
     return {
         generated: new Date().toISOString(),
-        project: config.name ?? basename(config.root),
+        project: projectName(config),
         language: config.language,
         words: { states: config.words.states, priorities: config.words.priorities, noGoal: config.words.noGoal },
         prefixes: config.prefixes,

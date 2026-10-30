@@ -10,7 +10,7 @@ import { phaseSuffix, planGoals, planPhases } from "../lib/plan.mjs";
 import { quoted } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { presets, stateKeys } from "../lib/words.mjs";
-import { colleagues, git, loadProject, ProjectError, read, readBacklog, realPath, shown, today, withBacklogLock, write, writeBacklog } from "./project.mjs";
+import { colleagues, git, loadProject, readmeTitle, ProjectError, read, readBacklog, realPath, shown, today, withBacklogLock, write, writeBacklog } from "./project.mjs";
 
 const skipped = new Set(["node_modules", ".git", "dist", "build", "tmp", "sandbox", ".codegraph", "worktrees", "coverage"]);
 const textFile = /\.(md|ts|tsx|js|mjs|cjs|yaml|yml|json|py)$/;
@@ -29,7 +29,7 @@ export function survey(root)
     const holders = [...new Set(tasks.flatMap((text, index) => parseBacklog(text, words, "T", index === 1).tasks.map((task) => task.to)))].filter((name) => !team.includes(name) && name !== "Claude");
     const folder = docs ?? "project";
     const settings = {
-        name: basename(root),
+        name: readmeTitle(root) ?? basename(root),
         language,
         docs: folder,
         people: ["Claude", ...holders],

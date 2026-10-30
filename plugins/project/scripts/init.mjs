@@ -9,7 +9,7 @@ import { sayer } from "../lib/messages.mjs";
 import { quoted } from "../lib/text.mjs";
 import { presets } from "../lib/words.mjs";
 import { moveSteps, survey, writeSettings } from "./adopt.mjs";
-import { isMain, ProjectError, read, runCli, today, write } from "./project.mjs";
+import { isMain, ProjectError, read, readmeTitle, runCli, today, write } from "./project.mjs";
 
 const examples = { language: "--language it", docs: "--docs project", people: '--people "Claude,Ann"', private: "--private private", name: '--name "My app"' };
 
@@ -39,7 +39,7 @@ export function init(root, options = {})
         throw new ProjectError(`The language is one of ${Object.keys(presets).join(", ")}, not ${language}; another language: pick one and override its words under words: in ${configFile}.`);
     }
 
-    const name = options.name ?? basename(root);
+    const name = options.name ?? readmeTitle(root) ?? basename(root);
     const docs = options.docs ?? (options.private ? `${options.private}/project` : "project");
     const people = options.people ?? ["Claude"];
     const written = [];

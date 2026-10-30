@@ -58,7 +58,7 @@ At the end run `check.mjs` and compare the plugin's outputs with the old tools' 
 `.claude/project.yaml`:
 
 ```yaml
-name: My app
+name: My app                 # the title of the README when left out
 language: it
 docs: private/project        # the docs' folder, from the project's root
 people: [Claude, Ann]

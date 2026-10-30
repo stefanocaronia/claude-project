@@ -1,14 +1,13 @@
 // What the panel shows, as one JSON on stdout: the open tasks, the plan's goals with their counts, the decisions to take and the latest,
 // the colleagues, the docs' health. node snapshot.mjs [--no-health]
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { basename } from "node:path";
 import { effortKey } from "../lib/backlog.mjs";
 import { proposalOf } from "../lib/decisions.mjs";
 import { planUpdated } from "../lib/plan.mjs";
 import { plainMarkdown } from "../lib/text.mjs";
 import { check } from "./check.mjs";
 import { extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
-import { colleagues, findRoot, isMain, loadProject, profileOf, read, readBacklog, readDecisions, readGoals, runCli, today, todoFiles } from "./project.mjs";
+import { colleagues, findRoot, isMain, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readGoals, runCli, today, todoFiles } from "./project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 const recentDecisions = 3;
@@ -31,7 +30,7 @@ export async function snapshot(config, say, withHealth = true)
     const extensions = await loadExtensions(config);
 
     return {
-        project: config.name ?? basename(config.root),
+        project: projectName(config),
         language: config.language,
         words: { states: config.words.states, priorities: config.words.priorities, noGoal: config.words.noGoal },
         prefixes: config.prefixes,
