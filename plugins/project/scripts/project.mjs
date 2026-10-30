@@ -9,7 +9,7 @@ import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
 import { parseDecisions } from "../lib/decisions.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { planGoals } from "../lib/plan.mjs";
-import { dependencies, seenFrom, todoLinks } from "../lib/links.mjs";
+import { dependencies, partsOf, seenFrom, todoLinks } from "../lib/links.mjs";
 import { firstName, parseTodo } from "../lib/todos.mjs";
 
 const lockWait = 10_000;
@@ -202,17 +202,28 @@ export function readDependencies(config, tasks = readBacklog(config).tasks)
 }
 
 /** What the panel and the page show of each task's links, by its number: what it waits for and what of that is still open, the chain
- * to do first, who waits for it, what it points to and what points to it, its note's path when it has one. */
+ * to do first, who waits for it, what it points to and what points to it, its note's path when it has one; the large task it is a part
+ * of, or its own parts, how many are closed and the next to start. */
 export function taskLinks(config, tasks = readBacklog(config).tasks)
 {
     const prefix = config.prefixes.task;
     const graph = readDependencies(config, tasks);
     const from = seenFrom(tasks, prefix);
     const notes = new Set(existsSync(config.files.notes) ? readdirSync(config.files.notes) : []);
+    const parts = partsOf(tasks, prefix);
+    const byId = new Map(tasks.map((task) => [`${prefix}-${task.id}`, task]));
+    const isClosed = (task) => task.state === "done" || task.state === "archived";
 
     return new Map(tasks.map((task) => {
         const id = `${prefix}-${task.id}`;
+        const own = (parts.get(id) ?? []).map((part) => byId.get(part));
+        // The next part to start: one to do and free, by priority, then the oldest.
+        const next = own.filter((part) => part.state === "todo" && graph.blockers(`${prefix}-${part.id}`).length === 0).sort((first, second) => `${first.priority}${first.created}`.localeCompare(`${second.priority}${second.created}`))[0];
         return [task.id, {
+            parent: task.parent ?? null,
+            parts: own.map((part) => `${prefix}-${part.id}`),
+            partsDone: own.filter(isClosed).length,
+            nextPart: next ? `${prefix}-${next.id}` : null,
             after: task.after,
             see: task.see,
             blockedBy: graph.blockers(id),

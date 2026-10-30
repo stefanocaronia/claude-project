@@ -405,48 +405,285 @@
         font-size: 12px;
     }
 
-    /* Phases */
-    .phases {
+    /* The plan as a roadmap: a rail of phases, each with its epics as cards */
+    .roadmap {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .phase-row {
         display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        gap: 10px;
+        grid-template-columns: 30px minmax(0, 1fr);
+        gap: 16px;
     }
 
-    @media (max-width: 980px) {
-        .phases { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-    }
-
-    .phase {
-        border-radius: 12px;
-        padding: 14px;
-        background: var(--surface-2);
+    .rail {
         position: relative;
-        overflow: hidden;
+        display: flex;
+        justify-content: center;
     }
 
-    .phase .num {
-        font-size: 12px;
+    .rail::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 14px;
+        width: 2px;
+        background: var(--grid);
+    }
+
+    .phase-row:first-child .rail::before {
+        top: 14px;
+    }
+
+    .phase-row:last-child .rail::before {
+        bottom: auto;
+        height: 14px;
+    }
+
+    .node {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+        background: var(--surface);
         color: var(--muted);
+        border: 2px solid var(--axis);
+    }
+
+    .phase-row.active .node {
+        color: var(--accent);
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+    }
+
+    .phase-row.complete .node {
+        color: #ffffff;
+        background: var(--good);
+        border-color: var(--good);
+    }
+
+    .phase-body {
+        min-width: 0;
+        padding: 2px 0 26px;
+    }
+
+    .phase-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(140px, 260px);
+        gap: 6px 20px;
+        align-items: center;
+    }
+
+    .phase-head h3 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 640;
+        line-height: 1.3;
+    }
+
+    .phase-head h3 span {
+        color: var(--muted);
+        font-weight: 450;
+        font-size: 13px;
+        margin-right: 8px;
         font-variant-numeric: tabular-nums;
     }
 
-    .phase .name {
-        font-weight: 600;
-        margin: 2px 0 10px;
-        line-height: 1.25;
-        min-height: 2.5em;
-    }
-
-    .phase .status {
+    .phase-progress {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
         font-size: 12px;
         color: var(--ink-2);
-        margin-top: 8px;
+        font-variant-numeric: tabular-nums;
     }
 
-    .phase.complete .status::before {
-        content: "✓ ";
-        color: var(--good);
-        font-weight: 700;
+    .outcome {
+        margin: 4px 0 0;
+        font-size: 13px;
+        color: var(--ink-2);
+        max-width: 80ch;
+    }
+
+    .outcome b {
+        font-weight: 600;
+        color: var(--muted);
+    }
+
+    .phase-row.complete .phase-body, .phase-row.empty .phase-body {
+        padding-bottom: 18px;
+    }
+
+    .phase-row.complete h3 {
+        color: var(--ink-2);
+    }
+
+    .epics {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+        gap: 12px;
+        margin-top: 14px;
+    }
+
+    .epic {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+        padding: 14px 16px;
+        border-radius: 12px;
+        background: var(--card);
+        border: 1px solid var(--outline);
+        transition: background 0.12s;
+    }
+
+    .epic:hover {
+        background: var(--card-hover);
+    }
+
+    .epic.working {
+        box-shadow: inset 3px 0 0 var(--work);
+    }
+
+    .epic h4 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 620;
+        line-height: 1.3;
+    }
+
+    .epic-go {
+        font: inherit;
+        color: var(--ink);
+        text-align: left;
+        background: none;
+        border: 0;
+        padding: 0;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    /* The whole card is the epic's button; the link to its tasks sits above it. */
+    .epic-go::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 12px;
+    }
+
+    .epic-go:focus-visible {
+        outline: none;
+    }
+
+    .epic:has(.epic-go:focus-visible) {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
+
+    .epic-go span {
+        color: var(--muted);
+        font-weight: 400;
+        margin-left: 4px;
+    }
+
+    .epic-text {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.45;
+        color: var(--ink-2);
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .epic-bar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        margin-top: auto;
+        font-size: 12px;
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .epic-foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 12px;
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    .epic-foot .to-tasks {
+        position: relative;
+        z-index: 1;
+        margin-left: auto;
+        font-size: 12px;
+        padding: 2px 10px;
+        border-radius: 7px;
+        border-color: var(--outline);
+        color: var(--ink);
+    }
+
+    .epic.out .epic-go {
+        color: var(--ink-2);
+    }
+
+    .loose {
+        margin: 4px 0 0 46px;
+        font-size: 13px;
+        color: var(--muted);
+    }
+
+    .loose button {
+        font-size: 13px;
+        margin-left: 6px;
+    }
+
+    .bar.doing > i {
+        background: var(--work);
+    }
+
+    @media (max-width: 640px) {
+        .phase-row {
+            grid-template-columns: 24px minmax(0, 1fr);
+            gap: 10px;
+        }
+
+        .rail::before {
+            left: 11px;
+        }
+
+        .node {
+            width: 24px;
+            height: 24px;
+            font-size: 12px;
+        }
+
+        .phase-head {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .loose {
+            margin-left: 34px;
+        }
+
+        .doc-paper {
+            height: 112px;
+        }
     }
 
     .bar {
@@ -469,12 +706,7 @@
         background: var(--good);
     }
 
-    /* Plan sections */
-    .sections {
-        display: flex;
-        flex-direction: column;
-    }
-
+    /* The health's groups */
     .section {
         border-top: 1px solid var(--grid);
     }
@@ -531,68 +763,6 @@
     @media (max-width: 640px) {
         .section > summary { grid-template-columns: minmax(0, 1fr) 80px 44px; }
         .section .count { display: none; }
-    }
-
-    .items {
-        margin: 0 6px 12px;
-        padding: 0;
-        list-style: none;
-        font-size: 13px;
-        color: var(--ink-2);
-    }
-
-    .items li {
-        display: grid;
-        grid-template-columns: 20px 1fr;
-        gap: 6px;
-        padding: 4px 0;
-    }
-
-    .items li.child {
-        margin-left: 26px;
-    }
-
-    .items .mark {
-        font-weight: 700;
-        color: var(--muted);
-    }
-
-    .items li.doing .mark {
-        color: var(--accent);
-    }
-
-    .items .who {
-        color: var(--muted);
-    }
-
-    .items li.done .mark {
-        color: var(--good);
-    }
-
-    .items li.done .text {
-        color: var(--muted);
-    }
-
-    .items .text {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-    }
-
-    .items li:hover .text {
-        -webkit-line-clamp: unset;
-    }
-
-    .filter {
-        display: flex;
-        gap: 6px;
-        margin-bottom: 8px;
-    }
-
-    .filter button[aria-pressed="true"] {
-        background: var(--ink);
-        color: var(--surface);
     }
 
     /* Charts */
@@ -879,6 +1049,29 @@
         font-weight: 600;
     }
 
+    /* A task's waits and parts in place of its age, and its links under its text */
+    .wait.blocked {
+        color: var(--ink-2);
+    }
+
+    .task-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 10px;
+        margin-top: 3px;
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    .task-links b {
+        font-weight: 600;
+        color: var(--ink-2);
+    }
+
+    .epic.closed {
+        opacity: 0.7;
+    }
+
     /* The board: a column by state, a lane by goal */
     .board-head, .lane-cells {
         display: grid;
@@ -933,6 +1126,7 @@
 
     .lane {
         border-bottom: 1px solid var(--grid);
+        scroll-margin-top: calc(var(--tabs-height, 58px) + 52px);
     }
 
     .lane > summary {
@@ -993,10 +1187,6 @@
         text-align: right;
         font-variant-numeric: tabular-nums;
         margin: 0;
-    }
-
-    .lane .bar.doing > i {
-        background: var(--work);
     }
 
     .lane-cells {
@@ -1358,55 +1548,223 @@
         margin-top: 12px;
     }
 
-    /* The key documents, and the reader that opens them */
-    .key-documents {
+    /* The documents: the key ones as a gallery with a page's preview, the others as small cards; the reader opens them */
+    .doc-gallery {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+        gap: 16px;
     }
 
-    .key-document {
+    .doc-card {
+        position: relative;
         display: flex;
         flex-direction: column;
-        align-items: flex-start;
-        gap: 4px;
         min-width: 0;
-        padding: 14px 16px;
-        border-radius: 12px;
+        border-radius: 14px;
+        background: var(--card);
+        border: 1px solid var(--outline);
+        overflow: hidden;
+        transition: background 0.12s, transform 0.12s;
+    }
+
+    .doc-card:hover {
+        background: var(--card-hover);
+    }
+
+    .doc-card:has(.doc-open:focus-visible) {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
+
+    .doc-paper {
+        height: 168px;
+        margin: 12px 12px 0;
+        padding: 12px 14px;
+        border-radius: 8px 8px 0 0;
+        background: var(--surface);
+        box-shadow: 0 0 0 1px var(--ring), 0 2px 8px rgba(0, 0, 0, 0.06);
+        overflow: hidden;
+        font-size: 9.5px;
+        line-height: 1.45;
+        color: var(--ink-2);
+        overflow-wrap: anywhere;
+        mask-image: linear-gradient(to bottom, #000 62%, transparent);
+        pointer-events: none;
+        user-select: none;
+    }
+
+    .doc-paper > :first-child {
+        margin-top: 0;
+    }
+
+    .doc-paper h2 {
+        font-size: 13px;
+        margin: 0 0 6px;
+        color: var(--ink);
+    }
+
+    .doc-paper h3, .doc-paper h4, .doc-paper h5 {
+        font-size: 11px;
+        margin: 8px 0 3px;
+        color: var(--ink);
+    }
+
+    .doc-paper p, .doc-paper ul, .doc-paper ol, .doc-paper blockquote, .doc-paper pre, .doc-paper table {
+        margin: 0 0 5px;
+    }
+
+    .doc-paper ul, .doc-paper ol {
+        padding-left: 12px;
+    }
+
+    .doc-paper blockquote {
+        padding: 2px 6px;
+        border-left: 2px solid var(--axis);
+    }
+
+    .doc-paper pre, .doc-paper code {
+        font-size: 8.5px;
+    }
+
+    .doc-paper table {
+        font-size: 8.5px;
+    }
+
+    .doc-paper th, .doc-paper td {
+        padding: 2px 4px;
+    }
+
+    .doc-paper a, .doc-paper .reader-link {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .doc-paper.empty {
+        background: repeating-linear-gradient(to bottom, transparent 0 12px, var(--grid) 12px 13px) var(--surface);
+    }
+
+    .doc-info {
+        display: grid;
+        grid-template-columns: 38px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        padding: 14px 16px 4px;
+    }
+
+    .doc-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        color: var(--kind);
+        background: color-mix(in srgb, var(--kind) 14%, transparent);
+    }
+
+    .doc-icon.small {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+    }
+
+    .doc-icon svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .doc-icon.small svg {
+        width: 17px;
+        height: 17px;
+    }
+
+    .doc-info h3 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 640;
+        line-height: 1.3;
+    }
+
+    .doc-open {
+        font: inherit;
+        color: var(--ink);
+        text-align: left;
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+    }
+
+    .doc-open::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+    }
+
+    .doc-open:focus-visible {
+        outline: none;
+    }
+
+    .doc-sub {
+        margin: 2px 0 0;
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--ink-2);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .doc-meta {
+        margin: 0;
+        padding: 6px 16px 14px 66px;
+        font-size: 12px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .doc-card.missing {
+        background: transparent;
+        border-style: dashed;
+    }
+
+    .doc-card.missing .doc-info h3 {
+        color: var(--ink-2);
+    }
+
+    .doc-shelf {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr));
+        gap: 10px;
+    }
+
+    .doc-mini {
+        position: relative;
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        min-width: 0;
+        padding: 10px 12px;
+        border-radius: 10px;
         background: var(--card);
         border: 1px solid var(--outline);
     }
 
-    .key-document b {
-        font-size: 15px;
-        font-weight: 620;
-    }
-
-    .key-document code {
-        color: var(--muted);
-        max-width: 100%;
+    .doc-mini b {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
-    .key-document p {
-        margin: 0 0 8px;
+    .doc-mini span {
+        display: block;
         font-size: 12px;
-        color: var(--ink-2);
-    }
-
-    .key-document .action {
-        margin-top: auto;
-    }
-
-    .key-document.missing {
-        background: transparent;
-        border-style: dashed;
-    }
-
-    .key-document.missing b {
-        color: var(--ink-2);
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
     }
 
     #reader {
@@ -1547,26 +1905,6 @@
     }
 
     @media (max-width: 640px) {
-        .key-document {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            column-gap: 12px;
-        }
-
-        .key-document > :not(.action) {
-            grid-column: 1;
-        }
-
-        .key-document .action {
-            grid-column: 2;
-            grid-row: 1 / span 3;
-            align-self: center;
-        }
-
-        .key-document p {
-            margin: 0;
-        }
-
         #reader {
             width: 100vw;
             max-width: 100vw;
@@ -1625,7 +1963,6 @@ const colors = { blue: "#3987e5", red: "#e34948", green: "#1baf7a", yellow: "#ed
 const seriesColors = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-7)"];
 const priorityOrder = ["P1", "P2", "P3", "none"];
 const priorityColors = { P1: "#184f95", P2: "#3987e5", P3: "#9ec5f4", none: "var(--never)" };
-const stateMarks = { done: "✓", doing: "◐", todo: "○", postponed: "–" };
 // The board's columns, the backlog command that moves a task into each, and the turn of a priority, as the panel's.
 const boardStates = ["doing", "todo", "postponed", "done"];
 const moveCommands = { doing: "start", todo: "todo", postponed: "postpone", done: "done" };
@@ -1640,10 +1977,39 @@ const priorityMarks = {
 const effortBars = { low: 1, medium: 2, high: 3, xhigh: 4, max: 4 };
 const tints = { red: "#b42318", blue: "#1d4ed8", green: "#15803d", yellow: "#8a6100", purple: "#7e22ce", orange: "#c2410c", pink: "#be185d", cyan: "#0e7490" };
 const critter = claudeCritter();
+// The kinds of document the page knows by their names, in English and Italian, and the icon and color of each.
+const documentKinds = [
+    ["design", /\bgdd\b|design|game design/],
+    ["spec", /specific|spec\b|requisit|requirement/],
+    ["architecture", /architet/],
+    ["rules", /meccanic|mechanic|regol|\brules?\b/],
+    ["glossary", /glossar|lessic|vocabolar|dictionar/],
+    ["tests", /copertur|coverage|playtest|\btests?\b/],
+    ["plan", /\bplan\b|\bpiano\b|roadmap/],
+    ["decisions", /decision/],
+    ["tasks", /\btasks?\b|backlog|compiti/],
+    ["ideas", /\bide[ae]\b|\bideas\b|inbox/],
+    ["wishes", /desiderat|wish/],
+    ["index", /readme|indice|\bindex\b/],
+];
+const documentDrawings = {
+    design: ["#8a63c9", '<path d="M10 2.5l5 7.5-5 7.5-5-7.5z"/><circle cx="10" cy="10.5" r="1.6"/><path d="M10 2.5v6.4"/>'],
+    spec: ["#1baf7a", '<path d="M3.5 5.5l1.5 1.5 2.5-3M3.5 12.5l1.5 1.5 2.5-3"/><path d="M10.5 5.5h6M10.5 12.5h6"/>'],
+    architecture: ["#2a78d6", '<path d="M10 3l7 3.5-7 3.5-7-3.5z"/><path d="M3 10l7 3.5 7-3.5M3 13.5l7 3.5 7-3.5"/>'],
+    rules: ["#eb6834", '<circle cx="10" cy="10" r="2.6"/><circle cx="10" cy="10" r="5.4"/><path d="M10 2v2.6M10 15.4V18M2 10h2.6M15.4 10H18M4.3 4.3l1.9 1.9M13.8 13.8l1.9 1.9M4.3 15.7l1.9-1.9M13.8 6.2l1.9-1.9"/>'],
+    glossary: ["#0fa3b1", '<path d="M3 4.5c2.5-1 5-1 7 .6 2-1.6 4.5-1.6 7-.6v11c-2.5-1-5-1-7 .6-2-1.6-4.5-1.6-7-.6z"/><path d="M10 5.1v11"/>'],
+    tests: ["#e87ba4", '<circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3.8"/><circle cx="10" cy="10" r="0.9" fill="currentColor"/>'],
+    plan: ["#2a78d6", '<path d="M5 17.5V2.8"/><path d="M5 3.5h9.5l-2.2 3.2 2.2 3.2H5"/>'],
+    decisions: ["#8a63c9", '<path d="M10 3v14M6.5 17h7M4 5.5h12"/><path d="M4 5.5L2 11h4zM16 5.5L14 11h4z"/>'],
+    tasks: ["#4e9a6b", '<rect x="3" y="3.5" width="14" height="13" rx="2"/><path d="M7.7 3.5v13M12.3 3.5v13"/>'],
+    ideas: ["#c99400", '<path d="M7.2 13.5c0-1.6-2.7-3-2.7-5.6a5.5 5.5 0 0 1 11 0c0 2.6-2.7 4-2.7 5.6z"/><path d="M7.6 16h4.8M8.6 18h2.8"/>'],
+    wishes: ["#c99400", '<path d="M10 2.8l2.1 4.4 4.8.6-3.5 3.3.9 4.8L10 13.6l-4.3 2.3.9-4.8-3.5-3.3 4.8-.6z"/>'],
+    index: ["#898781", '<circle cx="10" cy="10" r="7"/><path d="M10 9v5"/><circle cx="10" cy="6.4" r="0.7" fill="currentColor"/>'],
+    page: ["#898781", '<path d="M5 2.5h6.5L15 6v11.5H5z"/><path d="M11.5 2.5V6H15M7.5 10h5M7.5 13h5"/>'],
+};
 const decisionsShown = 50;
 const extensions = [];
 const loadedScripts = new Set();
-const openSections = new Set();
 const expanded = new Set();
 const lanesOpen = savedLanes();
 const taskFilter = { state: "open", priority: "all", who: "all", goal: "all" };
@@ -1651,7 +2017,6 @@ let words = pageWords.en;
 let data = null;
 let lastData = "";
 let tidyData = null;
-let sectionFilter = "all";
 let days = [];
 let decisionQuery = "";
 let decisionLimit = decisionsShown;
@@ -1660,6 +2025,9 @@ let renderWaits = false;
 let focusAfter = null;
 let landed = null;
 let announceTimer = 0;
+// The documents' texts the page has read, for their previews: by address and the day they changed; those being read.
+const documentTexts = new Map();
+const documentsReading = new Set();
 
 /** What an extension draws with: the page's helpers, words and data calls. */
 const kit = {
@@ -1812,7 +2180,6 @@ function render()
         document.querySelectorAll("[data-width]").forEach((bar) => (bar.style.width = bar.dataset.width));
         document.querySelectorAll(".ring-arc").forEach((arc) => (arc.style.strokeDashoffset = arc.dataset.offset));
     });
-    bindSections();
     bindTabs();
     renderTidy();
     measureTabs();
@@ -1891,20 +2258,107 @@ function overviewPanel()
             </div>
         </section>
 
-        <section class="card span-12">
-            <h2>${t("phasesTitle")}</h2>
-            <p class="hint">${t("phasesHint")}</p>
-            <div class="phases">${plan.phases.map(phaseCard).join("")}</div>
-        </section>
+        ${roadmap()}`;
+}
 
-        <section class="card span-12">
-            <h2>${t("goalsTitle")}</h2>
-            <p class="hint">${t("goalsHint")}</p>
-            <div class="filter" role="group" aria-label="${attribute(t("goalsFilter"))}">
-                ${filterButton("all", t("filterAll"))}${filterButton("open", t("filterOpen"))}${filterButton("done", t("filterDone"))}
-            </div>
-            <div class="sections">${plan.sections.filter(keepSection).map(sectionRow).join("")}</div>
+/** The plan as a roadmap: the phases of its table in their order, each with its bar, what it lets you do, and its epics as cards in the
+ * plan's order; the epics of no phase after, as the cross-cutting ones. */
+function roadmap()
+{
+    const { plan } = data;
+    const noGoal = data.words.noGoal;
+    const epics = plan.sections.filter((section) => section.name !== noGoal);
+    const phased = new Set(plan.phases.map((phase) => phase.number));
+    const across = epics.filter((section) => !phased.has(section.phase));
+    const loose = (data.board ?? []).filter((task) => (!task.goal || task.goal === noGoal) && columnOf(task) !== "done").length;
+    const rows = plan.phases.map((phase) => phaseRow(phase, epics.filter((section) => section.phase === phase.number)));
+
+    if (across.length) {
+        const done = across.reduce((sum, section) => sum + section.done, 0);
+        const total = across.reduce((sum, section) => sum + section.total, 0);
+        rows.push(phaseRow({ number: null, name: t("acrossTitle"), outcome: "", done, total }, across));
+    }
+
+    return `<section class="card span-12">
+            <h2>${t("planTitle")}</h2>
+            <p class="hint">${t("planHint")}</p>
+            <ol class="roadmap">${rows.join("")}</ol>
+            ${loose ? `<p class="loose">${escape(t("looseTasks", loose))}<button type="button" data-go-lane="">${t("toBoard")}</button></p>` : ""}
         </section>`;
+}
+
+function phaseRow(phase, epics)
+{
+    const percent = ratio(phase.done, phase.total);
+    const complete = phase.total > 0 && phase.done === phase.total;
+    const status = phase.total === 0 ? "empty" : complete ? "complete" : "active";
+    const working = epics.some((section) => section.items.some((item) => item.state === "doing"));
+    const words = phase.total === 0 ? t("phaseNotStarted") : complete ? t("phaseClosed") : t("phaseProgress", phase.done, phase.total, percent);
+    const node = phase.number === null ? "∗" : complete ? "✓" : phase.number;
+    const label = phase.number === null ? escape(phase.name) : `<span>${escape(t("phase", phase.number))}</span> ${escape(phase.name)}`;
+    const outcome = phase.outcome ? `<p class="outcome"><b>${t("phaseOutcome")}</b> ${escape(phase.outcome)}</p>` : phase.number === null ? `<p class="outcome">${t("acrossHint")}</p>` : "";
+
+    return `<li class="phase-row ${status}">
+            <div class="rail"><span class="node" aria-hidden="true">${node}</span></div>
+            <div class="phase-body">
+                <div class="phase-head">
+                    <h3>${label}</h3>
+                    <div class="phase-progress">${phase.total ? bar(percent, complete ? "done" : working ? "doing" : "", t("laneDone", phase.done, phase.total)) : "<span></span>"}<span>${escape(words)}</span></div>
+                </div>
+                ${outcome}
+                ${epics.length ? `<div class="epics">${epics.map(epicCard).join("")}</div>` : ""}
+            </div>
+        </li>`;
+}
+
+/** An epic of the plan: its name, what it is, its bar, its open tasks and those in progress; the card opens its lane on the board. */
+function epicCard(section)
+{
+    const open = section.items.filter((item) => !item.done).length;
+    const doing = section.items.filter((item) => item.state === "doing").length;
+    const complete = section.total > 0 && section.done === section.total;
+    const percent = ratio(section.done, section.total);
+    const note = /\((.*)\)$/.exec(section.title)?.[1];
+    const description = section.description ? `<p class="epic-text" data-tip="${attribute(escape(section.description))}">${escape(section.description)}</p>` : "";
+    const counts = [doing ? `<span class="work">⚒︎ ${escape(t("epicDoing", doing))}</span>` : "", `<span>${escape(section.closed ? t("epicClosed", formatDay(section.closed)) : open ? t("epicOpen", open) : t("epicAllDone"))}</span>`].join("");
+
+    return `<article class="epic ${doing ? "working" : ""} ${section.isUnplanned ? "out" : ""} ${section.closed ? "closed" : ""}">
+            <h4><button type="button" class="epic-go" data-go-lane="${attribute(section.name)}" aria-label="${attribute(t("epicToBoard", section.name))}">${escape(section.name)}${section.isUnplanned ? `<span>· ${escape(t("outOfPlan"))}</span>` : note && section.phase === null ? `<span>· ${escape(note)}</span>` : ""}</button></h4>
+            ${description}
+            <div class="epic-bar">${bar(percent, complete ? "done" : doing ? "doing" : "", t("laneDone", section.done, section.total))}<span>${section.done}/${section.total}</span></div>
+            <div class="epic-foot">${counts}<button type="button" class="to-tasks" data-go-tasks="${attribute(section.name)}">${t("epicTasks")}</button></div>
+        </article>`;
+}
+
+/** A progress bar that says its numbers to a screen reader; kind is "done", "doing" or nothing. */
+function bar(percent, kind, label)
+{
+    return `<div class="bar ${kind}" role="img" aria-label="${attribute(label)}"><i data-width="${percent}%"></i></div>`;
+}
+
+/** Opens an epic's lane on the board, or, when the board has none, its tasks in the list. */
+function goToLane(name)
+{
+    lanesOpen[name] = true;
+    saveLanes();
+    selectTab(document.getElementById("tab-board"));
+    const lane = [...document.querySelectorAll("details.lane")].find((one) => one.dataset.lane === name);
+
+    if (!lane) {
+        goToTasks(name, "all");
+        return;
+    }
+
+    lane.open = true;
+    lane.scrollIntoView({ block: "start" });
+    lane.querySelector("summary").focus({ preventScroll: true });
+}
+
+function goToTasks(name, state = "open")
+{
+    Object.assign(taskFilter, { state, priority: "all", who: "all", goal: name || "all" });
+    selectTab(document.getElementById("tab-tasks"));
+    refreshTaskList("filter-goal");
 }
 
 function rhythmPanel()
@@ -2102,8 +2556,8 @@ function boardLanes(tasks)
         const section = sections.find((one) => one.name === name);
         const done = section?.done ?? own.filter((task) => columnOf(task) === "done").length;
         const total = section?.total ?? own.length;
-        return { name, title: name ? section?.title ?? name : t("noGoalLane"), own, done, total };
-    }).filter((lane) => lane.own.length > 0);
+        return { name, title: name ? section?.title ?? name : t("noGoalLane"), own, done, total, closed: section?.closed ?? null };
+    }).filter((lane) => lane.own.length > 0 && !lane.closed);
 }
 
 function laneBlock(lane)
@@ -2146,13 +2600,14 @@ function taskCard(task, lane)
     const worker = held?.colleague ? data.colleagues.find((person) => person.id === held.colleague) : null;
     const foot = worker || held?.colleague
         ? `<span class="work" data-tip="${attribute(escape(t("atWork")))}">⚒︎ ${escape((worker?.name ?? held.colleague).split(" ")[0])}</span>`
-        : column === "done" ? `<span>✓ ${escape(formatDay(task.done ?? task.archived))}</span>` : `<span data-tip="${attribute(escape(t("bornOn", formatDay(task.created))))}">${escape(age(task.created))}</span>`;
+        : column === "done" ? `<span>✓ ${escape(formatDay(task.done ?? task.archived))}</span>` : waitOrAge(task);
     const moves = boardStates.filter((state) => state !== column)
         .map((state) => `<button type="button" id="move-${name}-${state}" data-move="${state}" data-task="${task.id}" aria-label="${attribute(t("moveTo", name, stateName(state)))}">${escape(stateName(state))}</button>`).join("");
 
     return `<li class="task ${column} ${expanded.has(`board-${name}`) ? "open" : ""} ${landed === task.id ? "landed" : ""}" draggable="true" data-task="${task.id}" data-lane="${attribute(lane)}" data-column="${column}">
             <div class="task-top">${priorityControl(task, "board")}<span class="id">${escape(name)}</span><span class="grow"></span>${effortMeter(task)}${face(task)}</div>
             ${expandButton(`board-${name}`, escape(task.text))}
+            ${taskLinks(task)}
             <div class="task-foot">${foot}</div>
             <div class="moves" role="group" aria-label="${attribute(t("moveGroup", name))}"><span aria-hidden="true">${escape(t("moveLabel"))}</span>${moves}</div>
         </li>`;
@@ -2209,7 +2664,7 @@ function taskRow(task)
     const held = column === "doing" ? data.holds?.[String(task.id)] : null;
     const worker = held?.colleague ? data.colleagues.find((person) => person.id === held.colleague) : null;
     const goal = task.goal && task.goal !== data.words.noGoal ? `<span>${escape(task.goal)}</span>` : "";
-    const when = column === "done" ? `<span>✓ ${escape(formatDay(task.done ?? task.archived))}</span>` : `<span data-tip="${attribute(escape(t("bornOn", formatDay(task.created))))}">${escape(age(task.created))}</span>`;
+    const when = column === "done" ? `<span>✓ ${escape(formatDay(task.done ?? task.archived))}</span>` : waitOrAge(task);
     const work = worker || held?.colleague ? `<span class="work">⚒︎ ${escape((worker?.name ?? held.colleague).split(" ")[0])}</span>` : "";
 
     return `<li class="row ${column}">
@@ -2217,9 +2672,47 @@ function taskRow(task)
             ${priorityControl(task, "list")}
             <div>${expandButton(`list-${name}`, `<span class="id">${escape(name)}</span>${escape(task.text)}`)}
                 <div class="row-meta"><span class="row-state"><i class="column-mark ${column}"></i>${escape(stateName(column))}</span>${work}${goal}${when}</div>
+                ${taskLinks(task)}
             </div>
             ${effortMeter(task) || "<span></span>"}
         </li>`;
+}
+
+/** In place of a task's age: what a blocked task still waits for, «⛓ T-62», or a large task's parts closed, each said in words under
+ * the pointer and to a screen reader; else its age. */
+function waitOrAge(task)
+{
+    const blockers = task.blockedBy ?? [];
+    const parts = task.parts ?? [];
+
+    if (parts.length > 0) {
+        const words = t("partsTip", task.partsDone, parts.length);
+        return `<span class="wait" data-tip="${attribute(escape(words))}"><span aria-hidden="true">${escape(t("partsCount", task.partsDone, parts.length))}</span><span class="visually-hidden">${escape(words)}</span></span>`;
+    }
+
+    if (blockers.length > 0) {
+        const words = t("blockedTip", blockers.join(", "));
+        return `<span class="wait blocked" data-tip="${attribute(escape(words))}"><span aria-hidden="true">⛓ ${escape(blockers[0])}${blockers.length > 1 ? ` +${blockers.length - 1}` : ""}</span><span class="visually-hidden">${escape(words)}</span></span>`;
+    }
+
+    return `<span data-tip="${attribute(escape(t("bornOn", formatDay(task.created))))}">${escape(age(task.created))}</span>`;
+}
+
+/** A task's links in words, both ways, under its text: the large task it is a part of, what it waits for, what waits for it, what it
+ * points to and what points to it; its note, which opens. Nothing when it has none. */
+function taskLinks(task)
+{
+    const line = (label, list) => (list?.length ? `<span><b>${escape(label)}</b> ${escape(list.join(", "))}</span>` : "");
+    const parts = [
+        line(t("linkPartOf"), task.parent ? [task.parent] : []),
+        line(t("linkParts"), task.parts),
+        line(t("linkWaitsFor"), task.after),
+        line(t("linkWaitedBy"), task.waitedBy),
+        line(t("linkSee"), task.see),
+        line(t("linkSeenFrom"), task.seenFrom),
+        task.noteHref ? `<a href="${attribute(task.noteHref)}" target="_blank" rel="noopener">${escape(t("openNote"))}</a>` : "",
+    ].filter(Boolean);
+    return parts.length > 0 ? `<div class="task-links">${parts.join("")}</div>` : "";
 }
 
 /** Puts the board's hands on the page once: drags, the moves, the priorities, the texts that open, the filters and the search. */
@@ -2246,6 +2739,10 @@ function setupBoard()
         } else if (target.hasAttribute("data-clear-filters")) {
             Object.assign(taskFilter, { state: "open", priority: "all", who: "all", goal: "all" });
             refreshTaskList("filter-state-open");
+        } else if (target.dataset.goLane !== undefined) {
+            goToLane(target.dataset.goLane);
+        } else if (target.dataset.goTasks !== undefined) {
+            goToTasks(target.dataset.goTasks);
         } else if (target.dataset.document) {
             openDocument(Number(target.dataset.document), target);
         } else if (target.id === "decisions-more") {
@@ -2651,38 +3148,120 @@ function documentsPanel()
 {
     const { documents, inbox } = data;
     const key = data.keyDocuments ?? [];
-    const keyCards = key.length ? `<section class="card span-12">
+    const keyPaths = new Set(key.map((document) => document.path));
+    const others = documents.filter((document) => !keyPaths.has(documentPath(document)));
+    readDocuments(key.filter((document) => document.exists).map((document) => ({ href: document.href, stamp: documentStamp(document) })));
+    const gallery = key.length ? `<section class="card span-12">
             <h2>${t("keyTitle")}</h2>
             <p class="hint">${t("keyHint")}</p>
-            <div class="key-documents">${key.map((document, index) => keyDocumentCard(document, index, documents)).join("")}</div>
+            <div class="doc-gallery">${key.map(keyDocumentCard).join("")}</div>
         </section>` : "";
 
-    return `${keyCards}<section class="card span-12">
-            <h2>${t("documentsTitle")}</h2>
+    return `${gallery}<section class="card span-12">
+            <h2>${t(key.length ? "otherDocumentsTitle" : "documentsTitle")}</h2>
             <p class="hint">${escape(t("documentsHint", data.docs))}${inbox ? ` ${escape(t("inboxEntries", inbox.name, inbox.count))}` : ""}</p>
-            <table>
-                <thead><tr><th>${t("documentName")}</th><th class="num">${t("documentLines")}</th><th class="num">${t("documentWords")}</th><th>${t("documentModified")}</th></tr></thead>
-                <tbody>${documents.map(documentRow).join("")}</tbody>
-            </table>
+            <div class="doc-shelf">${others.map(documentMini).join("")}</div>
         </section>`;
 }
 
-/** A key document of the configuration: its name, where it is, when it changed and how long it is, and a button that opens it here. */
-function keyDocumentCard(document, index, documents)
+/** A key document: its page in small, an icon for its kind, its name, its first line, when it changed and how long it is. The card opens it. */
+function keyDocumentCard(document, index)
 {
-    const known = documents.find((one) => `${data.docs.replace(/\/$/, "")}/${one.name}` === document.path);
-    const facts = known ? [t("docChanged", relative(known.modified)), t("docWords", known.words.toLocaleString(t("locale")))] : [];
+    const known = data.documents.find((one) => documentPath(one) === document.path);
+    const text = documentTexts.get(`${document.href}@${documentStamp(document)}`);
+    const facts = known ? [formatDay(known.modified.slice(0, 10)), t("docWords", known.words.toLocaleString(t("locale")))] : [];
+    const icon = documentIcon(document.name, document.path);
 
     if (!document.exists) {
-        return `<div class="key-document missing"><b>${escape(document.name)}</b><code title="${attribute(document.path)}">${escape(document.path)}</code><p>${t("docMissing")}</p></div>`;
+        return `<article class="doc-card missing">
+                <div class="doc-paper empty" aria-hidden="true"></div>
+                <div class="doc-info">${icon}<div><h3>${escape(document.name)}</h3><p class="doc-sub">${t("docMissing")}</p></div></div>
+                <p class="doc-meta"><code title="${attribute(document.path)}">${escape(document.path)}</code></p>
+            </article>`;
     }
 
-    return `<div class="key-document">
-            <b>${escape(document.name)}</b>
-            <code title="${attribute(document.path)}">${escape(document.path)}</code>
-            <p>${facts.map(escape).join(" · ")}</p>
-            <button type="button" class="action primary" id="open-document-${index}" data-document="${index}">${t("docOpen")}</button>
-        </div>`;
+    return `<article class="doc-card">
+            <div class="doc-paper ${text === undefined ? "empty" : ""}" aria-hidden="true">${text === undefined ? "" : markdown(text.split(/\r?\n/).slice(0, 48).join("\n"))}</div>
+            <div class="doc-info">${icon}<div>
+                <h3><button type="button" class="doc-open" id="open-document-${index}" data-document="${index}" aria-describedby="document-sub-${index}">${escape(document.name)}</button></h3>
+                <p class="doc-sub" id="document-sub-${index}">${escape(text === undefined ? document.path : documentSubtitle(text, document.name))}</p>
+            </div></div>
+            <p class="doc-meta" data-tip="${attribute(escape(document.path))}">${facts.map(escape).join(" · ")}</p>
+        </article>`;
+}
+
+/** Another document of the docs: its icon, its name, how long it is and when it changed. */
+function documentMini(document)
+{
+    const locale = t("locale");
+    const name = document.name.replace(/\.md$/i, "");
+    const facts = [t("docWords", document.words.toLocaleString(locale)), relative(document.modified)];
+
+    return `<div class="doc-mini" data-tip="${attribute(`<b>${escape(`${data.docs}/${document.name}`)}</b>${escape(t("docLines", document.lines.toLocaleString(locale)))}`)}">${documentIcon(name, document.name, true)}<div><b>${escape(name)}</b><span>${escape(facts.join(" · "))}</span></div></div>`;
+}
+
+/** Reads the texts of the documents the gallery shows that the page has not read yet, then draws the page once. */
+async function readDocuments(list)
+{
+    const missing = list.filter(({ href, stamp }) => !documentTexts.has(`${href}@${stamp}`) && !documentsReading.has(href));
+
+    if (missing.length === 0) {
+        return;
+    }
+
+    let read = 0;
+    missing.forEach(({ href }) => documentsReading.add(href));
+    await Promise.all(missing.map(async ({ href, stamp }) => {
+        try {
+            const response = await fetch(href);
+            documentTexts.set(`${href}@${stamp}`, response.ok ? await response.text() : "");
+            read++;
+        } catch {
+            // the server is restarting: the next reading of the data tries again
+        }
+
+        documentsReading.delete(href);
+    }));
+
+    if (read > 0) {
+        rerender();
+    }
+}
+
+/** A document's path as the configuration writes it, from the docs' folder. */
+function documentPath(document)
+{
+    return `${data.docs.replace(/\/$/, "")}/${document.name}`;
+}
+
+/** When a key document last changed, as far as the page knows: its text is read again after. */
+function documentStamp(document)
+{
+    return data.documents.find((one) => documentPath(one) === document.path)?.modified ?? "";
+}
+
+/** A document's first line under its name: its heading, unless it only says the name again, else its first sentence. */
+function documentSubtitle(text, name)
+{
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const plain = (line) => line.replace(/^#+\s*/, "").replace(/^>\s*(\[!\w+\]\s*)?/, "").replace(/\*\*|__|`/g, "").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").trim();
+    const heading = lines.find((line) => /^#\s/.test(line));
+    const title = heading ? plain(heading) : "";
+    const repeats = !title || folded(title).includes(folded(name)) || folded(name).includes(folded(title));
+    const first = lines.find((line) => !/^(#|\||```|[-*_]{3,}$)/.test(line));
+
+    return repeats ? plain(first ?? "") : title;
+}
+
+/** An icon for the kind of a document, read from its name: the design, a specification, the architecture, rules, a glossary, tests, a
+ * plan, decisions, tasks, ideas, wishes, an index; a page for any other. */
+function documentIcon(name, path, small = false)
+{
+    const text = folded(`${name} ${path.split("/").at(-1)}`);
+    const kind = documentKinds.find(([, pattern]) => pattern.test(text))?.[0] ?? "page";
+    const [color, drawing] = documentDrawings[kind];
+
+    return `<span class="doc-icon ${small ? "small" : ""}" style="--kind:${color}" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${drawing}</svg></span>`;
 }
 
 /** Opens a key document in the page's reader, its markdown made readable; the plain text stays a link away. */
@@ -3046,70 +3625,6 @@ function tile(label, number, sub)
     return `<div class="tile"><div class="label">${escape(label)}</div><div class="number">${escape(number)}</div><div class="sub">${escape(sub)}</div></div>`;
 }
 
-function phaseCard(phase)
-{
-    const percent = ratio(phase.done, phase.total);
-    const complete = phase.total > 0 && phase.done === phase.total;
-    const status = phase.total === 0 ? t("phaseNotStarted") : complete ? t("phaseClosed") : t("phaseProgress", phase.done, phase.total, percent);
-
-    return `<div class="phase ${complete ? "complete" : ""}" data-tip="${attribute(`<b>${escape(t("phaseOutcome"))}</b>${escape(phase.outcome)}`)}">
-        <div class="num">${escape(t("phase", phase.number))}</div>
-        <div class="name">${escape(phase.name)}</div>
-        ${progressBar(percent, complete)}
-        <div class="status">${escape(status)}</div>
-    </div>`;
-}
-
-function filterButton(value, label)
-{
-    return `<button type="button" data-filter="${value}" aria-pressed="${sectionFilter === value}">${escape(label)}</button>`;
-}
-
-function keepSection(section)
-{
-    const complete = section.done === section.total;
-
-    return sectionFilter === "all" || (sectionFilter === "done") === complete;
-}
-
-function sectionRow(section)
-{
-    const percent = ratio(section.done, section.total);
-    const complete = section.done === section.total;
-    const [, name, note] = /^(.*?)(?:\s*\((.*)\))?$/.exec(section.title);
-
-    return `<details class="section" data-title="${attribute(section.title)}" ${openSections.has(section.title) ? "open" : ""}>
-        <summary>
-            <div class="title"><b>${escape(name)}</b>${note ? `<span>${escape(note)}</span>` : ""}</div>
-            ${progressBar(percent, complete)}
-            <div class="count">${section.done}/${section.total}</div>
-            <div class="pct">${percent}%</div>
-        </summary>
-        <ul class="items">${section.items.map(itemLine).join("")}</ul>
-    </details>`;
-}
-
-function itemLine(item)
-{
-    const state = item.done ? "done" : item.state in stateMarks ? item.state : "todo";
-    const priority = item.priority && !item.done ? `<b style="color:${{ P1: "var(--accent)", P2: "var(--ink-2)", P3: "var(--muted)" }[item.priority]}">${item.priority}</b> · ` : "";
-    const who = item.to && !item.done ? ` <span class="who">· ${escape(item.to)}</span>` : "";
-
-    return `<li class="${state}"><span class="mark" title="${attribute(data.words.states[state] ?? state)}">${stateMarks[state]}</span><span class="text">${priority}${escape(item.text)}${who}</span></li>`;
-}
-
-function bindSections()
-{
-    document.querySelectorAll("[data-filter]").forEach((button) => button.addEventListener("click", () => {
-        sectionFilter = button.dataset.filter;
-        render();
-        document.querySelector(`[data-filter="${sectionFilter}"]`)?.focus();
-    }));
-    document.querySelectorAll("details.section[data-title]").forEach((details) => details.addEventListener("toggle", () => {
-        details.open ? openSections.add(details.dataset.title) : openSections.delete(details.dataset.title);
-    }));
-}
-
 function progressBar(percent, complete)
 {
     return `<div class="bar ${complete ? "done" : ""}"><i data-width="${percent}%"></i></div>`;
@@ -3257,13 +3772,6 @@ function numberingNote(decisions, prefix)
     const gaps = decisions.missing.length ? ` ${escape(t("missing", list(decisions.missing)))}` : "";
 
     return warning + gaps;
-}
-
-function documentRow(document)
-{
-    const locale = t("locale");
-
-    return `<tr><td>${escape(document.name)}</td><td class="num">${document.lines.toLocaleString(locale)}</td><td class="num">${document.words.toLocaleString(locale)}</td><td>${escape(relative(document.modified))}</td></tr>`;
 }
 
 /** Every day from the first one any of the value maps has to today, the axis all the day charts share. */

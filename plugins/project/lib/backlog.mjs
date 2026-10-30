@@ -19,8 +19,8 @@ export function parseLine(line, state, words, prefix = "T")
     const [, id, priority, effort, to, created, goal, rest] = match;
     const marks = new RegExp(`^(.*?)(?: · ${escapeRegex(words.doneMarker)} (\\d{4}-\\d{2}-\\d{2}))?(?: · ${escapeRegex(words.archivedMarker)} (\\d{4}-\\d{2}-\\d{2}))?$`);
     const [, whole, done, archived] = marks.exec(rest);
-    const { text, after, see } = splitLinks(whole);
-    return { id: Number(id), priority, effort: effort.trim(), to: to.trim(), created, goal: goal.trim(), text, after, see, done: done ?? null, archived: archived ?? null, state };
+    const { text, after, see, parent } = splitLinks(whole);
+    return { id: Number(id), priority, effort: effort.trim(), to: to.trim(), created, goal: goal.trim(), text, after, see, parent, done: done ?? null, archived: archived ?? null, state };
 }
 
 /** The task as a line again, its links at the end of its text. */
@@ -28,7 +28,7 @@ export function formatLine(task, words, prefix = "T")
 {
     const done = task.done ? `${separator}${words.doneMarker} ${task.done}` : "";
     const archived = task.archived ? `${separator}${words.archivedMarker} ${task.archived}` : "";
-    const text = joinLinks(task.text, task.after, task.see);
+    const text = joinLinks(task.text, task.after, task.see, task.parent);
     return `- ${prefix}-${task.id}${separator}${[task.priority, task.effort, task.to, task.created, task.goal, text].join(separator)}${done}${archived}`;
 }
 
@@ -141,16 +141,23 @@ export function taskErrors(task, { words, people, goals, prefix = "T", decisionP
         errors.push(say("badText", { prefix }));
     }
 
-    for (const kind of ["after", "see"]) {
-        const bad = badLinks(kind, task[kind] ?? [], { task: prefix, decision: decisionPrefix });
+    const lists = { after: task.after ?? [], see: task.see ?? [], in: task.parent ? [task.parent] : [] };
+    const messages = { after: "badAfter", see: "badSee", in: "badIn" };
+
+    for (const kind of ["after", "see", "in"]) {
+        const bad = badLinks(kind, lists[kind], { task: prefix, decision: decisionPrefix });
 
         if (bad.length > 0) {
-            errors.push(say(kind === "after" ? "badAfter" : "badSee", { list: bad.join(", "), task: `${prefix}-12`, decision: `${decisionPrefix}-2` }));
+            errors.push(say(messages[kind], { list: bad.join(", "), task: `${prefix}-12`, decision: `${decisionPrefix}-2` }));
         }
     }
 
     if ((task.after ?? []).includes(`${prefix}-${task.id}`)) {
         errors.push(say("afterItself", { id: `${prefix}-${task.id}` }));
+    }
+
+    if (task.parent === `${prefix}-${task.id}`) {
+        errors.push(say("inItself", { id: `${prefix}-${task.id}` }));
     }
 
     return errors;

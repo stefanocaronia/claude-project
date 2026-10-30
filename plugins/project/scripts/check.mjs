@@ -220,6 +220,20 @@ function checkLinks(config, say, add)
         }
     }
 
+    // A large task follows its parts: closed while some are open, or open once all are closed.
+    const isClosed = (task) => task.state === "done" || task.state === "archived";
+
+    for (const large of tasks.filter((task) => tasks.some((part) => part.parent === `${prefix}-${task.id}`))) {
+        const id = `${prefix}-${large.id}`;
+        const open = tasks.filter((part) => part.parent === id && !isClosed(part)).map((part) => `${prefix}-${part.id}`);
+
+        if (isClosed(large) && open.length > 0) {
+            add("warning", "links", large.file, large.line, say("partsOpen", { id, state: large.state === "done" ? config.words.doneMarker : config.words.archivedMarker, list: open.join(", ") }));
+        } else if (!isClosed(large) && open.length === 0) {
+            add("note", "links", large.file, large.line, say("partsAllDone", { id }));
+        }
+    }
+
     const ids = new Set(tasks.map((task) => task.id));
     const notes = existsSync(config.files.notes) ? readdirSync(config.files.notes) : [];
 

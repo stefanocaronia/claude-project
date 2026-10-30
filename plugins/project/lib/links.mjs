@@ -1,29 +1,51 @@
 // What a task waits for and what it points to, written as Crew writes them at the end of a line: `(after: T-62, #giulia-1)` names
 // the tasks this one waits for, a backlog task or a colleague's todo line by its id; `(see: T-12, D-2)` names tasks and decisions to
-// read with it. A todo line that is a colleague's part of a backlog task carries the task's number where Crew puts its id. Pure.
+// read with it; `(in: T-23)` names the large task this one is a part of. A todo line that is a colleague's part of a backlog task
+// carries the task's number where Crew puts its id. Pure.
 import { escapeRegex } from "./text.mjs";
 
-const kinds = ["after", "see"];
+const kinds = ["after", "see", "in"];
 
-/** A text without its `(after: …)` and `(see: …)` at the end, in any order, and what they name; empty lists when it has none. */
+/** A text without its `(after: …)`, `(see: …)` and `(in: …)` at the end, in any order, and what they name: lists, and the large task
+ * it is a part of or null. */
 export function splitLinks(text)
 {
     let rest = String(text);
-    const found = { after: [], see: [] };
+    const found = { after: [], see: [], in: [] };
 
     for (let match = suffixOf(rest); match; match = suffixOf(rest)) {
         found[match.kind] = [...new Set([...listOf(match.items), ...found[match.kind]])];
         rest = rest.slice(0, match.index);
     }
 
-    return { text: rest.trim(), ...found };
+    return { text: rest.trim(), after: found.after, see: found.see, parent: found.in[0] ?? null };
 }
 
-/** The text with its links at the end again, after first, each only when it names something. */
-export function joinLinks(text, after = [], see = [])
+/** The text with its links at the end again, after, see, then in, each only when it names something. */
+export function joinLinks(text, after = [], see = [], parent = null)
 {
     const suffix = (kind, items) => (items.length > 0 ? ` (${kind}: ${items.join(", ")})` : "");
-    return `${text}${suffix("after", after)}${suffix("see", see)}`;
+    return `${text}${suffix("after", after)}${suffix("see", see)}${suffix("in", parent ? [parent] : [])}`;
+}
+
+/** The parts one level too deep: a task whose large task is itself a part, as { id, parent }. A large task holds parts, never parts of
+ * parts. */
+export function nestedParts(tasks, prefix = "T")
+{
+    const parentOf = new Map(tasks.map((task) => [`${prefix}-${task.id}`, task.parent ?? null]));
+    return tasks.filter((task) => task.parent && parentOf.get(task.parent)).map((task) => ({ id: `${prefix}-${task.id}`, parent: task.parent }));
+}
+
+/** Each large task's parts, by its id: the ids of the tasks whose `in` names it, in the backlog's order. */
+export function partsOf(tasks, prefix = "T")
+{
+    const parts = new Map();
+
+    for (const task of tasks.filter((one) => one.parent)) {
+        parts.set(task.parent, [...(parts.get(task.parent) ?? []), `${prefix}-${task.id}`]);
+    }
+
+    return parts;
 }
 
 /** A list given on the command line, `T-3, #giulia-1` or `T-3 #giulia-1`, each once; empty for "" or "-". */
@@ -32,12 +54,12 @@ export function listOf(given)
     return [...new Set(String(given ?? "").split(/[,\s]+/).filter((item) => item !== "" && item !== "-"))];
 }
 
-/** The names a list gives that are no task or todo id (in after) or no task or decision (in see). */
+/** The names a list gives that are no task or todo id (in after), no task or decision (in see), no task (in in). */
 export function badLinks(kind, items, prefixes)
 {
     const task = `${escapeRegex(prefixes.task)}-\\d+`;
-    const pattern = kind === "after" ? new RegExp(`^(${task}|#[\\w-]+-\\d+)$`) : new RegExp(`^(${task}|${escapeRegex(prefixes.decision)}-\\d+)$`);
-    return items.filter((item) => !pattern.test(item));
+    const patterns = { after: `^(${task}|#[\\w-]+-\\d+)$`, see: `^(${task}|${escapeRegex(prefixes.decision)}-\\d+)$`, in: `^${task}$` };
+    return items.filter((item) => !new RegExp(patterns[kind]).test(item));
 }
 
 /** The id and the waits of a colleague's todo line, as Crew writes it after the priority and the day: `#matteo-3 · …` or `T-61 · …`. */

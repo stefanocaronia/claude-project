@@ -3,19 +3,19 @@
 //   node backlog.mjs add "text" [--goal "<goal of the plan>"] [--p P2] [--effort <word>] [--to <name>] [--state todo|doing|postponed|done]
 //   node backlog.mjs start|done|postpone|todo T-12 [T-13…]
 //   node backlog.mjs archive T-12… | archive --done
-//   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"]
+//   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23]
 //   node backlog.mjs note T-12   (its note, written when missing: the path)
-//   node backlog.mjs show T-12… | list [--state doing] [--to <name>] [--p P1] [--goal "…"] [--json] | find <words>… | goals
+//   node backlog.mjs show T-12… | list [--atomic] [--state doing] [--to <name>] [--p P1] [--goal "…"] [--json] | find <words>… | goals
 import { existsSync } from "node:fs";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
-import { listOf, splitLinks } from "../lib/links.mjs";
+import { listOf, nestedParts, splitLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { stateKeys } from "../lib/words.mjs";
 import { assignees, isMain, loadProject, notePath, ProjectError, readBacklog, readDecisions, readDependencies, readGoals, runCli, shown, taskLinks, today, withBacklogLock, write, writeBacklog } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
 const changes = ["add", "start", "done", "postpone", "todo", "archive", "set"];
-const flags = ["json", "done"];
+const flags = ["json", "done", "atomic"];
 
 /** What the backlog's checks need: the problems of the tasks as they are, for check.mjs. */
 export function backlogProblems(config, say)
@@ -44,13 +44,18 @@ export function backlogProblems(config, say)
         }
 
         // A link to a task that is in neither the backlog nor the archive; a decision's the check of the references says.
-        for (const cited of [...task.after, ...task.see].filter((one) => one.startsWith(`${prefix}-`) && !tasks.some((other) => `${prefix}-${other.id}` === one))) {
+        for (const cited of [...task.after, ...task.see, ...(task.parent ? [task.parent] : [])].filter((one) => one.startsWith(`${prefix}-`) && !tasks.some((other) => `${prefix}-${other.id}` === one))) {
             problems.push({ ...at, message: say("linkUnknown", { id, other: cited }) });
         }
 
         if (task.state === "done" && !task.done) {
             problems.push({ ...at, message: say("doneNoDate", { id, marker: config.words.doneMarker }) });
         }
+    }
+
+    for (const nested of nestedParts(tasks, prefix)) {
+        const task = tasks.find((one) => `${prefix}-${one.id}` === nested.id);
+        problems.push({ file: task.file, line: task.line, message: say("inNested", { id: nested.id, other: nested.parent }) });
     }
 
     return problems;
@@ -100,11 +105,13 @@ function execute(command, options, words, config, say)
         ];
         return errors.length > 0 ? fail(errors.join("\n")) : task;
     };
-    // The links of a text, `(after: …)` and `(see: …)` at its end, with those of the options on top: an option given replaces.
-    const linked = (given, old = { after: [], see: [] }) => {
+    // The links of a text, `(after: …)`, `(see: …)` and `(in: …)` at its end, with those of the options on top: an option given replaces.
+    const linked = (given, old = { after: [], see: [], parent: null }) => {
         const split = splitLinks(given ?? old.text);
-        const pick = (kind) => (options[kind] !== undefined && options[kind] !== true ? listOf(options[kind]) : given !== undefined && split[kind].length > 0 ? split[kind] : old[kind]);
-        return { text: split.text, after: pick("after"), see: pick("see") };
+        const isGiven = (kind) => options[kind] !== undefined && options[kind] !== true;
+        const pick = (kind) => (isGiven(kind) ? listOf(options[kind]) : given !== undefined && split[kind].length > 0 ? split[kind] : old[kind]);
+        const parent = isGiven("in") ? (listOf(options.in)[0] ?? null) : given !== undefined && split.parent ? split.parent : (old.parent ?? null);
+        return { text: split.text, after: pick("after"), see: pick("see"), parent };
     };
     const save = (all, said) => {
         writeBacklog(config, all);
@@ -132,7 +139,18 @@ function execute(command, options, words, config, say)
     } else if (["start", "done", "postpone", "todo"].includes(command)) {
         const state = { start: "doing", done: "done", postpone: "postponed", todo: "todo" }[command];
         const ids = words.map(find).map((task) => task.id);
-        save(moveTasks(tasks, ids, state, today()).tasks, ids.map((id) => say("moved", { id: `${prefix}-${id}`, state: config.words.states[state] })).join("\n"));
+        // A large task is in progress while one of its parts is: a part started starts it too.
+        const parents = state === "doing" ? ids.map((id) => tasks.find((task) => task.id === id).parent).filter(Boolean).map(find).filter((task) => ["todo", "postponed"].includes(task.state)).map((task) => task.id) : [];
+        const moved = moveTasks(moveTasks(tasks, ids, state, today()).tasks, parents, "doing", today()).tasks;
+        save(moved, [...ids, ...parents].map((id) => say("moved", { id: `${prefix}-${id}`, state: config.words.states[state] })).join("\n"));
+        // A large task whose parts are now all closed: done is still to say, as for any task.
+        const isClosed = (task) => task.state === "done" || task.state === "archived";
+
+        for (const parent of new Set(ids.map((id) => moved.find((task) => task.id === id).parent).filter(Boolean))) {
+            if (moved.filter((task) => task.parent === parent).every(isClosed) && !isClosed(find(parent))) {
+                console.log(say("partsAllDone", { id: parent }));
+            }
+        }
     } else if (command === "archive") {
         const chosen = options.done === true ? tasks.filter((task) => task.state === "done") : words.map(find);
         const ids = new Set(chosen.map((task) => task.id));
@@ -165,8 +183,16 @@ function execute(command, options, words, config, say)
         const shownTasks = tasks.filter((task) => (options.state ? task.state === options.state : task.state !== "archived" && task.state !== "done"))
             .filter((task) => !options.to || task.to === options.to)
             .filter((task) => !options.p || task.priority === options.p)
-            .filter((task) => !options.goal || task.goal === options.goal);
-        print(shownTasks, options.json, line, say("count", { count: shownTasks.length }));
+            .filter((task) => !options.goal || task.goal === options.goal)
+            // --atomic: only the tasks done as they are, for Crew and whoever wants them; a large task is done through its parts.
+            .filter((task) => options.atomic !== true || !tasks.some((other) => other.parent === `${prefix}-${task.id}`));
+        // As the panel shows them: a blocked task with what it still waits for, a large task with its parts closed.
+        const links = taskLinks(config, tasks);
+        const marked = (task) => {
+            const { blockedBy, parts, partsDone } = links.get(task.id);
+            return `${line(task)}${blockedBy.length > 0 ? `  ⛓ ${blockedBy.join(", ")}` : ""}${parts.length > 0 ? `  ${say("partsCount", { done: partsDone, total: parts.length })}` : ""}`;
+        };
+        print(shownTasks, options.json, marked, say("count", { count: shownTasks.length }));
     } else if (command === "find" && words.length > 0) {
         const wanted = words.map(plain);
         const shownTasks = tasks.filter((task) => wanted.every((word) => plain(`${task.text} ${task.goal} ${task.to}`).includes(word)));
@@ -189,11 +215,14 @@ function linkErrors(task, all, config, say)
     const id = `${prefix}-${task.id}`;
     const tasks = new Set(all.map((one) => `${prefix}-${one.id}`));
     const decisions = new Set(readDecisions(config).decided.map((row) => `${config.prefixes.decision}-${row.number}`));
-    const missing = [...task.after, ...task.see].filter((one) => (one.startsWith(`${prefix}-`) && !tasks.has(one)) || (one.startsWith(`${config.prefixes.decision}-`) && !decisions.has(one)));
+    const missing = [...task.after, ...task.see, ...(task.parent ? [task.parent] : [])].filter((one) => (one.startsWith(`${prefix}-`) && !tasks.has(one)) || (one.startsWith(`${config.prefixes.decision}-`) && !decisions.has(one)));
     const cycles = readDependencies(config, all).cycles().filter((cycle) => cycle.includes(id));
+    // Parts one level deep: this task a part of a part, or a part of a large task whose parts would then hold parts.
+    const nested = nestedParts(all, prefix).filter((one) => one.id === id || one.parent === id);
     return [
         ...missing.map((other) => say("linkUnknown", { id, other })),
         ...cycles.map((cycle) => say("cycle", { ids: [...cycle, cycle[0]].join(" → ") })),
+        ...nested.map((one) => say("inNested", { id: one.id, other: one.parent })),
     ];
 }
 
@@ -208,8 +237,11 @@ function linksOf(tasks, config, say, stateName)
     const named = (one) => (byId.has(one) ? `${one} (${stateName(byId.get(one))})` : graph.known(one) ? `${one} (${say(graph.isOpen(one) ? "todoOpen" : "todoClosed")})` : `${one} (?)`);
 
     return (task) => {
-        const { after, chain, waitedBy, see, seenFrom, note } = links.get(task.id);
+        const { after, chain, waitedBy, see, seenFrom, note, parent, parts, partsDone, nextPart } = links.get(task.id);
         return [
+            parent ? say("partOf", { id: named(parent) }) : null,
+            parts.length > 0 ? say("partsLabel", { done: partsDone, total: parts.length, list: parts.map(named).join(", ") }) : null,
+            nextPart ? say("nextPart", { id: nextPart }) : null,
             after.length > 0 ? say("waitsFor", { list: after.map(named).join(", ") }) : null,
             chain.length > 0 ? say("chainFirst", { list: [...chain, `${prefix}-${task.id}`].join(" → ") }) : null,
             waitedBy.length > 0 ? say("waitedBy", { list: waitedBy.join(", ") }) : null,

@@ -23,6 +23,11 @@ export type Task = {
     /** Its note's path from the project's root, and its address on the page; null without one. */
     note: string | null;
     noteHref: string | null;
+    /** The large task it is a part of, `(in: T-23)`; or, for a large task, its parts, how many are closed and the next to start. */
+    parent: string | null;
+    parts: string[];
+    partsDone: number;
+    nextPart: string | null;
 };
 
 /** A goal of the plan with its tasks counted; `closed`, the day it closed, out of the open bars. */

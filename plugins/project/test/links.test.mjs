@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { formatLine, parseLine, taskErrors } from "../lib/backlog.mjs";
-import { badLinks, dependencies, joinLinks, listOf, seenFrom, splitLinks, todoLinks } from "../lib/links.mjs";
+import { badLinks, dependencies, joinLinks, listOf, nestedParts, partsOf, seenFrom, splitLinks, todoLinks } from "../lib/links.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { wordsOf } from "../lib/words.mjs";
 
@@ -17,8 +17,8 @@ const scripts = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts");
 let root;
 
 test("a text's after and see are read from its end in any order, and written back after first", () => {
-    assert.deepEqual(splitLinks("fix it (see: T-12, D-2) (after: T-62, #giulia-1)"), { text: "fix it", after: ["T-62", "#giulia-1"], see: ["T-12", "D-2"] });
-    assert.deepEqual(splitLinks("the (after: x) is in the middle"), { text: "the (after: x) is in the middle", after: [], see: [] });
+    assert.deepEqual(splitLinks("fix it (see: T-12, D-2) (after: T-62, #giulia-1)"), { text: "fix it", after: ["T-62", "#giulia-1"], see: ["T-12", "D-2"], parent: null });
+    assert.deepEqual(splitLinks("the (after: x) is in the middle"), { text: "the (after: x) is in the middle", after: [], see: [], parent: null });
     assert.equal(joinLinks("fix it", ["T-62"], ["D-2"]), "fix it (after: T-62) (see: D-2)");
     assert.equal(joinLinks("fix it", [], []), "fix it");
     assert.deepEqual(listOf("T-3, #giulia-1 T-3"), ["T-3", "#giulia-1"]);
@@ -208,4 +208,45 @@ test("a goal closes once its tasks are closed, refuses new tasks while closed, o
     assert.match(plan("open", "Later").stdout, /«Later» open again/);
     assert.match(read("docs/PLAN.md"), /^### Later$/m);
     assert.match(plan("close", "Elsewhere").stderr, /The goal «Elsewhere» is not in the plan/);
+});
+
+test("a part names its large task at the end of its text, one level deep, and the large one finds its parts", () => {
+    assert.deepEqual(splitLinks("the format (in: T-23) (after: T-24)"), { text: "the format", after: ["T-24"], see: [], parent: "T-23" });
+    assert.equal(joinLinks("the format", ["T-24"], [], "T-23"), "the format (after: T-24) (in: T-23)");
+    const tasks = [{ id: 23, parent: null }, { id: 24, parent: "T-23" }, { id: 25, parent: "T-23" }, { id: 26, parent: "T-25" }];
+    assert.deepEqual([...partsOf(tasks).entries()], [["T-23", ["T-24", "T-25"]], ["T-25", ["T-26"]]]);
+    assert.deepEqual(nestedParts(tasks), [{ id: "T-26", parent: "T-25" }]);
+    const say = sayer("en");
+    const errors = taskErrors({ id: 4, priority: "P1", effort: "high", to: "Ann", goal: "—", text: "ok", state: "todo", after: [], see: [], parent: "T-4" }, { words: en, people: ["Ann"], goals: [], say });
+    assert.deepEqual(errors, ["T-4 cannot be a part of itself."]);
+    assert.match(taskErrors({ id: 4, priority: "P1", effort: "high", to: "Ann", goal: "—", text: "ok", state: "todo", after: [], see: [], parent: "D-2" }, { words: en, people: ["Ann"], goals: [], say })[0], /An in names the large task/);
+});
+
+test("a part started starts its large task, the last part closed proposes closing it, list --atomic leaves it out, and the check follows it", () => {
+    put("docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n- T-1 · P1 · high · Claude · 2026-10-01 · — · the big one\n- T-2 · P2 · medium · Claude · 2026-10-01 · — · part one (in: T-1)\n- T-3 · P2 · medium · Claude · 2026-10-01 · — · part two\n- T-4 · P2 · medium · Claude · 2026-10-01 · — · elsewhere\n\n## Postponed\n\n## Done\n");
+    put("docs/PLAN.md", "# Plan\n\n## Goals\n\n### Core (phase 1)\n");
+    put(".claude/agent-memory/giulia-ferri/todo.md", "- [ ] P1 · 2026-10-29 · #giulia-1 · read the rules\n");
+    assert.match(run("set", "T-3", "--in", "T-1"), /· part two \(in: T-1\)$/);
+    assert.match(fails("set", "T-4", "--in", "T-2"), /T-4 is a part of T-2, which is itself a part/);
+    assert.match(fails("set", "T-1", "--in", "T-4"), /is a part of T-1, which is itself a part/);
+    assert.match(run("start", "T-2"), /T-2: In progress\nT-1: In progress/);
+    assert.deepEqual(JSON.parse(run("list", "--atomic", "--json")).map((task) => task.id), [2, 3, 4]);
+    assert.match(run("show", "T-1"), /parts, 0 of 2 closed: T-2 \(In progress\), T-3 \(To do\)\n {2}the next part to start: T-3/);
+    assert.match(run("show", "T-2"), /part of: T-1 \(In progress\)/);
+    assert.doesNotMatch(run("done", "T-2"), /Every part/);
+    assert.match(run("done", "T-3"), /Every part of T-1 is closed: backlog\.mjs done T-1/);
+
+    const check = () => JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: root, encoding: "utf8", env: environment() }).stdout);
+    assert.ok(check().some((finding) => finding.severity === "note" && /Every part of T-1 is closed/.test(finding.message)));
+    run("todo", "T-3");
+    run("done", "T-1");
+    assert.ok(check().some((finding) => finding.severity === "warning" && /T-1 is done but its parts T-3 are still open/.test(finding.message)));
+});
+
+test("list marks a blocked task with what it still waits for, and a large task with its parts closed", () => {
+    put("docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n- T-1 · P1 · high · Claude · 2026-10-01 · — · the big one\n- T-2 · P2 · medium · Claude · 2026-10-01 · — · part one (in: T-1)\n- T-3 · P2 · medium · Claude · 2026-10-01 · — · waits (after: T-2, #giulia-1)\n\n## Postponed\n\n## Done\n");
+    const listed = run("list");
+    assert.match(listed, /· the big one {2}0\/1 parts$/m);
+    assert.match(listed, /· waits \(after: T-2, #giulia-1\) {2}⛓ T-2, #giulia-1$/m);
+    assert.match(listed, /· part one \(in: T-1\)$/m);
 });

@@ -36,6 +36,9 @@ const stateLayer = "#80808014";
 // Every card's faint gray, the same for all, as Crew's.
 const cardTint = "#80808003";
 const quietColor = "#888780";
+// A hint in Material's inverse colors, which read on both themes, as Crew's.
+const tooltipBackground = "#2b2b29";
+const tooltipText = "#f4f4f1";
 const effortMeters: Record<string, string> = { low: "▮▯▯▯", medium: "▮▮▯▯", high: "▮▮▮▯", xhigh: "▮▮▮▮", max: "▮▮▮▮", none: "" };
 // The exit code of snapshot.mjs in a folder with no project above it.
 const noProject = 3;
@@ -210,6 +213,13 @@ export const register: Register = (on) => {
             const key = `task-${task.id}`;
             const member = byName.get(task.to);
 
+            // A large task is done through its parts: its ▶ starts the next one, by priority and age, free and to do.
+            if (isLarge(task)) {
+                const part = snapshot.tasks.find((one) => `${prefix}-${one.id}` === task.nextPart);
+                const isStartable = part && (part.to === "Claude" || byName.has(part.to)) && !isStarting(`task-${part.id}`);
+                return part && isStartable ? <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={() => startTask($, snapshot, part, byName.get(part.to))} /> : null;
+            }
+
             // Nobody starts a person's own task but them.
             if (!member && task.to !== "Claude") {
                 return null;
@@ -239,14 +249,32 @@ export const register: Register = (on) => {
 
             return <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={() => startTask($, snapshot, task, member, held?.session)} />;
         };
-        // In place of its age, a blocked task shows what it waits for: «⛓ T-62», and how many more.
+        // In place of its age, a blocked task shows what it waits for: «⛓ T-62», and how many more; a large task, its parts closed. On the
+        // desktop a hint under the pointer says it in words.
         const ageOrWait = (task: Task) => {
             const blockers = task.blockedBy ?? [];
-            const label = blockers.length > 0 ? `⛓ ${blockers[0]}${blockers.length > 1 ? ` +${blockers.length - 1}` : ""}` : age(task.created);
-            return <Box key={`age-${task.id}`} flexShrink={0}><Text dimColor wrap="truncate">{label}</Text></Box>;
+            const label = isLarge(task) ? words("partsCount", { done: task.partsDone, total: task.parts.length })
+                : blockers.length > 0 ? `⛓ ${blockers[0]}${blockers.length > 1 ? ` +${blockers.length - 1}` : ""}`
+                : age(task.created);
+            const hint = isLarge(task) ? words("partsTip", { done: task.partsDone, total: task.parts.length }) : blockers.length > 0 ? words("blockedTip", { list: blockers.join(", ") }) : null;
+            const cell = <Box key={`age-${task.id}`} flexShrink={0}><Text dimColor wrap="truncate">{label}</Text></Box>;
+            return hint ? tip(`age-${task.id}`, hint, cell) : cell;
         };
+        // A hint under the pointer, above the control so that the card does not cut it; the terminal draws none.
+        const tip = (key: string, hint: string, control: JSX.Element) => (isDesktop
+            ? (
+                <Box key={`tip-${key}`} flexShrink={0}>
+                    {control}
+                    <Box position="absolute" bottom={1} right={0} display="none" hover={{ display: "flex" }} backgroundColor={tooltipBackground} borderStyle="round" borderColor={outline} paddingX={1}>
+                        <Text color={tooltipText}>{hint}</Text>
+                    </Box>
+                </Box>
+            )
+            : control);
         // A task's links, both ways, under its facts: what it waits for and what waits for it, what it points to and what points to it.
         const linkLines = (task: Task) => [
+            task.parent ? words("partOf", { id: task.parent }) : null,
+            isLarge(task) ? words("partsLabel", { done: task.partsDone, total: task.parts.length, list: task.parts.join(", ") }) : null,
             (task.after ?? []).length > 0 ? words("waitsFor", { list: task.after.join(", ") }) : null,
             (task.chain ?? []).length > 0 ? `⛓ ${words("chainFirst", { list: [...task.chain, `${prefix}-${task.id}`].join(" → ") })}` : null,
             (task.waitedBy ?? []).length > 0 ? words("waitedBy", { list: task.waitedBy.join(", ") }) : null,
@@ -405,7 +433,7 @@ export const register: Register = (on) => {
         const proposals = snapshot.decisions.open.slice().sort((first, second) => rank(first) - rank(second) || (first.day ?? "9999").localeCompare(second.day ?? "9999") || first.line - second.line);
         // What the buttons above the links start: the first task someone here can start, the first decision to take.
         // A blocked task is skipped: its chain starts from its own ▶.
-        const nextTask = rest.find((task) => task.state === "todo" && !isBlocked(task) && (task.to === "Claude" || byName.has(task.to)));
+        const nextTask = rest.find((task) => task.state === "todo" && !isBlocked(task) && !isLarge(task) && (task.to === "Claude" || byName.has(task.to)));
         const nextProposal = proposals[0];
         const actions = (
             <Box key="actions" flexDirection="row" flexWrap="wrap" gap={1}>
@@ -732,6 +760,12 @@ async function markStarting($: EngineInterface, id: number): Promise<void>
 {
     const at = await $.clock.now();
     await update($, view, (old) => ({ ...old, starting: { ...Object.fromEntries(Object.entries(old.starting).filter(([, when]) => at - when < startingFor)), [`task-${id}`]: at } }));
+}
+
+/** Whether a task holds parts: a large task, done through them. */
+function isLarge(task: Task): boolean
+{
+    return (task.parts ?? []).length > 0;
 }
 
 /** Whether a task waits for one still open. */

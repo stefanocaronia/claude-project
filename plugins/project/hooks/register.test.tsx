@@ -22,6 +22,9 @@ const snapshot = {
         { id: 61, priority: "P1", effort: "alto", effortKey: "high", to: "Matteo", colleague: "matteo-conti", created: "2026-10-28", goal: "Revisione", text: "La plancia, in tre parti", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: ["T-143"], seenFrom: [], note: null, noteHref: null },
         // The oldest P1 to do, but it waits for T-62, still in progress: the next-task button skips it.
         { id: 72, priority: "P1", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-20", goal: "Revisione", text: "Il rilascio", state: "todo", after: ["T-62", "#giulia-1"], blockedBy: ["T-62", "#giulia-1"], chain: ["#giulia-1", "T-62"], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
+        // A large task, the oldest P1, is done through its parts: the next-task button skips it, its ▶ starts its next part.
+        { id: 80, priority: "P1", effort: "alto", effortKey: "high", to: "Claude", colleague: null, created: "2026-10-01", goal: "Revisione", text: "I sotto-compiti", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null, parent: null, parts: ["T-81", "T-82"], partsDone: 1, nextPart: "T-81" },
+        { id: 81, priority: "P2", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-02", goal: "Revisione", text: "Il formato", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null, parent: "T-80", parts: [], partsDone: 0, nextPart: null },
         { id: 70, priority: "P1", effort: "medio", effortKey: "medium", to: "Stefano", colleague: null, created: "2026-10-28", goal: "—", text: "Il login di npm", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
         { id: 71, priority: "P3", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-28", goal: "Revisione", text: "Più avanti", state: "postponed", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
     ],
@@ -105,7 +108,7 @@ test("the panel shows the project's numbers, the tasks in progress and the P1 to
         expect((await ui.find({ key: "toggle-documents" }))?.props.label).toBe("▾ 📄 Documenti");
         expect((await ui.find({ key: "toggle-doing" }))?.props.label).toBe("▾ ⚒︎ In corso · 2");
         expect((await ui.find({ key: "toggle-goals" }))?.props.label).toBe("▾ ⚑︎ Piano · 2");
-        expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 4");
+        expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 6");
         expect((await ui.find({ key: "toggle-decisions" }))?.props.label).toBe("▸ ⚖︎ Decisioni · 2 da decidere");
         expect(await ui.find({ type: "Text", text: "▸ I pacchetti nei loro repo" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /^▸ Revisione/ })).toBeDefined();
@@ -267,6 +270,8 @@ test("a blocked task shows what it waits for in place of its age, its ▶ asks f
     for (const surface of surfaces) {
         const ui = await $.ui.mount({ plugin, surface, component: "Pane", requestId: "project", props });
         expect(await ui.find({ type: "Text", text: "⛓ T-62 +1" })).toBeDefined();
+        // On the desktop a hint says it in words.
+        expect(await ui.find({ type: "Text", text: "Aspetta T-62, #giulia-1, ancora aperti: si può avviare quando sono fatti" })).toEqual(surface === "desktop" ? expect.anything() : undefined);
         await ui.press({ key: "open-72" });
         expect(await ui.find({ type: "Text", text: "aspetta: T-62, #giulia-1" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: "⛓ la catena, in ordine: #giulia-1 → T-62 → T-72" })).toBeDefined();
@@ -323,5 +328,21 @@ test("the button for where the project stands asks Claude for a short report", a
     expect((await ui.find({ key: "where-we-stand" }))?.props.label).toBe("◎ Il punto della situazione");
     await ui.press({ key: "where-we-stand" });
     expect(prompts[0]).toMatch(/^Fammi il punto della situazione del progetto, in al massimo 30 righe/);
+    await ui.unmount();
+});
+
+test("a large task shows its parts closed in place of its age, its ▶ starts the next part, and a part names its large task", async ($, on) => {
+    const { runs, prompts } = world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
+    expect(await ui.find({ type: "Text", text: "1/2 parti" })).toBeDefined();
+    await ui.press({ key: "open-81" });
+    expect(await ui.find({ type: "Text", text: "parte di: T-80" })).toBeDefined();
+    await ui.press({ key: "open-80" });
+    expect(await ui.find({ type: "Text", text: "parti, 1 chiuse su 2: T-81, T-82" })).toBeDefined();
+    runs.length = 0;
+    await ui.press({ key: "start-80" });
+    expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "start", "T-81"]]);
+    expect(prompts[0]).toBe("Lavora a T-81: Il formato");
     await ui.unmount();
 });
