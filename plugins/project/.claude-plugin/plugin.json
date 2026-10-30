@@ -1,6 +1,6 @@
 {
   "name": "project",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "A project's plan, tasks and decisions in markdown files, kept by deterministic tools: the plan's phases and goals, a backlog of numbered tasks, the decisions by number, a check of the docs' health; a panel beside the chat and a page with the charts; Crew's colleagues as assignees.",
   "author": {
     "name": "Stefano Caronia",

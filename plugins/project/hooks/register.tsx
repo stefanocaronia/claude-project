@@ -1008,8 +1008,16 @@ function isBlocked(task: Task): boolean
     return (task.blockedBy ?? []).length > 0;
 }
 
+/** A prompt asked as the user would ask it; one that is a slash command, `/project:tidy …`, runs that command, so that its skill is loaded. */
 async function submit($: EngineInterface, text: string): Promise<void>
 {
+    const command = /^\/(\S+)\s*([\s\S]*)$/.exec(text);
+
+    if (command) {
+        await $.command.run({ command: command[1], args: command[2] });
+        return;
+    }
+
     await $.prompt.submit({ text, asUser: true });
 }
 

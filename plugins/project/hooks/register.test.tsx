@@ -252,9 +252,10 @@ test("the buttons above the links start the first task by priority and age, and 
     await ui.press({ key: "next-task" });
     await ui.press({ key: "next-decision" });
     await ui.press({ key: "tidy-docs" });
-    expect(commands).toEqual(["/crew:next Matteo -- T-61 · La plancia, in tre parti"]);
+    expect(commands[0]).toBe("/crew:next Matteo -- T-61 · La plancia, in tre parti");
     expect(prompts[0]).toMatch(/\(riga 553 delle decisioni\): P3 · Le cariche degli oggetti$/);
-    expect(prompts[1]).toMatch(/^Riordina i documenti del progetto/);
+    // The tidying runs the skill's own command, so that the skill is loaded whole.
+    expect(commands[1]).toMatch(/^\/project:tidy i documenti del progetto: .*mai di deciderlo/);
     await ui.unmount();
 });
 
@@ -345,15 +346,15 @@ test("▶ on Claude's own task moves it to in progress before asking, and a chan
     expect(reads()).toBe(before + 1);
 });
 
-test("the button for where the project stands asks Claude for a short report", async ($, on) => {
-    const { prompts } = world(on);
+test("the button for where the project stands asks Claude for a short report, and tidying the backlog runs the tidy skill", async ($, on) => {
+    const { prompts, commands } = world(on);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
     const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
     expect((await ui.find({ key: "where-we-stand" }))?.props.label).toBe("◎ Il punto della situazione");
     await ui.press({ key: "where-we-stand" });
     expect(prompts[0]).toMatch(/^Fammi il punto della situazione del progetto, in al massimo 30 righe/);
     await ui.press({ key: "tidy-backlog" });
-    expect(prompts[1]).toMatch(/^Riordina il backlog e le decisioni da prendere con la skill tidy, sezione 4: prima da solo il minimo.*mai di decidere un punto aperto/);
+    expect(commands[0]).toMatch(/^\/project:tidy sezione 4, il backlog e le decisioni da prendere: prima da solo il minimo.*mai farmi decidere un punto aperto/);
     await ui.unmount();
 });
 
