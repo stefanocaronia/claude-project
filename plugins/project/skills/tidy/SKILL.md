@@ -5,7 +5,7 @@ description: Tidy the project docs - plan, backlog, decisions, the colleagues' t
 
 # Tidying the project docs
 
-Half deterministic, half judgment: the script finds; you fix what is mechanical and propose to the user what changes a meaning. Speak to the user in the project's language.
+Half deterministic, half judgment: the script finds; you fix what is mechanical and what is clear, and ask the user only whether an item still stands, where you cannot tell. Tidying never asks them to decide. Speak to the user in the project's language.
 
 ## 1. The report
 
@@ -16,34 +16,33 @@ Half deterministic, half judgment: the script finds; you fix what is mechanical 
 - Trailing spaces and double blank lines: `check.mjs --fix`.
 - Tasks without a date in the colleagues' todos: `task-dates.mjs --write` (the day the line appeared in git).
 - A decision number used twice: the newer row takes the first free number past the highest (`decisions.mjs next`). Read every reference before changing it, to know which of the two it means; references can be in code too.
-- A broken link whose target only moved: the new path. A target that is gone goes among the proposals.
+- A broken link whose target only moved: the new path. A target that is gone: the link goes too; ask only if you cannot tell whether it still stands.
 
-## 3. To propose to the user
+## 3. What changes a meaning
 
-The most important first, each as a choice in the question form (AskUserQuestion), never as a wall of text: one question a proposal, at most four a form, the next ones in the next form. The question says what and why in a line; the options are the change itself (recommended first) and leaving it, plus the other ways it could go when there are some; the command it runs shows in the option's description. Applied only on their yes, each as they chose.
+Tidying never asks the user to decide anything. For a decision, a point to decide or a task, the only question is whether it still stands: left as it is, obsolete, contradicted by a decision accepted later, or already done. Answer it yourself, reading the decisions, the plan and the code, and apply what is clear without asking; say what you changed in the report at the end, so that the user can undo it.
 
-- **Superseded decisions**: the row keeps its number, reduced to `| 412 | <superseded marker> D-427: <three or four words>. | |`. A number is never deleted or reused: code cites it. Superseded means revised whole; a revision in part leaves the row as it is.
-- **Old proposals** under "to decide": decide them, or remove them if a decision already closed them (say which).
-- **Tasks**: priorities that no longer fit, tasks a later decision or piece of work already closed (`backlog.mjs done` or `archive`), a colleague's todo line citing a task closed or missing; a cycle of waits or a link to a task that is not there (`backlog.mjs set T-n --after …` / `--see …`), the note of a task long archived.
+- **Superseded decisions**: a row revised whole by a later accepted one keeps its number, reduced to `| 412 | <superseded marker> D-427: <three or four words>. | |`. A number is never deleted or reused: code cites it. A revision in part leaves the row as it is.
+- **Points under "to decide"**: one a decision already took, or later work made moot, is removed (the report says which row closed it). One still open stays as it is, whatever its age: it is the user's to take up when they want.
+- **Tasks**: a task a later decision or piece of work already closed (`backlog.mjs done` or `archive`), a colleague's todo line citing a task closed or missing; a cycle of waits or a link to a task that is not there (`backlog.mjs set T-n --after …` / `--see …`), the note of a task long archived.
 - **Docs outside the index**: into it, or into the archive folder if the work is closed.
 - **Heavy files**: the superseded rows first, then the lines that repeat what another already says.
 
+**Ask only where you cannot tell**, and ask only whether the item stands: «still open, or closed by D-427?», «still to do, or done by 0715a26?». Never «decide this», never the content of a decision. An item you cannot tell and that nothing contradicts stays as it is, with no question. The questions go in the question form (AskUserQuestion), never as a wall of text: one an item, at most four a form, few in all. The options are the answer you think likely, first, and «it stands», always a normal answer and never a retreat.
+
 ## 4. The backlog
 
-When the user asks to tidy the backlog (the panel's «Tidy the backlog», or the page's), read it whole with `backlog.mjs list --json` and `backlog.mjs list --state done --json`, the plan's goals, the decisions and the points still to decide, then:
+When the user asks to tidy the backlog (the panel's «Tidy the backlog», or the page's), read it whole with `backlog.mjs list --json` and `backlog.mjs list --state done --json`, the plan's goals, the decisions and the points still to decide, then, as section 3 says:
 
-- **Fix without asking** what changes no meaning: a task's text that breaks the line's rules or reads badly (one line, clear, no « · »), a part whose goal differs from its large task's, a type plainly wrong or missing where the text says it (a bug, a research).
-- **Propose**, numbered, the most useful first, each with the `backlog.mjs` command that applies it:
-  - priorities that no longer fit: P1 only for what blocks the work at hand or the next step;
-  - types that are missing or wrong where the text does not say it plainly (`set T-n --type …`);
-  - who should do each (`set T-n --to …`): Claude for work in the code and the docs it can do alone; the user for what only a person can do or decide (an account, a purchase, a test in their hands, a choice of taste); with Crew, the colleague whose field it is, as their profile says (`.claude/agents/`), for a review, a test, research or a change in their field;
-  - tasks that belong together as one piece of work: a large task with its parts, `(in: T-n)`, one level deep;
-  - tasks another task or a commit already did (`show` names the code that cites a task), to close with `done`;
-  - tasks a later decision made moot, revised or contradicted (read the decisions they cite and the later ones), to close or rewrite;
-  - duplicates, to archive one and point the other to it with `(see: T-n)`;
-  - waits that no longer hold, goals that changed;
-  - **the points to decide**, under the decisions' "to decide" heading: one a decision already took (say which row) or later work made moot, to remove; two on the same question, to merge into one that keeps who asked and the older date; one that mixes several questions, to split; one that reads badly, to rewrite; one whose priority no longer fits; one the user can decide now, to become a row with its number from `decisions.mjs next`. They change with Edit, only under that heading, and the proposal says exactly which lines go and which come.
-- Bring them as section 3 says, as choices in the question form, one question a proposal; then apply only what the user chose: the tasks through `backlog.mjs` alone, the points to decide with Edit under their heading; at the end `check.mjs` and a short report.
+- **Do yourself**, without asking, what is clear, through `backlog.mjs` (the points to decide with Edit, only under their heading):
+  - a task's text that breaks the line's rules or reads badly (one line, clear, no « · »), a part whose goal differs from its large task's;
+  - a type missing or wrong, a priority that no longer fits (P1 only for what blocks the work at hand or the next step), who should do a task (`set T-n --to …`: Claude for work in the code and the docs it can do alone; the user for what only a person can do: an account, a purchase, a test in their hands, a choice of taste; with Crew, the colleague whose field it is, as their profile in `.claude/agents/` says);
+  - tasks plainly done by another task or a commit (`show` names the code that cites a task), closed with `done`; tasks a later accepted decision made moot or contradicted, archived or rewritten to agree with it;
+  - duplicates: one archived, the other pointing to it with `(see: T-n)`; two points to decide on the same question merged into one that keeps who asked and the older date; waits that no longer hold, goals that changed;
+  - points to decide that a decision already took or later work made moot, removed.
+- **Ask** only for what you cannot tell, as section 3 says: whether a task or a point still stands, never what to decide. A form choice that is really doubtful (a large task's grouping, say) may be asked too; few.
+- **Leave** an open point, a vague task or anything not superseded as it is, with no question.
+- At the end `check.mjs`, and a short report of what you changed and why, by item.
 
 ## The rules that stay
 

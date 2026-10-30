@@ -353,7 +353,7 @@ test("the button for where the project stands asks Claude for a short report", a
     await ui.press({ key: "where-we-stand" });
     expect(prompts[0]).toMatch(/^Fammi il punto della situazione del progetto, in al massimo 30 righe/);
     await ui.press({ key: "tidy-backlog" });
-    expect(prompts[1]).toMatch(/^Riordina il backlog con la skill tidy, sezione 4/);
+    expect(prompts[1]).toMatch(/^Riordina il backlog e le decisioni da prendere con la skill tidy, sezione 4: .*mai di deciderlo/);
     await ui.unmount();
 });
 
