@@ -223,8 +223,11 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
     return new Map(tasks.map((task) => {
         const id = `${prefix}-${task.id}`;
         const own = (parts.get(id) ?? []).map((part) => byId.get(part));
-        // The next part to start: one to do and free, by priority, then the oldest.
-        const next = own.filter((part) => part.state === "todo" && graph.blockers(`${prefix}-${part.id}`).length === 0).sort((first, second) => `${first.priority}${first.created}`.localeCompare(`${second.priority}${second.created}`))[0];
+        // The next part to start: one to do and free, by priority, then the oldest; a postponed one when none is to do, so that a large
+        // task postponed with its parts starts again from its ▶.
+        const waiting = (part) => graph.blockers(`${prefix}-${part.id}`).length === 0;
+        const rank = (part) => `${part.state === "todo" ? 0 : 1}${part.priority}${part.created}`;
+        const next = own.filter((part) => ["todo", "postponed"].includes(part.state) && waiting(part)).sort((first, second) => rank(first).localeCompare(rank(second)))[0];
         return [task.id, {
             parent: task.parent ?? null,
             parts: own.map((part) => `${prefix}-${part.id}`),

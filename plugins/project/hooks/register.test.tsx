@@ -137,7 +137,12 @@ test("a task opens in place; Done and Postpone and the priority go through the b
         runs.length = 0;
         const ui = await $.ui.mount({ plugin, surface, component: "Pane", requestId: "project", props });
         await ui.press({ key: "open-61" });
-        expect(await ui.find({ type: "Text", text: /T-61 · P1 priorità alta · impegno alto · Matteo Conti · Revisione · nato il 2026-10-28/ })).toBeDefined();
+        // Opened: chips for its goal and the day it was born, a chip on the desktop, in brackets on the terminal; who holds it, its
+        // priority and effort are only in the row.
+        expect(await ui.find({ type: "Text", text: /^\[?Matteo Conti\]?$/ })).toBeUndefined();
+        expect(await ui.find({ type: "Text", text: /^\[?⚑ Revisione\]?$/ })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: /^\[?nato il 2026-10-28\]?$/ })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: /impegno/ })).toBeUndefined();
         await ui.press({ key: "done-61" });
         await ui.press({ key: "postpone-61" });
         await ui.press({ key: "priority-61" });
@@ -282,16 +287,18 @@ test("a blocked task shows what it waits for in place of its age, its ▶ asks f
         // On the desktop a hint says it in words.
         expect(await ui.find({ type: "Text", text: "Aspetta T-62, #giulia-1, ancora aperti: si può avviare quando sono fatti" })).toEqual(surface === "desktop" ? expect.anything() : undefined);
         await ui.press({ key: "open-72" });
-        expect(await ui.find({ type: "Text", text: "aspetta: T-62, #giulia-1" })).toBeDefined();
-        expect(await ui.find({ type: "Text", text: "⛓ la catena, in ordine: #giulia-1 → T-62 → T-72" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: "aspetta" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: /^\[?#giulia-1\]?$/ })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: /^\[?⛓ #giulia-1 → T-62 → T-72\]?$/ })).toBeDefined();
         await ui.press({ key: "open-72" });
         await ui.press({ key: "open-143" });
-        expect(await ui.find({ type: "Text", text: "vedi: D-541" })).toBeDefined();
-        expect(await ui.find({ type: "Text", text: "citato da: T-61" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: "vedi" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: /^\[?D-541\]?$/ })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: "citato da" })).toBeDefined();
         expect((await ui.find({ type: "Link", text: "📄 Nota ↗" }))?.props.href).toBe("http://localhost:5790/note/143");
         // The code that cites it: the commits, the latest a link; the pull request, merged, and that the task can close.
         expect((await ui.find({ type: "Link", text: "⎇ 3 commit, l'ultimo il 2026-10-30" }))?.props.href).toBe("https://github.com/a/b/commit/759cf6f");
-        expect((await ui.find({ type: "Link", text: "pull request #12, unita il 2026-10-30: Il plugin" }))?.props.href).toBe("https://github.com/a/b/pull/12");
+        expect((await ui.find({ type: "Link", text: "#12 unita il 2026-10-30" }))?.props.href).toBe("https://github.com/a/b/pull/12");
         expect(await ui.find({ type: "Text", text: "✓ pull request #12 unita: si può chiudere" })).toBeDefined();
         await ui.press({ key: "open-143" });
         await ui.unmount();
@@ -354,9 +361,11 @@ test("a large task shows its parts closed in place of its age, its ▶ starts th
     expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 4");
     expect(await ui.find({ key: "part-81" })).toBeDefined();
     await ui.press({ key: "open-81" });
-    expect(await ui.find({ type: "Text", text: "parte di: T-80" })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: "parte di" })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: "[T-80]" })).toBeDefined();
     await ui.press({ key: "open-80" });
-    expect(await ui.find({ type: "Text", text: "parti, 1 chiuse su 2: T-81, T-82" })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: "parti · 1/2" })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: "[T-82]" })).toBeDefined();
     runs.length = 0;
     await ui.press({ key: "start-80" });
     expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "start", "T-81"]]);
@@ -372,7 +381,7 @@ test("the open GitHub issues no task does yet show apart and go into the backlog
     runs.length = 0;
     await ui.press({ key: "issue-take-40" });
     await ui.press({ key: "open-70" });
-    expect((await ui.find({ type: "Link", text: "issue #33: npm login (aperta)" }))?.props.href).toBe("https://github.com/a/b/issues/33");
+    expect((await ui.find({ type: "Link", text: "◉ #33 aperta" }))?.props.href).toBe("https://github.com/a/b/issues/33");
     await ui.press({ key: "done-70" });
     expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "add", "Il login fallisce", "--issue", "40"], ["backlog.mjs", "done", "T-70"]]);
     expect(prompts[0]).toMatch(/^T-70 è fatto e la sua issue #33 su GitHub è ancora aperta: chiedimi se chiuderla/);
@@ -388,8 +397,7 @@ test("a task's type as Jira draws it, its due day near or late, a task stuck in 
         expect(await ui.find({ type: "Text", text: "⏰ in ritardo di 2 g" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /^⏸ 6.g$/ })).toBeDefined();
         await ui.press({ key: "open-70" });
-        expect(await ui.find({ type: "Text", text: "tipo: bug" })).toBeDefined();
-        expect(await ui.find({ type: "Text", text: "scade il 2026-10-28" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: /^\[?⏰ in ritardo di 2 g\]?$/ })).toBeDefined();
         await ui.press({ key: "open-70" });
         await ui.press({ key: "toggle-decisions" });
         await ui.press({ key: "open-decision-541" });
@@ -398,4 +406,19 @@ test("a task's type as Jira draws it, its due day near or late, a task stuck in 
         await ui.press({ key: "toggle-decisions" });
         await ui.unmount();
     }
+});
+
+test("a postponed task goes back to do from its row, and a large task takes its postponed parts along", async ($, on) => {
+    const { runs } = world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
+    await ui.press({ key: "toggle-postponed" });
+    await ui.press({ key: "open-71" });
+    expect(await ui.find({ key: "postpone-71" })).toBeUndefined();
+    runs.length = 0;
+    await ui.press({ key: "resume-71" });
+    await ui.press({ key: "open-80" });
+    await ui.press({ key: "postpone-80" });
+    expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "todo", "T-71"], ["backlog.mjs", "postpone", "T-80", "T-81"]]);
+    await ui.unmount();
 });

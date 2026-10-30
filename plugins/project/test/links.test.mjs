@@ -250,3 +250,9 @@ test("list marks a blocked task with what it still waits for, and a large task w
     assert.match(listed, /· waits \(after: T-2, #giulia-1\) {2}⛓ T-2, #giulia-1$/m);
     assert.match(listed, /· part one \(in: T-1\)$/m);
 });
+
+test("a large task postponed with its parts starts again from its next part, a postponed one when none is to do", () => {
+    put("docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n## Postponed\n\n- T-1 · P2 · high · Claude · 2026-10-01 · — · the big one\n- T-2 · P2 · medium · Claude · 2026-10-01 · — · part one (in: T-1)\n- T-3 · P1 · medium · Claude · 2026-10-02 · — · part two (in: T-1)\n\n## Done\n");
+    assert.match(run("show", "T-1"), /the next part to start: T-3/);
+    assert.match(run("start", "T-3"), /T-3: In progress\nT-1: In progress/);
+});

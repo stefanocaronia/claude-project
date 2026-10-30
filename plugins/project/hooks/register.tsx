@@ -318,35 +318,64 @@ export const register: Register = (on) => {
                 </Box>
             )
             : control);
-        // A task's links, both ways, under its facts: what it waits for and what waits for it, what it points to and what points to it.
-        const linkLines = (task: Task) => [
-            task.type ? words("typeLabel", { name: snapshot.types?.[task.type] ?? task.type }) : null,
-            task.due ? words("dueLabel", { day: task.due }) : null,
-            task.started && task.state === "doing" ? words(task.stale ? "staleTip" : "startedLabel", { day: task.started }) : null,
-            (task.decisions ?? []).length > 0 ? words("decisionsOf", { list: (task.decisions ?? []).join(", ") }) : null,
-            task.parent ? words("partOf", { id: task.parent }) : null,
-            isLarge(task) ? words("partsLabel", { done: task.partsDone, total: task.parts.length, list: task.parts.join(", ") }) : null,
-            (task.after ?? []).length > 0 ? words("waitsFor", { list: task.after.join(", ") }) : null,
-            (task.chain ?? []).length > 0 ? `⛓ ${words("chainFirst", { list: [...task.chain, `${prefix}-${task.id}`].join(" → ") })}` : null,
-            (task.waitedBy ?? []).length > 0 ? words("waitedBy", { list: task.waitedBy.join(", ") }) : null,
-            (task.see ?? []).length > 0 ? words("seeLabel", { list: task.see.join(", ") }) : null,
-            (task.seenFrom ?? []).length > 0 ? words("seenFrom", { list: task.seenFrom.join(", ") }) : null,
-        ].filter((line): line is string => Boolean(line)).map((line, index) => <Text key={`link-${task.id}-${index}`} dimColor>{line}</Text>);
-        // A task's card; a large task's holds its open parts under it, those in progress first, then as the lists order them.
-        // The code that cites a task, under its links: its commits, the latest a link, and each pull request, a link, with its state; a
-        // merged one on a task still open says it can close.
-        const codeLines = (task: Task) => {
-            const latest = (task.commits ?? [])[0];
-            const issue = task.issueInfo;
-            const state = (pull: Pull) => (pull.merged ? words("pullMerged", { day: pull.merged }) : words(pull.state === "open" ? "pullOpen" : "pullClosed"));
-            const line = (key: string, text: string, href: string | null | undefined, color?: string) => (href ? <Link key={key} href={href}>{text}</Link> : <Text key={key} dimColor={!color} color={color}>{text}</Text>);
-            return [
-                issue ? line(`issue-${task.id}`, words("issueLabel", { issue: `#${issue.number}`, title: issue.title, state: words(issue.state === "open" ? "issueStateOpen" : "issueStateClosed") }), issue.url) : null,
-                latest ? line(`commits-${task.id}`, words("commitsCount", { count: task.commitCount, day: latest.day }), latest.url) : null,
-                ...(task.pulls ?? []).map((pull) => line(`pull-${task.id}-${pull.number}`, words("codePull", { number: pull.number, state: state(pull), title: pull.title }), pull.url)),
-                task.mergedPull ? line(`merged-${task.id}`, `✓ ${words("mergedCanClose", { number: task.mergedPull.number })}`, null, workColor) : null,
-            ].filter((element): element is JSX.Element => element !== null);
+        // A task opened: its whole text, then chips for what the row does not show (its goal, its days, its issue and note), then a
+        // labeled row of chips for each tie (parts, waits, links both ways, decisions, code). What the row shows already, who holds it,
+        // its type, priority, effort and number, is not said again. A chip is one line high: a tinted background, no border.
+        const chip = (key: string, text: string, color?: string, href?: string | null, hint?: string) => {
+            const label = href ? <Link key={`${key}-link`} href={href}>{text}</Link> : <Text key={`${key}-text`} color={color} dimColor={!color}>{text}</Text>;
+            const drawn = isDesktop
+                ? <Box key={key} flexShrink={0} paddingX={1} backgroundColor={color ? `${color}26` : stateLayer}>{label}</Box>
+                : <Box key={key} flexShrink={0}>{href ? label : <Text color={color} dimColor={!color}>{`[${text}]`}</Text>}</Box>;
+            return hint ? tip(key, hint, drawn) : drawn;
         };
+        const refColor = (id: string) => (id.startsWith(`${snapshot.prefixes.decision}-`) ? decisionColor : id.startsWith(`${prefix}-`) ? taskColor : undefined);
+        const refs = (key: string, ids: string[]) => ids.map((id) => chip(`${key}-${id}`, id, refColor(id)));
+        const field = (key: string, label: string, chips: (JSX.Element | null)[]) => {
+            const shown = chips.filter((one): one is JSX.Element => one !== null);
+            return shown.length > 0
+                ? (
+                    <Box key={key} flexDirection="row" flexWrap="wrap" gap={1} alignItems="center">
+                        <Box width={13} flexShrink={0}><Text dimColor>{label}</Text></Box>
+                        {shown}
+                    </Box>
+                )
+                : null;
+        };
+        const taskDetails = (task: Task) => {
+            const id = `${prefix}-${task.id}`;
+            const due = task.dueInfo;
+            const issue = task.issueInfo;
+            const latest = (task.commits ?? [])[0];
+            const pullState = (pull: Pull) => (pull.merged ? words("pullMerged", { day: pull.merged }) : words(pull.state === "open" ? "pullOpen" : "pullClosed"));
+            const what = [
+                task.goal === snapshot.words.noGoal ? null : chip(`goal-chip-${task.id}`, `⚑ ${task.goal}`),
+                task.due ? chip(`due-chip-${task.id}`, due && (due.isLate || due.isNear) ? `⏰ ${dueWords(due)}` : words("dueLabel", { day: task.due }), due?.isLate ? errorColor : due?.isNear ? warningColor : undefined, null, words("dueTip", { day: task.due })) : null,
+                task.started && task.state === "doing" ? chip(`started-chip-${task.id}`, words(task.stale ? "staleTip" : "startedLabel", { day: task.started }), task.stale ? warningColor : workColor) : null,
+                chip(`born-chip-${task.id}`, words("born", { date: task.created })),
+                issue ? chip(`issue-chip-${task.id}`, `◉ #${issue.number} ${words(issue.state === "open" ? "issueStateOpen" : "issueStateClosed")}`, undefined, issue.url, issue.title) : null,
+                task.noteHref ? chip(`note-chip-${task.id}`, words("openNote"), undefined, task.noteHref) : null,
+            ].filter((one): one is JSX.Element => one !== null);
+            return [
+                <Text key={`text-${task.id}`}>{task.text}</Text>,
+                <Box key={`what-${task.id}`} flexDirection="row" flexWrap="wrap" gap={1}>{what}</Box>,
+                field(`part-of-${task.id}`, words("labelPartOf"), task.parent ? refs(`part-of-${task.id}`, [task.parent]) : []),
+                field(`parts-${task.id}`, words("labelParts", { done: task.partsDone, total: (task.parts ?? []).length }), refs(`parts-${task.id}`, task.parts ?? [])),
+                field(`waits-${task.id}`, words("labelWaits"), refs(`waits-${task.id}`, task.after ?? [])),
+                field(`chain-${task.id}`, words("labelChain"), (task.chain ?? []).length > 0 ? [chip(`chain-chip-${task.id}`, `⛓ ${[...task.chain, id].join(" → ")}`, warningColor)] : []),
+                field(`waited-${task.id}`, words("labelWaitedBy"), refs(`waited-${task.id}`, task.waitedBy ?? [])),
+                // A decision it points to is among its decisions: «see» keeps the rest.
+                field(`see-${task.id}`, words("labelSee"), refs(`see-${task.id}`, (task.see ?? []).filter((one) => !(task.decisions ?? []).includes(one)))),
+                field(`seen-${task.id}`, words("labelSeenFrom"), refs(`seen-${task.id}`, task.seenFrom ?? [])),
+                field(`decisions-${task.id}`, words("labelDecisions"), refs(`decisions-${task.id}`, task.decisions ?? [])),
+                field(`code-${task.id}`, words("labelCode"), [
+                    latest ? chip(`commits-${task.id}`, words("commitsCount", { count: task.commitCount, day: latest.day }), undefined, latest.url, latest.subject) : null,
+                    ...(task.pulls ?? []).map((pull) => chip(`pull-${task.id}-${pull.number}`, `#${pull.number} ${pullState(pull)}`, pull.merged ? workColor : undefined, pull.url, pull.title)),
+                ]),
+                task.mergedPull ? <Text key={`merged-${task.id}`} color={workColor}>{`✓ ${words("mergedCanClose", { number: task.mergedPull.number })}`}</Text> : null,
+            ];
+        };
+        // A task's id, and for a large task its parts in a state too: a large task postponed or put back to do takes those parts along.
+        const withParts = (task: Task, state: Task["state"]) => [`${prefix}-${task.id}`, ...snapshot.tasks.filter((part) => part.parent === `${prefix}-${task.id}` && part.state === state).map((part) => `${prefix}-${part.id}`)];
         const taskRow = (task: Task) => {
             const parts = snapshot.tasks.filter((part) => part.parent === `${prefix}-${task.id}`)
                 .sort((first, second) => Number(second.state === "doing") - Number(first.state === "doing") || order(first).localeCompare(order(second)));
@@ -359,8 +388,6 @@ export const register: Register = (on) => {
         const taskLines = (task: Task, isPart = false) => {
             const key = `task-${task.id}`;
             const isExpanded = panel.expanded === key;
-            const member = byName.get(task.to);
-            const facts = [`${prefix}-${task.id}`, `${task.priority} ${words("priorityLabel", { name: snapshot.words.priorities[task.priority] ?? "" })}`, `${words("effort")} ${task.effort}`, member?.fullName ?? task.to, task.goal === snapshot.words.noGoal ? null : task.goal, words("born", { date: task.created })];
             return [
                 <Box key={`row-${task.id}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
                     {face(task.to, isPart ? 18 : 24)}
@@ -379,14 +406,12 @@ export const register: Register = (on) => {
                 isExpanded
                     ? (
                         <Box key={`details-${task.id}`} flexDirection="column" gap={1} paddingLeft={isDesktop ? 4 : 2}>
-                            <Text>{task.text}</Text>
-                            <Text dimColor>{facts.filter(Boolean).join(" · ")}</Text>
-                            {linkLines(task)}
-                            {codeLines(task)}
+                            {taskDetails(task)}
                             <Box flexDirection="row" columnGap={2}>
-                                {task.noteHref ? <Link key={`note-${task.id}`} href={task.noteHref}>{words("openNote")}</Link> : null}
                                 <Button key={`done-${task.id}`} plain label={words("markDone")} onPress={() => markDone($, snapshot, task)} />
-                                {task.state === "postponed" ? null : <Button key={`postpone-${task.id}`} plain dimColor label={words("postpone")} onPress={() => backlog($, ["postpone", `${prefix}-${task.id}`])} />}
+                                {task.state === "postponed"
+                                    ? <Button key={`resume-${task.id}`} plain label={words("backToDo")} onPress={() => backlog($, ["todo", ...withParts(task, "postponed")])} />
+                                    : <Button key={`postpone-${task.id}`} plain dimColor label={words("postpone")} onPress={() => backlog($, ["postpone", ...withParts(task, "todo")])} />}
                             </Box>
                         </Box>
                     )
