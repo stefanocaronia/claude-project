@@ -17,8 +17,8 @@ const scripts = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts");
 let root;
 
 test("a text's after and see are read from its end in any order, and written back after first", () => {
-    assert.deepEqual(splitLinks("fix it (see: T-12, D-2) (after: T-62, #giulia-1)"), { text: "fix it", after: ["T-62", "#giulia-1"], see: ["T-12", "D-2"], parent: null, issue: null, due: null, type: null });
-    assert.deepEqual(splitLinks("the (after: x) is in the middle"), { text: "the (after: x) is in the middle", after: [], see: [], parent: null, issue: null, due: null, type: null });
+    assert.deepEqual(splitLinks("fix it (see: T-12, D-2) (after: T-62, #giulia-1)"), { text: "fix it", after: ["T-62", "#giulia-1"], see: ["T-12", "D-2"], parent: null, issue: null, due: null, type: null, by: null });
+    assert.deepEqual(splitLinks("the (after: x) is in the middle"), { text: "the (after: x) is in the middle", after: [], see: [], parent: null, issue: null, due: null, type: null, by: null });
     assert.equal(joinLinks("fix it", { after: ["T-62"], see: ["D-2"] }), "fix it (after: T-62) (see: D-2)");
     assert.equal(joinLinks("fix it", {}), "fix it");
     assert.deepEqual(listOf("T-3, #giulia-1 T-3"), ["T-3", "#giulia-1"]);
@@ -93,7 +93,7 @@ test("set --after and --see write the links, show reads them both ways with the 
     assert.match(run("set", "T-1", "--after", "T-2, #giulia-1", "--see", "D-1"), /· the dice \(after: T-2, #giulia-1\) \(see: D-1\)$/);
     assert.match(run("set", "T-3", "--see", "T-1"), /· the log \(see: T-1\)$/);
     assert.match(run("set", "T-1", "--text", "the dice, fair"), /· the dice, fair \(after: T-2, #giulia-1\) \(see: D-1\)$/);
-    assert.match(run("add", "the table (after: T-1)", "--goal", "Core"), /T-4 added: .* · the table \(after: T-1\)$/);
+    assert.match(run("add", "the table (after: T-1)", "--goal", "Core"), /T-4 added: .* · the table \(after: T-1\) \(by: Claude\)$/);
 
     const shown = run("show", "T-1");
     assert.match(shown, /waits for: T-2 \(To do\), #giulia-1 \(open in a todo\)/);
@@ -211,7 +211,7 @@ test("a goal closes once its tasks are closed, refuses new tasks while closed, o
 });
 
 test("a part names its large task at the end of its text, one level deep, and the large one finds its parts", () => {
-    assert.deepEqual(splitLinks("the format (in: T-23) (after: T-24)"), { text: "the format", after: ["T-24"], see: [], parent: "T-23", issue: null, due: null, type: null });
+    assert.deepEqual(splitLinks("the format (in: T-23) (after: T-24)"), { text: "the format", after: ["T-24"], see: [], parent: "T-23", issue: null, due: null, type: null, by: null });
     assert.equal(joinLinks("the format", { after: ["T-24"], parent: "T-23" }), "the format (after: T-24) (in: T-23)");
     const tasks = [{ id: 23, parent: null }, { id: 24, parent: "T-23" }, { id: 25, parent: "T-23" }, { id: 26, parent: "T-25" }];
     assert.deepEqual([...partsOf(tasks).entries()], [["T-23", ["T-24", "T-25"]], ["T-25", ["T-26"]]]);

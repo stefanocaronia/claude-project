@@ -1049,6 +1049,27 @@
         font-weight: 600;
     }
 
+    /* A large task's parts closed, a chip that shows or folds them */
+    .parts-chip {
+        border: 0;
+        border-radius: 6px;
+        padding: 0 6px;
+        font: inherit;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        background: color-mix(in srgb, var(--ink) 7%, transparent);
+        cursor: pointer;
+    }
+
+    .parts-chip:hover {
+        background: color-mix(in srgb, var(--ink) 12%, transparent);
+    }
+
+    .parts-chip.doing {
+        color: var(--work);
+        background: color-mix(in srgb, var(--work) 15%, transparent);
+    }
+
     /* A task's waits and parts in place of its age, and its links under its text */
     .wait.blocked {
         color: var(--ink-2);
@@ -1070,6 +1091,43 @@
 
     .epic.closed {
         opacity: 0.7;
+    }
+
+    /* A task written in the list */
+    .task-form textarea {
+        width: 100%;
+        font: inherit;
+        font-size: 13px;
+        padding: 6px 8px;
+        border: 1px solid var(--axis);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--ink);
+        resize: vertical;
+    }
+
+    .form-fields {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        margin: 8px 0;
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    .form-field {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .link-button {
+        border: 0;
+        background: none;
+        padding: 0;
+        font: inherit;
+        color: var(--accent);
+        cursor: pointer;
     }
 
     /* The open GitHub issues not yet in the backlog */
@@ -2102,6 +2160,10 @@ let renderWaits = false;
 let focusAfter = null;
 let landed = null;
 let announceTimer = 0;
+// The task being written in the list: "new", a task's number, or null; while it is, the page does not draw itself again.
+let editing = null;
+// A large task's parts shown (true) or folded (false), by task number, as the user left them.
+const folds = {};
 // The documents' texts the page has read, for their previews: by address and the day they changed; those being read.
 const documentTexts = new Map();
 const documentsReading = new Set();
@@ -2167,7 +2229,7 @@ async function load()
     live.classList.add("pulse");
     setTimeout(() => live.classList.remove("pulse"), 300);
 
-    if (signature === lastData) {
+    if (signature === lastData || editing !== null) {
         return;
     }
 
@@ -2367,10 +2429,11 @@ function roadmap()
 function phaseRow(phase, epics)
 {
     const percent = ratio(phase.done, phase.total);
-    const complete = phase.total > 0 && phase.done === phase.total;
-    const status = phase.total === 0 ? "empty" : complete ? "complete" : "active";
+    // A phase is complete when its tasks are all done, or its goals all closed.
+    const complete = phase.isClosed || (phase.total > 0 && phase.done === phase.total);
+    const status = complete ? "complete" : phase.total === 0 ? "empty" : "active";
     const working = epics.some((section) => section.items.some((item) => item.state === "doing"));
-    const words = phase.total === 0 ? t("phaseNotStarted") : complete ? t("phaseClosed") : t("phaseProgress", phase.done, phase.total, percent);
+    const words = complete ? t("phaseClosed") : phase.total === 0 ? t("phaseNotStarted") : t("phaseProgress", phase.done, phase.total, percent);
     const node = phase.number === null ? "∗" : complete ? "✓" : phase.number;
     const label = phase.number === null ? escape(phase.name) : `<span>${escape(t("phase", phase.number))}</span> ${escape(phase.name)}`;
     const outcome = phase.outcome ? `<p class="outcome"><b>${t("phaseOutcome")}</b> ${escape(phase.outcome)}</p>` : phase.number === null ? `<p class="outcome">${t("acrossHint")}</p>` : "";
@@ -2570,7 +2633,7 @@ function tasksPanel()
     const { tasks, colleagues } = data;
 
     return `<section class="card span-12">
-            <h2>${t("listTitle")} <button type="button" class="action" id="tidy-backlog" data-tidy-backlog>${t("tidyBacklog")}</button></h2>
+            <h2>${t("listTitle")} <button type="button" class="action primary" id="new-task" data-new-task>${t("newTask")}</button> <button type="button" class="action" id="tidy-backlog" data-tidy-backlog>${t("tidyBacklog")}</button></h2>
             <p class="hint">${escape(t("listHint", data.boardDays))}</p>
             <div class="filters" id="task-filters">${taskFilters()}</div>
             <div id="task-list">${taskListBody()}</div>
@@ -2694,7 +2757,7 @@ function taskCard(task, lane, isUnder = false)
     return `<li class="task ${column} ${isUnder ? "part" : ""} ${expanded.has(`board-${name}`) ? "open" : ""} ${landed === task.id ? "landed" : ""}" draggable="true" data-task="${task.id}" data-lane="${attribute(lane)}" data-column="${column}">
             <div class="task-top">${typeIcon(task)}${priorityControl(task, "board")}<span class="id">${escape(name)}</span><span class="grow"></span>${effortMeter(task)}${face(task)}</div>
             ${expandButton(`board-${name}`, escape(task.text))}
-            ${taskLinks(task)}
+            ${taskLinks(task, isUnder)}
             <div class="task-foot">${foot}</div>
             <div class="moves" role="group" aria-label="${attribute(t("moveGroup", name))}"><span aria-hidden="true">${escape(t("moveLabel"))}</span>${moves}</div>
         </li>`;
@@ -2741,7 +2804,7 @@ function withPartsUnder(tasks)
 {
     const ids = new Set(tasks.map((task) => taskName(task)));
     const isUnder = (task) => Boolean(task.parent && ids.has(task.parent));
-    const partsOf = (task) => tasks.filter((part) => part.parent === taskName(task)).sort((first, second) => Number(second.state === "doing") - Number(first.state === "doing"));
+    const partsOf = (task) => (isUnfolded(task) ? tasks.filter((part) => part.parent === taskName(task)).sort((first, second) => Number(second.state === "doing") - Number(first.state === "doing")) : []);
     return tasks.filter((task) => !isUnder(task)).flatMap((task) => [task, ...partsOf(task)]);
 }
 
@@ -2749,7 +2812,7 @@ function taskListBody()
 {
     const tasks = filteredTasks();
     const ids = new Set(tasks.map((task) => taskName(task)));
-    const rows = tasks.map((task) => taskRow(task, Boolean(task.parent && ids.has(task.parent)))).join("");
+    const rows = (editing === "new" ? taskForm(null) : "") + tasks.map((task) => (editing === task.id ? taskForm(task) : taskRow(task, Boolean(task.parent && ids.has(task.parent))))).join("");
     const filtered = Object.entries(taskFilter).some(([kind, value]) => value !== (kind === "state" ? "open" : "all"));
 
     return `<p class="found">${escape(t("listCount", tasks.length))}${filtered ? ` · <button type="button" id="filters-clear" data-clear-filters>${t("clearFilters")}</button>` : ""}</p>
@@ -2770,11 +2833,17 @@ function taskRow(task, isUnder = false)
             ${face(task)}
             <span class="marks">${typeIcon(task)}${priorityControl(task, "list")}</span>
             <div>${expandButton(`list-${name}`, `<span class="id">${escape(name)}</span>${escape(task.text)}`)}
-                <div class="row-meta"><span class="row-state"><i class="column-mark ${column}"></i>${escape(stateName(column))}</span>${work}${goal}${when}</div>
-                ${taskLinks(task)}
+                <div class="row-meta"><span class="row-state"><i class="column-mark ${column}"></i>${escape(stateName(column))}</span>${work}${goal}${when}${task.by ? `<span>${escape(t("createdBy", task.by))}</span>` : ""}<button type="button" class="link-button" id="edit-${name}" data-edit-task="${task.id}">${t("editTask")}</button></div>
+                ${taskLinks(task, isUnder)}
             </div>
             ${effortMeter(task) || "<span></span>"}
         </li>`;
+}
+
+/** A large task's parts shown: as the user left them, else while one is in progress. */
+function isUnfolded(task)
+{
+    return folds[task.id] ?? (data.board ?? []).some((part) => part.parent === taskName(task) && part.state === "doing");
 }
 
 /** In place of a task's age: what a blocked task still waits for, «⛓ T-62», or a large task's parts closed, each said in words under
@@ -2786,7 +2855,8 @@ function waitOrAge(task)
 
     if (parts.length > 0) {
         const words = t("partsTip", task.partsDone, parts.length);
-        return `<span class="wait" data-tip="${attribute(escape(words))}"><span aria-hidden="true">${escape(t("partsCount", task.partsDone, parts.length))}</span><span class="visually-hidden">${escape(words)}</span></span>`;
+        const isOpen = isUnfolded(task);
+        return `<button type="button" class="parts-chip ${task.state === "doing" ? "doing" : ""}" id="fold-${taskName(task)}" data-fold="${task.id}" aria-expanded="${isOpen}" data-tip="${attribute(escape(words))}"><span aria-hidden="true">${isOpen ? "▾" : "▸"} ${task.partsDone}/${parts.length}</span><span class="visually-hidden">${escape(words)}</span></button>`;
     }
 
     if (blockers.length > 0) {
@@ -2830,14 +2900,15 @@ function typeIcon(task)
 
 /** A task's links in words, both ways, under its text: the large task it is a part of, what it waits for, what waits for it, what it
  * points to and what points to it; its note, which opens. Nothing when it has none. */
-function taskLinks(task)
+function taskLinks(task, isUnder = false)
 {
     const line = (label, list) => (list?.length ? `<span><b>${escape(label)}</b> ${escape(list.join(", "))}</span>` : "");
     const parts = [
         task.due ? `<span><b>${escape(t("linkDue"))}</b> ${escape(formatDay(task.due))}</span>` : "",
         task.started && task.state === "doing" ? `<span><b>${escape(t("linkStarted"))}</b> ${escape(formatDay(task.started))}</span>` : "",
         line(t("linkDecisions"), task.decisions),
-        line(t("linkPartOf"), task.parent ? [task.parent] : []),
+        // A part drawn under its large task does not name it again.
+        line(t("linkPartOf"), task.parent && !isUnder ? [task.parent] : []),
         line(t("linkParts"), task.parts),
         line(t("linkWaitsFor"), task.after),
         line(t("linkWaitedBy"), task.waitedBy),
@@ -2884,6 +2955,75 @@ function issuesCard()
         </section>`;
 }
 
+/** A task written in the list, new or one there: its text, goal, priority, type, who holds it and when it is due; save, cancel and,
+ * for one there, archive. */
+function taskForm(task)
+{
+    const id = task ? task.id : "new";
+    const option = (value, label, chosen) => `<option value="${attribute(value)}" ${value === chosen ? "selected" : ""}>${escape(label)}</option>`;
+    const goals = [...new Set([data.words.noGoal, ...(data.plan.openGoals ?? []), ...(task ? [task.goal] : [])])];
+    const people = [...new Set([...(data.people ?? []), ...data.colleagues.map((person) => person.short ?? person.name), ...(task ? [task.to] : [])])];
+    const types = ["", ...Object.keys(data.types ?? {})];
+    // A large task takes parts one level deep: the open tasks that are no part themselves, nor this task.
+    const parents = ["", ...(data.board ?? []).filter((one) => !one.parent && columnOf(one) !== "done" && one.id !== task?.id && !(task?.parts ?? []).length).map((one) => taskName(one))];
+    const parentLabel = (name) => {
+        const one = (data.board ?? []).find((each) => taskName(each) === name);
+        return one ? `${name} · ${one.text.length > 50 ? `${one.text.slice(0, 50)}…` : one.text}` : name;
+    };
+    const field = (key, label, control) => `<label class="form-field"><span>${escape(label)}</span>${control}</label>`;
+
+    return `<li class="row task-form" data-form="${id}">
+            <span></span><span></span>
+            <div>
+                <textarea id="form-text-${id}" rows="2" placeholder="${attribute(t("taskTextHint"))}">${escape(task?.text ?? "")}</textarea>
+                <div class="form-fields">
+                    ${field("goal", t("filterGoal"), `<select id="form-goal-${id}">${goals.map((goal) => option(goal, goal === data.words.noGoal ? t("noGoalLane") : goal, task?.goal ?? data.words.noGoal)).join("")}</select>`)}
+                    ${field("priority", t("filterPriority"), `<select id="form-priority-${id}">${["P1", "P2", "P3"].map((key) => option(key, priorityName(key), task?.priority ?? "P2")).join("")}</select>`)}
+                    ${field("type", t("filterType"), `<select id="form-type-${id}">${types.map((key) => option(key, key ? data.types[key] : "—", task?.type ?? "")).join("")}</select>`)}
+                    ${field("to", t("filterWho"), `<select id="form-to-${id}">${people.map((person) => option(person, person, task?.to ?? people[0])).join("")}</select>`)}
+                    ${field("due", t("linkDue"), `<input type="date" id="form-due-${id}" value="${attribute(task?.due ?? "")}">`)}
+                    ${(task?.parts ?? []).length ? "" : field("parent", t("linkPartOf"), `<select id="form-parent-${id}">${[...new Set([...parents, ...(task?.parent ? [task.parent] : [])])].map((name) => option(name, name ? parentLabel(name) : "—", task?.parent ?? "")).join("")}</select>`)}
+                </div>
+                <div class="actions">
+                    <button type="button" class="action primary" data-save-task="${id}">${t("saveTask")}</button>
+                    <button type="button" class="action" data-cancel-task>${t("cancelEdit")}</button>
+                    ${task ? `<button type="button" class="action" data-archive-task="${task.id}">${t("archiveTask")}</button>` : ""}
+                </div>
+            </div>
+            <span></span>
+        </li>`;
+}
+
+/** Saves a task written in the list: a new one added, one there changed in what changed. */
+async function saveTask(id)
+{
+    const value = (field) => document.getElementById(`form-${field}-${id}`)?.value ?? "";
+    const text = value("text").trim();
+
+    if (!text) {
+        alert(t("taskTextHint"));
+        return;
+    }
+
+    const fields = { text, goal: value("goal"), priority: value("priority"), type: value("type"), to: value("to"), due: value("due"), parent: value("parent") };
+
+    // A part without a goal of its own takes its large task's.
+    if (fields.parent && fields.goal === data.words.noGoal) {
+        fields.goal = data.board.find((one) => taskName(one) === fields.parent)?.goal ?? fields.goal;
+    }
+    const task = id === "new" ? null : data.board.find((one) => String(one.id) === String(id));
+    const changed = task ? Object.fromEntries(Object.entries(fields).filter(([key, current]) => current !== String((key === "priority" ? task.priority : task[key]) ?? ""))) : fields;
+    editing = null;
+
+    if (task && Object.keys(changed).length === 0) {
+        lastData = "";
+        await load();
+        return;
+    }
+
+    await changeTask(task ? { command: "set", id: taskName(task), ...changed } : { command: "add", ...fields }, task ? t("taskSaved", taskName(task)) : t("taskAdded"));
+}
+
 /** Puts the board's hands on the page once: drags, the moves, the priorities, the texts that open, the filters and the search. */
 function setupBoard()
 {
@@ -2908,6 +3048,35 @@ function setupBoard()
         } else if (target.hasAttribute("data-clear-filters")) {
             Object.assign(taskFilter, { state: "open", priority: "all", type: "all", who: "all", goal: "all" });
             refreshTaskList("filter-state-open");
+        } else if (target.dataset.fold) {
+            const task = data.board.find((one) => String(one.id) === target.dataset.fold);
+            folds[task.id] = !isUnfolded(task);
+            // The focus stays on the chip pressed, in its own tab: the board and the list each draw one.
+            const panel = target.closest("[id^='panel-']")?.id;
+            render();
+            document.querySelector(`#${panel} [data-fold="${task.id}"]`)?.focus();
+        } else if (target.hasAttribute("data-new-task")) {
+            editing = "new";
+            document.getElementById("task-list").innerHTML = taskListBody();
+            document.getElementById("form-text-new")?.focus();
+        } else if (target.dataset.editTask) {
+            editing = Number(target.dataset.editTask);
+            document.getElementById("task-list").innerHTML = taskListBody();
+            document.getElementById(`form-text-${editing}`)?.focus();
+        } else if (target.dataset.saveTask) {
+            saveTask(target.dataset.saveTask);
+        } else if (target.hasAttribute("data-cancel-task")) {
+            editing = null;
+            document.getElementById("task-list").innerHTML = taskListBody();
+            lastData = "";
+            load();
+        } else if (target.dataset.archiveTask) {
+            const name = taskName({ id: target.dataset.archiveTask });
+
+            if (confirm(t("archiveConfirm", name))) {
+                editing = null;
+                changeTask({ command: "archive", id: name }, t("taskArchived", name));
+            }
         } else if (target.hasAttribute("data-tidy-backlog")) {
             // The backlog's tidying runs from the cleanup, in the Health tab, where its proposals show.
             selectTab(document.getElementById("tab-health"));

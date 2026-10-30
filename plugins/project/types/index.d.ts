@@ -8,6 +8,8 @@ export type Task = {
     /** The Crew colleague who holds it, by agent id; null for a person or Claude. */
     colleague: string | null;
     created: string;
+    /** Who created it, `(by: Stefano)`: Claude, a person or a colleague; null when the backlog does not say. */
+    by?: string | null;
     goal: string;
     text: string;
     state: "doing" | "todo" | "postponed";
@@ -51,13 +53,17 @@ export type Pull = { number: number; title: string; state: string; url: string |
 /** A goal of the plan with its tasks counted; `closed`, the day it closed, out of the open bars. */
 export type Goal = { name: string; phase: number | null; done: number; total: number; isDoing: boolean; closed?: string | null };
 
-export type Proposal = { priority: string | null; day: string | null; text: string; whole: string; line: number };
+/** A phase of the plan, closed once every goal of it is. */
+export type Phase = { number: number; name: string; goals: number; closedGoals: number; isClosed: boolean };
 
-export type Decision = { number: number; text: string; why: string; tasks?: string[] };
+export type Proposal = { priority: string | null; day: string | null; text: string; whole: string; line: number };
 
 export type Member = { id: string; name: string; fullName: string; role: string; color: string; portrait?: string };
 
 /** What the panel draws, read from the project's files by snapshot.mjs. */
+/** A part already closed of a large task still open: done, or archived. */
+export type DonePart = { id: number; parent: string; to: string; type?: string | null; text: string; done: string | null };
+
 export type Snapshot = {
     project: string;
     language: string;
@@ -65,6 +71,8 @@ export type Snapshot = {
     prefixes: { task: string; decision: string };
     /** The task types by key, each with its name in the project's language. */
     types?: Record<string, string>;
+    /** The closed parts of the large tasks still open. */
+    doneParts?: DonePart[];
     today: string;
     page: string;
     /** The extensions' links: a page to open, or a path of the project's page to POST to. */
@@ -80,8 +88,9 @@ export type Snapshot = {
     /** The person this machine's gh is signed in as, with their GitHub picture: on their tasks and on every decision; null without gh. */
     owner?: { name: string; fullName: string; portrait?: string } | null;
     tasks: Task[];
-    plan: { updated: string | null; goals: Goal[] };
-    decisions: { open: Proposal[]; recent: Decision[] };
+    plan: { updated: string | null; goals: Goal[]; phases?: Phase[] };
+    /** The points still to decide; the decisions taken are the page's. */
+    decisions: { open: Proposal[] };
     watch: string[];
     health: { errors: number; warnings: number; notes: number } | null;
 };
@@ -100,6 +109,14 @@ export type View = {
     starting: Record<string, number>;
     /** The lists' order kept for a moment after a priority turns, by task number, until a time; null when they sort freely. */
     frozen?: { until: number; rank: Record<string, number> } | null;
+    /** The text being written: "new" for a new task, an open task's key for its text; null when none. */
+    editing?: string | null;
+    /** A new task's priority, type and large task, picked before its text is written. */
+    draft?: { priority?: string; type?: string; parent?: string };
+    /** A large task's parts shown (true) or folded (false), by task number, as the user left them. */
+    folds?: Record<string, boolean>;
+    /** The task whose «Archive» was pressed once and waits for the second press. */
+    archiving?: number | null;
 };
 
 declare module "claude-code" {

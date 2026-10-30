@@ -49,6 +49,17 @@ export function planPhases(text)
     return [...(text ?? "").matchAll(/^\| (\d+)\. ([^|]+) \| ([^|]+) \|\s*$/gm)].map((match) => ({ number: Number(match[1]), name: match[2].trim(), outcome: match[3].trim() }));
 }
 
+/** Each phase of the table with its goals counted: { number, name, outcome, goals, closedGoals, isClosed }, closed once it has goals
+ * and every one is closed. */
+export function phaseStates(phases, goals)
+{
+    return phases.map((phase) => {
+        const own = goals.filter((goal) => goal.phase === phase.number);
+        const closedGoals = own.filter((goal) => goal.closed).length;
+        return { ...phase, goals: own.length, closedGoals, isClosed: own.length > 0 && closedGoals === own.length };
+    });
+}
+
 /** The day the plan says it was updated, as YYYY-MM-DD, or null. */
 export function planUpdated(text, words)
 {

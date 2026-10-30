@@ -1,13 +1,13 @@
 // What a task waits for and what it points to, written as Crew writes them at the end of a line: `(after: T-62, #giulia-1)` names
 // the tasks this one waits for, a backlog task or a colleague's todo line by its id; `(see: T-12, D-2)` names tasks and decisions to
 // read with it; `(in: T-23)` names the large task this one is a part of; `(issue: #34)`, the GitHub issue it does; `(due: 2026-11-15)`,
-// the day it is due; `(type: bug)`, its label. A todo line that is a colleague's part of a backlog task carries the task's number where
+// the day it is due; `(type: bug)`, its label; `(by: Stefano)`, who created it. A todo line that is a colleague's part of a backlog task carries the task's number where
 // Crew puts its id. Pure.
 import { escapeRegex } from "./text.mjs";
 
 // The suffixes that name several things, and those that name one, by the field a task keeps it in; written back in this order.
 const lists = ["after", "see"];
-const singles = { in: "parent", issue: "issue", due: "due", type: "type" };
+const singles = { in: "parent", issue: "issue", due: "due", type: "type", by: "by" };
 const kinds = [...lists, ...Object.keys(singles)];
 
 /** A text without its suffixes at the end, in any order, and what they name: { text, after, see, parent, issue, due, type }, lists
@@ -93,7 +93,7 @@ export function listOf(given)
 export function badLinks(kind, items, prefixes)
 {
     const task = `${escapeRegex(prefixes.task)}-\\d+`;
-    const patterns = { after: `^(${task}|#[\\w-]+-\\d+)$`, see: `^(${task}|${escapeRegex(prefixes.decision)}-\\d+)$`, in: `^${task}$`, issue: "^#\\d+$", due: "^\\d{4}-\\d{2}-\\d{2}$", type: "^[a-z][\\w-]*$" };
+    const patterns = { after: `^(${task}|#[\\w-]+-\\d+)$`, see: `^(${task}|${escapeRegex(prefixes.decision)}-\\d+)$`, in: `^${task}$`, issue: "^#\\d+$", due: "^\\d{4}-\\d{2}-\\d{2}$", type: "^[a-z][\\w-]*$", by: "^[^,()·]+$" };
     return items.filter((item) => !new RegExp(patterns[kind]).test(item));
 }
 

@@ -36,7 +36,7 @@ test("add, start, done, set and archive change the backlog; show and list read i
 
     const tasks = readFileSync(join(root, "docs/TASKS.md"), "utf8");
     assert.match(tasks, /^# Backlog\n\nI compiti\.\n\n## In corso\n\n- T-1 · P1 · alto · Matteo · 2026-10-01 · Nucleo · i dadi e i tiri · iniziato \d{4}-\d{2}-\d{2}\n/);
-    assert.match(tasks, /## Fatti\n\n- T-2 · .* · il registro · fatto \d{4}-\d{2}-\d{2}\n/);
+    assert.match(tasks, /## Fatti\n\n- T-2 · .* · il registro \(by: Claude\) · fatto \d{4}-\d{2}-\d{2}\n/);
 
     const listed = JSON.parse(run("backlog.mjs", "list", "--json"));
     assert.deepEqual(listed.map((task) => [task.id, task.state]), [[1, "doing"]]);

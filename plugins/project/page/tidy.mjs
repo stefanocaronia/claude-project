@@ -50,13 +50,14 @@ Answer with a JSON array and nothing else, at most 25 proposals, the most useful
     });
 }
 
-/** The proposals on the backlog: priorities, large tasks, texts, tasks already done or made moot; reading only. */
+/** The proposals on the backlog and on the points to decide: priorities, types, who should do each, large tasks, texts, tasks already done
+ * or made moot; points to decide obsolete, doubled or to rewrite. Reading only. */
 function proposeBacklog(config)
 {
     const backlog = `node ${pluginRoot}/scripts/backlog.mjs`;
     const brief = `Run the tidy skill of the project plugin on the backlog: read ${pluginRoot}/skills/tidy/SKILL.md, section 4, and do only its proposals. Change no file.
-Read the backlog with \`${backlog} list --json\`, the done ones with \`${backlog} list --state done --json\`, a task whole with \`${backlog} show T-n\`; the plan's goals in ${shown(config, config.files.plan)}; the decisions a task cites, and the later ones, in ${shown(config, config.files.decisions)} with Grep (never read it whole).
-Run each command alone, exactly as written here: no cd, no pipes, no other program. Every proposal changes something, and "change" is the exact \`${backlog} …\` command or commands that apply it; a large task's new parts are added with \`--in T-n\`, the large task's number. A proposal that cannot be applied now carries in "waits" what it waits for: "user" (a decision of theirs) or "a run of its own"; the others have "waits": null.
+Read the backlog with \`${backlog} list --json\`, the done ones with \`${backlog} list --state done --json\`, a task whole with \`${backlog} show T-n\`; the plan's goals in ${shown(config, config.files.plan)}; the decisions a task cites, and the later ones, in ${shown(config, config.files.decisions)} with Grep (never read it whole); who can do a task: the people ${config.people.join(", ")} and, with Crew, the colleagues of .claude/agents/, each with their field in their profile; the points still to decide under the "to decide" heading of ${shown(config, config.files.decisions)} (find it with Grep, then Read from its line).
+Run each command alone, exactly as written here: no cd, no pipes, no other program. Every proposal changes something, and "change" is the exact \`${backlog} …\` command or commands that apply it; a large task's new parts are added with \`--in T-n\`, the large task's number. A proposal on the points to decide has "kind": "to decide", "file": "${shown(config, config.files.decisions)}", the line of the first point it touches, and in "change" exactly which lines go and which come. A proposal that cannot be applied now carries in "waits" what it waits for: "user" (a decision of theirs) or "a run of its own"; the others have "waits": null.
 Answer with a JSON array and nothing else, at most 25 proposals, the most useful first, written in the project's language (${config.language}):
 [{"id": "p1", "kind": "task", "file": "${shown(config, config.files.tasks)}", "line": null, "title": "one line", "why": "the reason, in one or two sentences", "change": "${backlog} set T-12 --p P1", "waits": null}]`;
 
@@ -82,11 +83,12 @@ export function apply(config, ids)
     // The backlog's proposals are applied through its command alone.
     if (readState(config).scope === "backlog") {
         const backlog = `node ${pluginRoot}/scripts/backlog.mjs`;
-        const brief = `Apply these proposals on the backlog, approved by the user, and only these, each with the \`${backlog} …\` commands its "change" names:
+        const decisions = shown(config, config.files.decisions);
+        const brief = `Apply these proposals on the backlog and on the points to decide, approved by the user, and only these: a task's with the \`${backlog} …\` commands its "change" names, a point to decide's with Edit in ${decisions}, only under its "to decide" heading:
 ${JSON.stringify(chosen, null, 2)}
 Follow ${pluginRoot}/skills/tidy/SKILL.md, section 4 and "The rules that stay". If a command is refused, read its message, fix the command once, or skip the proposal and say why. At the end run \`${check}\`.
 Answer with a JSON object and nothing else, its summary in the project's language (${config.language}): {"applied": ["p1"], "skipped": [{"id": "p3", "why": "..."}], "summary": "two or three sentences"}`;
-        return startRun(config, "apply", brief, ["Read", "Grep", `Bash(${backlog} *)`, `Bash(${check})`], (state, result) => {
+        return startRun(config, "apply", brief, ["Read", "Grep", `Edit(${decisions})`, `Bash(${backlog} *)`, `Bash(${check})`], (state, result) => {
             const outcome = objectOf(result);
             const applied = new Set(outcome.applied ?? []);
             state.proposals = (state.proposals ?? []).filter((proposal) => !applied.has(proposal.id));

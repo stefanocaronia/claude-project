@@ -143,8 +143,8 @@ export function taskErrors(task, { words, people, goals, types = Object.keys(wor
     }
 
     const one = (value) => (value ? [value] : []);
-    const lists = { after: task.after ?? [], see: task.see ?? [], in: one(task.parent), issue: one(task.issue), due: one(task.due), type: one(task.type) };
-    const messages = { after: "badAfter", see: "badSee", in: "badIn", issue: "badIssue", due: "badDue", type: "badType" };
+    const lists = { after: task.after ?? [], see: task.see ?? [], in: one(task.parent), issue: one(task.issue), due: one(task.due), type: one(task.type), by: one(task.by) };
+    const messages = { after: "badAfter", see: "badSee", in: "badIn", issue: "badIssue", due: "badDue", type: "badType", by: "badBy" };
 
     for (const kind of Object.keys(lists)) {
         const bad = badLinks(kind, lists[kind], { task: prefix, decision: decisionPrefix });
@@ -160,6 +160,10 @@ export function taskErrors(task, { words, people, goals, types = Object.keys(wor
 
     if (task.parent === `${prefix}-${task.id}`) {
         errors.push(say("inItself", { id: `${prefix}-${task.id}` }));
+    }
+
+    if (task.by && !people.includes(task.by)) {
+        errors.push(say("unknownCreator", { value: task.by, list: people.join(", ") }));
     }
 
     if (task.type && !types.includes(task.type)) {

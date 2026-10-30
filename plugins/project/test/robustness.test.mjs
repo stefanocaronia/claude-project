@@ -170,8 +170,10 @@ test("a task a failed write left in both files is written once by the next chang
     rmSync(root, { recursive: true, force: true });
 });
 
-test("the page changes a task's state or priority through the backlog's command line, and nothing else", async () => {
+test("the page changes, adds and archives tasks through the backlog's command line, and nothing else; what it adds is its owner's", async () => {
     const root = project();
+    const noGh = process.env.PROJECT_NO_GH;
+    process.env.PROJECT_NO_GH = "1";
     const { pageServer } = await import("../page/serve.mjs");
     const { server } = await pageServer(root);
     await new Promise((done) => server.listen(0, "127.0.0.1", done));
@@ -179,15 +181,31 @@ test("the page changes a task's state or priority through the backlog's command 
     const post = async (payload) => (await fetch(`http://127.0.0.1:${port}/backlog`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })).json();
     assert.equal((await post({ command: "start", id: "T-1" })).ok, true);
     assert.equal((await post({ command: "set", id: "T-2", priority: "P1" })).ok, true);
-    assert.equal((await post({ command: "archive", id: "T-1" })).ok, false);
     assert.equal((await post({ command: "set", id: "T-2; rm -rf /", priority: "P1" })).ok, false);
+    assert.equal((await post({ command: "set", id: "T-2" })).ok, false);
+    assert.equal((await post({ command: "add", text: "  " })).ok, false);
     assert.match((await post({ command: "done", id: "T-9" })).message, /T-9 non c'è/);
+    // A task added: its text one line without the separator, its fields, and its creator the page's owner (without gh, the first person not Claude).
+    assert.equal((await post({ command: "add", text: "nuovo · compito\n  in due righe", priority: "P1", type: "bug", due: "2026-12-01", to: "Claude" })).ok, true);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-4 · P1 · .* · nuovo - compito in due righe \(due: 2026-12-01\) \(type: bug\) \(by: C\+\+\)$/m);
+    assert.equal((await post({ command: "set", id: "T-4", text: "nuovo compito", due: "", type: "" })).ok, true);
+    assert.equal((await post({ command: "archive", id: "T-2" })).ok, true);
+    // A part of a large task, from the page's form.
+    assert.equal((await post({ command: "add", text: "una parte", parent: "T-1", type: "", goal: "—" })).ok, true);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-5 · .* · una parte \(in: T-1\) \(by: C\+\+\)$/m);
     const tasks = readFileSync(join(root, "docs/TASKS.md"), "utf8");
     assert.match(tasks, /## In corso\n\n- T-1 /);
-    assert.match(tasks, /- T-2 · P1 /);
+    assert.match(tasks, /^- T-4 · P1 · [^·]+ · Claude · \d{4}-\d{2}-\d{2} · — · nuovo compito \(by: C\+\+\)$/m);
+    assert.doesNotMatch(tasks, /T-2 /);
     const data = await (await fetch(`http://127.0.0.1:${port}/data`)).json();
-    assert.deepEqual(data.board.map((task) => [task.id, task.state]), [[1, "doing"], [2, "todo"], [3, "done"]]);
+    assert.deepEqual(data.board.map((task) => [task.id, task.state]).sort((first, second) => first[0] - second[0]), [[1, "doing"], [2, "archived"], [3, "done"], [4, "todo"], [5, "todo"]]);
+    assert.equal(data.board.find((task) => task.id === 4).by, "C++");
     assert.equal(data.decisions.all[0].number, 1);
+    // A task done or archived, taken up again: back in progress, out of the archive, without its day done.
+    assert.equal((await post({ command: "start", id: "T-2" })).ok, true);
+    assert.equal((await post({ command: "start", id: "T-3" })).ok, true);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-2 · .* · due · iniziato \d{4}-\d{2}-\d{2}\n- T-3 · .* · tre · iniziato \d{4}-\d{2}-\d{2}$/m);
+    noGh === undefined ? delete process.env.PROJECT_NO_GH : (process.env.PROJECT_NO_GH = noGh);
     server.closeAllConnections();
     server.close();
     rmSync(root, { recursive: true, force: true });

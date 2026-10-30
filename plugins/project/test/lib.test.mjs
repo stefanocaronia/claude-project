@@ -15,7 +15,7 @@ const en = wordsOf("en");
 test("a task line reads and writes back the same, done and archived marks included", () => {
     const line = "- T-12 · P2 · medio · Matteo · 2026-10-29 · Revisione e pulizia · La plancia, in tre parti · fatto 2026-10-30 · archiviato 2026-10-31";
     const task = parseLine(line, "archived", it);
-    assert.deepEqual({ ...task }, { id: 12, priority: "P2", effort: "medio", to: "Matteo", created: "2026-10-29", goal: "Revisione e pulizia", text: "La plancia, in tre parti", after: [], see: [], parent: null, issue: null, due: null, type: null, started: null, done: "2026-10-30", archived: "2026-10-31", state: "archived" });
+    assert.deepEqual({ ...task }, { id: 12, priority: "P2", effort: "medio", to: "Matteo", created: "2026-10-29", goal: "Revisione e pulizia", text: "La plancia, in tre parti", after: [], see: [], parent: null, issue: null, due: null, type: null, by: null, started: null, done: "2026-10-30", archived: "2026-10-31", state: "archived" });
     assert.equal(formatLine(task, it), line);
     assert.equal(parseLine("- [ ] P2 · 2026-10-29 · a todo line", "todo", it), null);
 });
@@ -207,4 +207,11 @@ test("paths resolve against a folder, absolute ones stay, and show relative to t
 test("a message falls back to English, and keeps a name it is not given", () => {
     assert.equal(sayer("fr")("count", { count: 3 }), "3 tasks.");
     assert.equal(sayer("it")("count", {}), "{count} compiti.");
+});
+
+test("a phase is closed once it has goals and every one is closed", async () => {
+    const { phaseStates } = await import("../lib/plan.mjs");
+    const phases = [{ number: 1, name: "Core", outcome: "play" }, { number: 2, name: "More", outcome: "more" }, { number: 3, name: "Empty", outcome: "-" }];
+    const goals = [{ name: "a", phase: 1, closed: "2026-10-30" }, { name: "b", phase: 1, closed: "2026-10-30" }, { name: "c", phase: 2, closed: null }, { name: "d", phase: 2, closed: "2026-10-30" }];
+    assert.deepEqual(phaseStates(phases, goals).map((phase) => [phase.number, phase.goals, phase.closedGoals, phase.isClosed]), [[1, 2, 2, true], [2, 2, 1, false], [3, 0, 0, false]]);
 });

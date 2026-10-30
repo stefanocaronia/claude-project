@@ -30,13 +30,12 @@ const snapshot = {
         { id: 70, priority: "P1", effort: "medio", effortKey: "medium", to: "Stefano", colleague: null, created: "2026-10-28", goal: "—", text: "Il login di npm", state: "todo", type: "bug", due: "2026-10-28", dueInfo: { day: "2026-10-28", days: -2, isLate: true, isNear: false }, issue: "#33", issueInfo: { number: 33, title: "npm login", state: "open", url: "https://github.com/a/b/issues/33", closed: null }, after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
         { id: 71, priority: "P3", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-28", goal: "Revisione", text: "Più avanti", state: "postponed", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
     ],
-    plan: { updated: "2026-10-29", goals: [{ name: "Revisione", phase: null, done: 6, total: 9, isDoing: true }, { name: "La 5e", phase: 4, done: 0, total: 3, isDoing: false }, { name: "Il nucleo", phase: 1, done: 5, total: 5, isDoing: false, closed: "2026-10-20" }] },
+    plan: { updated: "2026-10-29", phases: [{ number: 1, name: "Il nucleo", goals: 1, closedGoals: 1, isClosed: true }, { number: 4, name: "La 5e", goals: 1, closedGoals: 0, isClosed: false }], goals: [{ name: "Revisione", phase: null, done: 6, total: 9, isDoing: true }, { name: "La 5e", phase: 4, done: 0, total: 3, isDoing: false }, { name: "Il nucleo", phase: 1, done: 5, total: 5, isDoing: false, closed: "2026-10-20" }] },
     decisions: {
         open: [
             { priority: "P3", day: null, text: "Le cariche degli oggetti", whole: "P3 · Le cariche degli oggetti", line: 553 },
             { priority: null, day: "2026-10-27", text: "I temi da installare", whole: "I temi da installare (Stefano, 27 ottobre)", line: 560 },
         ],
-        recent: [{ number: 541, text: "Il PLAN tiene le fasi.", why: "Stefano, 29 ottobre.", tasks: ["T-61"] }],
     },
     watch: ["/p/docs/TASKS.md"],
     problems: [],
@@ -100,7 +99,7 @@ function world(on: On, answers: Answer[] = [good]): { runs: string[][]; prompts:
     return { runs, prompts, commands, stamp, opens };
 }
 
-test("the panel shows the project's numbers, the tasks in progress and the P1 to do, the goals; the decisions closed", async ($, on) => {
+test("the panel shows the project's numbers, the tasks in progress and the P1 to do, the goals, the points to decide", async ($, on) => {
     world(on);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
 
@@ -111,18 +110,23 @@ test("the panel shows the project's numbers, the tasks in progress and the P1 to
         expect((await ui.find({ key: "toggle-doing" }))?.props.label).toBe("▾ ⚒︎ In corso · 2");
         expect((await ui.find({ key: "toggle-goals" }))?.props.label).toBe("▾ ⚑︎ Piano · 2");
         expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 4");
-        expect((await ui.find({ key: "toggle-decisions" }))?.props.label).toBe("▸ ⚖︎ Decisioni · 2 da decidere");
+        // Only what waits to be decided, open from the start; the decisions taken are the page's.
+        expect((await ui.find({ key: "toggle-decisions" }))?.props.label).toBe("▾ ⚖︎ Da decidere · 2");
+        expect(await ui.find({ type: "Text", text: /Decise di recente/ })).toBeUndefined();
         expect(await ui.find({ type: "Text", text: "▸ I pacchetti nei loro repo" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: "T-62" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /^▸ Revisione/ })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /6\/9/ })).toBeDefined();
+        // The goals by phase: an open phase's line above its goals, a closed phase one line.
+        expect(await ui.find({ type: "Text", text: "fase 4 · La 5e" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: "✓ fase 1 · Il nucleo, chiusa" })).toBeDefined();
         // A closed goal has no bar: only the count of the closed ones, a link to the page.
         expect(await ui.find({ type: "Text", text: /^▸ Il nucleo/ })).toBeUndefined();
         expect((await ui.find({ type: "Link", text: "✓ 1 traguardi chiusi" }))?.props.href).toBe("http://localhost:5790/#overview");
         // Stefano's own task has no ▶: nobody starts it but him.
         expect(await ui.find({ key: "start-61" })).toBeDefined();
         expect(await ui.find({ key: "start-70" })).toBeUndefined();
-        expect(await ui.find({ type: "Text", text: "I temi da installare" })).toBeUndefined();
+        expect(await ui.find({ type: "Text", text: "▸ I temi da installare" })).toBeDefined();
         // The postponed in a section of their own after the tasks to do, closed at the start.
         expect((await ui.find({ key: "toggle-postponed" }))?.props.label).toBe("▸ ⏸ Rimandati · 1");
         await ui.unmount();
@@ -166,22 +170,19 @@ test("▶ gives a colleague's task to Crew's next command and asks Claude for it
     await ui.unmount();
 });
 
-test("the decisions open: the proposals by priority, one brought to the chat as a choice; the latest decision with its why", async ($, on) => {
+test("the points to decide by priority, one brought to the chat as a choice", async ($, on) => {
     const { prompts } = world(on);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
 
     for (const surface of surfaces) {
         prompts.length = 0;
         const ui = await $.ui.mount({ plugin, surface, component: "Pane", requestId: "project", props });
-        await ui.press({ key: "toggle-decisions" });
         expect(await ui.find({ type: "Text", text: "▸ I temi da installare" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: "3 g" })).toBeDefined();
         await ui.press({ key: "open-proposal-560" });
         await ui.press({ key: "choice-proposal-560" });
         expect(prompts).toEqual(["Portami come scelta, con la tua raccomandazione prima, questo punto da decidere (riga 560 delle decisioni): I temi da installare (Stefano, 27 ottobre)"]);
-        await ui.press({ key: "open-decision-541" });
-        expect(await ui.find({ type: "Text", text: "Stefano, 29 ottobre." })).toBeDefined();
-        await ui.press({ key: "toggle-decisions" });
+        await ui.press({ key: "open-proposal-560" });
         await ui.unmount();
     }
 });
@@ -273,7 +274,7 @@ test("a task in progress: a colleague at work shows instead of ▶, the chat tha
     // A chat at work on a task starts no other: no next task, no ▶, a line that says where another one starts.
     expect(await again.find({ key: "next-task" })).toBeUndefined();
     // The button stays in its place, gray, with why it cannot be pressed.
-    expect(await again.find({ type: "Text", text: "▶ Prossimo compito" })).toBeDefined();
+    expect((await again.find({ key: "next-task-idle" }))?.props.label).toBe("▶ Prossimo compito");
     expect(await again.find({ key: "start-61" })).toBeUndefined();
     expect(await again.find({ type: "Text", text: "Questa chat lavora a T-143: un altro compito si avvia in una nuova sessione del progetto." })).toBeDefined();
     await again.unmount();
@@ -357,16 +358,25 @@ test("the button for where the project stands asks Claude for a short report", a
 });
 
 test("a large task shows its parts closed in place of its age, its ▶ starts the next part, and a part names its large task", async ($, on) => {
-    const { runs, prompts } = world(on);
+    const withDone = { ...good, stdout: JSON.stringify({ ...snapshot, doneParts: [{ id: 82, parent: "T-80", to: "Claude", type: null, text: "La parte fatta", done: "2026-10-29" }] }) };
+    const { runs, prompts } = world(on, [withDone]);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
     const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
-    expect(await ui.find({ type: "Text", text: "1/2 parti" })).toBeDefined();
+    // Its parts closed as a chip with an arrow; folded while none is in progress, shown with a press, folded again with another.
+    expect(await ui.find({ type: "Text", text: "[▸ 1/2]" })).toBeDefined();
+    expect(await ui.find({ key: "part-81" })).toBeUndefined();
+    await ui.press({ key: "parts-80" });
+    expect(await ui.find({ type: "Text", text: "[▾ 1/2]" })).toBeDefined();
     // The part is drawn under its large task, not on its own: To do counts the large task only.
     expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 4");
     expect(await ui.find({ key: "part-81" })).toBeDefined();
+    // A part closed while its large task is open: under it, checked, without ▶.
+    expect(await ui.find({ key: "done-part-82" })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: "La parte fatta" })).toBeDefined();
+    expect(await ui.find({ key: "start-82" })).toBeUndefined();
     await ui.press({ key: "open-81" });
-    expect(await ui.find({ type: "Text", text: "parte di" })).toBeDefined();
-    expect(await ui.find({ type: "Text", text: "[T-80]" })).toBeDefined();
+    // Drawn under its large task, a part does not name it again.
+    expect(await ui.find({ type: "Text", text: "parte di" })).toBeUndefined();
     await ui.press({ key: "open-80" });
     expect(await ui.find({ type: "Text", text: "parti · 1/2" })).toBeDefined();
     expect(await ui.find({ type: "Text", text: "[T-82]" })).toBeDefined();
@@ -403,11 +413,6 @@ test("a task's type as Jira draws it, its due day near or late, a task stuck in 
         await ui.press({ key: "open-70" });
         expect(await ui.find({ type: "Text", text: /^\[?⏰ in ritardo di 2 g\]?$/ })).toBeDefined();
         await ui.press({ key: "open-70" });
-        await ui.press({ key: "toggle-decisions" });
-        await ui.press({ key: "open-decision-541" });
-        expect(await ui.find({ type: "Text", text: "compiti: T-61" })).toBeDefined();
-        await ui.press({ key: "open-decision-541" });
-        await ui.press({ key: "toggle-decisions" });
         await ui.unmount();
     }
 });
@@ -427,17 +432,41 @@ test("a postponed task goes back to do from its row, and a large task takes its 
     await ui.unmount();
 });
 
+test("a task added from the list to do, with its priority, type and large task, is its person's; an open task's text written again; «Archive» archives on its second press", async ($, on) => {
+    const { runs } = world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
+    runs.length = 0;
+    await ui.press({ key: "new-task" });
+    // The text typed so far stays while the pickers draw the panel again.
+    await ui.input({ key: "new-task", text: "un · compito", kind: "change" });
+    await ui.select({ key: "new-priority", value: "P1" });
+    await ui.select({ key: "new-type", value: "bug" });
+    await ui.select({ key: "new-parent", value: "T-80" });
+    expect((await ui.find({ key: "new-task" }))?.props.value).toBe("un · compito");
+    await ui.input({ key: "new-task", text: "un · compito\n nuovo" });
+    await ui.press({ key: "open-80" });
+    await ui.press({ key: "edit-text-80" });
+    await ui.input({ key: "edit-80", text: "I sotto-compiti, scritti di nuovo" });
+    await ui.press({ key: "archive-80" });
+    expect(await ui.find({ type: "Button", label: "🗄 Archiviare T-80? Premi ancora" })).toBeDefined();
+    await ui.press({ key: "archive-80" });
+    expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([
+        ["backlog.mjs", "add", "un - compito nuovo", "--p", "P1", "--type", "bug", "--in", "T-80", "--by", "Stefano"],
+        ["backlog.mjs", "set", "T-80", "--text", "I sotto-compiti, scritti di nuovo"],
+        ["backlog.mjs", "archive", "T-80"],
+    ]);
+    await ui.unmount();
+});
+
 test("the owner's GitHub picture on their tasks and beside every decision; without it, the initials of the person who decides", async ($, on) => {
     const owned = { ...good, stdout: JSON.stringify({ ...snapshot, owner: { name: "Stefano", fullName: "Stefano Caronia", portrait: "data:image/jpeg;base64,AAAA" } }) };
     world(on, [owned]);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
     const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
     const pictures = async () => (await ui.findAll({ type: "Svg" })).filter((one) => (one.props as { alt?: string }).alt === "Stefano Caronia");
-    // T-70, Stefano's, in its row; none yet beside the decisions, closed.
-    expect((await pictures()).length).toBe(1);
-    await ui.press({ key: "toggle-decisions" });
-    // Two proposals and the latest decision, each with who decides.
-    expect((await pictures()).length).toBe(4);
+    // T-70, Stefano's, in its row, and the two points to decide, each with who decides.
+    expect((await pictures()).length).toBe(3);
     await ui.unmount();
 });
 

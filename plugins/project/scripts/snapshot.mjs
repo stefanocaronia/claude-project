@@ -3,18 +3,16 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { effortKey } from "../lib/backlog.mjs";
 import { proposalOf } from "../lib/decisions.mjs";
-import { planUpdated } from "../lib/plan.mjs";
+import { phaseStates, planPhases, planUpdated } from "../lib/plan.mjs";
 import { configFile } from "../lib/config.mjs";
 import { plainMarkdown } from "../lib/text.mjs";
 import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
-import { decisionLinks } from "../lib/links.mjs";
 import { check } from "./check.mjs";
 import { readCode, readIssues, readOwner } from "./code.mjs";
 import { extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
 import { colleagues, findRoot, isMain, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readGoals, runCli, taskLinks, today, todoFiles } from "./project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
-const recentDecisions = 3;
 // The most a portrait may weigh in the panel's drawing, which the desktop drops past about 100 KB: Crew's small ones are under 2 KB.
 const portraitLimit = 4096;
 
@@ -27,7 +25,7 @@ export async function snapshot(config, say, withHealth = true)
     const goals = readGoals(config);
     // A task merged into another is neither done nor open: it counts nowhere, as the page counts.
     const counted = tasks.filter((task) => task.done || openStates.includes(task.state));
-    const { decided, open } = readDecisions(config);
+    const { open } = readDecisions(config);
     const now = today();
     const findings = withHealth ? check(config, say) : null;
     const page = `http://localhost:${config.page.port}`;
@@ -35,8 +33,6 @@ export async function snapshot(config, say, withHealth = true)
     const links = taskLinks(config, tasks);
     const code = readCode(config);
     const issues = readIssues(config);
-    // The tasks each decision is tied to, both ways.
-    const tasksOf = decisionLinks(tasks, readDecisions(config).decided, config.prefixes).byDecision;
 
     return {
         project: projectName(config),
@@ -68,8 +64,13 @@ export async function snapshot(config, say, withHealth = true)
             ...codeView(code.get(task.id)),
             issueInfo: issueOf(issues, task),
         })),
+        // The parts already closed of a large task still open, shown checked under it.
+        doneParts: tasks.filter((task) => task.parent && !openStates.includes(task.state) && tasks.some((one) => openStates.includes(one.state) && `${config.prefixes.task}-${one.id}` === task.parent))
+            .map(({ id, parent, to, type, text, done, archived }) => ({ id, parent, to, type, text: plainMarkdown(text), done: done ?? archived ?? null })),
         plan: {
             updated: planUpdated(read(config.files.plan), config.words),
+            // The phases of the plan, each closed once its goals all are.
+            phases: phaseStates(planPhases(read(config.files.plan)), goals).map(({ number, name, goals: count, closedGoals, isClosed }) => ({ number, name, goals: count, closedGoals, isClosed })),
             goals: goals.map((goal) => {
                 const own = counted.filter((task) => task.goal === goal.name);
                 return { ...goal, done: own.filter((task) => task.done).length, total: own.length, isDoing: own.some((task) => task.state === "doing") };
@@ -80,7 +81,6 @@ export async function snapshot(config, say, withHealth = true)
                 const proposal = proposalOf(point.text, config.words, now);
                 return { ...proposal, text: plainMarkdown(proposal.text), line: point.line, whole: point.text };
             }),
-            recent: decided.slice().sort((first, second) => second.number - first.number).slice(0, recentDecisions).map((decision) => ({ number: decision.number, text: plainMarkdown(decision.text), why: plainMarkdown(decision.why), tasks: tasksOf.get(`${config.prefixes.decision}-${decision.number}`) ?? [] })),
         },
         // The files whose change makes the panel read the project again.
         watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.notes, ...todoFiles(config).map((one) => one.file)],

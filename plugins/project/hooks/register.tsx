@@ -18,10 +18,14 @@ const board = atom({ plugin: "project", key: "board" } as const, { snapshot: nul
 const holdsLast = 24 * 3_600_000;
 const view = atom({ plugin: "project", key: "view" } as const, { sections: {}, expanded: null, whole: {}, starting: {}, frozen: null }, { shape: "view-1" });
 // The sections open at the start, as Joseph's sketch has them: the decisions closed, the tile above says how many wait.
-const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, goals: true, decisions: false };
+const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, goals: true, decisions: true };
 // How many rows a section shows before "show all".
-const rows: Record<string, number> = { doing: 5, rest: 10, postponed: 5, issues: 5, goals: 5, open: 3, recent: 3 };
+const rows: Record<string, number> = { doing: 5, rest: 10, postponed: 5, issues: 5, goals: 5, open: 3 };
 const proposalLength = 400;
+// The text of a new task being written: kept across the drawings its pickers cause, not across a reload.
+let newText = "";
+// How long «Archive» waits for its second press.
+const archiveAskFor = 4000;
 // Crew's marks: a priority as an issue tracker draws it, the green of work, the purple of decisions, the red of errors.
 const priorities = { P1: { glyph: "⇈", color: "#E5493A" }, P2: { glyph: "=", color: "#E2852B" }, P3: { glyph: "↓", color: "#4C8FE0" } } as const;
 const markOf = (priority: string) => priorities[priority as keyof typeof priorities] ?? priorities.P2;
@@ -36,11 +40,13 @@ const errorColor = "#D0453F";
 // Material's outline, its hover state layer, and the gray of a count with nothing wrong, readable in both themes.
 const outline = "#8080803d";
 const stateLayer = "#80808014";
+// A link's or a document's chip under the pointer: one line high, no border, a stronger gray.
+const chipHover = "#80808029";
 // Every card's faint gray, the same for all, as Crew's.
 const cardTint = "#80808003";
 const quietColor = "#888780";
 // A ▶ that cannot be pressed now: gray, fainter than a dim one.
-const idleColor = "#8080806b";
+const idleColor = "#80808040";
 // How long the lists keep their order after a priority turns.
 const frozenFor = 4000;
 const warningColor = "#E2852B";
@@ -138,7 +144,7 @@ export const register: Register = (on) => {
         }
 
         const ui = $.ui.resolve(e);
-        const { Box, Text, Button, Link } = ui;
+        const { Box, Text, Button, Link, Input, Select } = ui;
         const current = await read($, board);
         const panel = await read($, view);
         const words = say(current);
@@ -294,22 +300,33 @@ export const register: Register = (on) => {
 
             return <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={() => startTask($, snapshot, task, member, held?.session)} />;
         };
-        // A button that cannot be pressed now keeps its place and shape, gray, its reason under the pointer.
-        const idleButton = (key: string, label: string, reason: string) => tip(key, reason, (
-            <Box key={key} flexShrink={0} borderStyle="round" paddingX={1} {...(isDesktop ? { borderColor: outline } : { borderDimColor: true })}>
-                <Text color={idleColor}>{label}</Text>
-            </Box>
-        ));
+        // A button that cannot be pressed now keeps its place and its size, the surface's own button drawn dim, a press doing nothing;
+        // its reason under the pointer.
+        const idleButton = (key: string, label: string, reason: string) => tip(key, reason, <Button key={key} label={label} onPress={() => undefined}><Text color={idleColor}>{label}</Text></Button>);
         // A ▶ that cannot be pressed now stays in its place, gray, its reason under the pointer.
         const idle = (task: Task, reason: string) => tip(`idle-${task.id}`, reason, <Box key={`idle-${task.id}`} flexShrink={0}><Text color={idleColor}>▶</Text></Box>);
         // In place of its age, a blocked task shows what it waits for: «⛓ T-62», and how many more; a large task, its parts closed. On the
         // desktop a hint under the pointer says it in words.
         // After those, a due day near or past, «⏰ 3 g», red when late; a task stuck in progress, «⏸ 4 g», in the color of a warning.
+        // A large task's parts, shown or folded: as the user left them, else shown while one is in progress.
+        const isUnfolded = (task: Task) => panel.folds?.[String(task.id)] ?? snapshot.tasks.some((part) => part.parent === `${prefix}-${task.id}` && part.state === "doing");
+        const toggleParts = (task: Task) => () => void update($, view, (old) => ({ ...old, folds: { ...old.folds, [String(task.id)]: !isUnfolded(task) } }));
+        // In a large task's row, its parts closed as a chip with an arrow, that shows or folds them.
+        const partsChip = (task: Task) => {
+            const isDoing = task.state === "doing";
+            const text = `${isUnfolded(task) ? "▾" : "▸"} ${task.partsDone}/${task.parts.length}`;
+            const label = <Button key={`parts-${task.id}`} plain onPress={toggleParts(task)}><Text color={isDoing ? workColor : undefined} dimColor={!isDoing}>{isDesktop ? text : `[${text}]`}</Text></Button>;
+            const button = isDesktop ? <Box key={`parts-box-${task.id}`} flexShrink={0} paddingX={1} backgroundColor={isDoing ? `${workColor}26` : stateLayer}>{label}</Box> : label;
+            return tip(`parts-${task.id}`, words("partsTip", { done: task.partsDone, total: task.parts.length }), button);
+        };
         const ageOrWait = (task: Task) => {
+            if (isLarge(task)) {
+                return partsChip(task);
+            }
+
             const blockers = task.blockedBy ?? [];
             const due = task.dueInfo && (task.dueInfo.isLate || task.dueInfo.isNear) ? task.dueInfo : null;
-            const [label, hint, color] = isLarge(task) ? [words("partsCount", { done: task.partsDone, total: task.parts.length }), words("partsTip", { done: task.partsDone, total: task.parts.length }), undefined]
-                : blockers.length > 0 ? [`⛓ ${blockers[0]}${blockers.length > 1 ? ` +${blockers.length - 1}` : ""}`, words("blockedTip", { list: blockers.join(", ") }), undefined]
+            const [label, hint, color] = blockers.length > 0 ? [`⛓ ${blockers[0]}${blockers.length > 1 ? ` +${blockers.length - 1}` : ""}`, words("blockedTip", { list: blockers.join(", ") }), undefined]
                 : due ? [`⏰ ${dueWords(due)}`, words("dueTip", { day: due.day }), due.isLate ? errorColor : warningColor]
                 : task.stale && task.started ? [`⏸ ${age(task.started)}`, words("staleTip", { day: task.started }), warningColor]
                 : [age(task.created), null, undefined];
@@ -363,7 +380,8 @@ export const register: Register = (on) => {
                 )
                 : null;
         };
-        const taskDetails = (task: Task) => {
+        // A part drawn under its large task does not name it again.
+        const taskDetails = (task: Task, isPart = false) => {
             const id = `${prefix}-${task.id}`;
             const due = task.dueInfo;
             const issue = task.issueInfo;
@@ -373,14 +391,14 @@ export const register: Register = (on) => {
                 task.goal === snapshot.words.noGoal ? null : chip(`goal-chip-${task.id}`, `⚑ ${task.goal}`),
                 task.due ? chip(`due-chip-${task.id}`, due && (due.isLate || due.isNear) ? `⏰ ${dueWords(due)}` : words("dueLabel", { day: task.due }), due?.isLate ? errorColor : due?.isNear ? warningColor : undefined, null, words("dueTip", { day: task.due })) : null,
                 task.started && task.state === "doing" ? chip(`started-chip-${task.id}`, words(task.stale ? "staleTip" : "startedLabel", { day: task.started }), task.stale ? warningColor : workColor) : null,
-                chip(`born-chip-${task.id}`, words("born", { date: task.created })),
+                chip(`born-chip-${task.id}`, task.by ? words("bornBy", { date: task.created, name: task.by }) : words("born", { date: task.created })),
                 issue ? chip(`issue-chip-${task.id}`, `◉ #${issue.number} ${words(issue.state === "open" ? "issueStateOpen" : "issueStateClosed")}`, undefined, issue.url, issue.title) : null,
                 task.noteHref ? chip(`note-chip-${task.id}`, words("openNote"), undefined, task.noteHref) : null,
             ].filter((one): one is JSX.Element => one !== null);
             return [
                 <Text key={`text-${task.id}`}>{task.text}</Text>,
                 <Box key={`what-${task.id}`} flexDirection="row" flexWrap="wrap" gap={1}>{what}</Box>,
-                field(`part-of-${task.id}`, words("labelPartOf"), task.parent ? refs(`part-of-${task.id}`, [task.parent]) : []),
+                field(`part-of-${task.id}`, words("labelPartOf"), task.parent && !isPart ? refs(`part-of-${task.id}`, [task.parent]) : []),
                 field(`parts-${task.id}`, words("labelParts", { done: task.partsDone, total: (task.parts ?? []).length }), refs(`parts-${task.id}`, task.parts ?? [])),
                 field(`waits-${task.id}`, words("labelWaits"), refs(`waits-${task.id}`, task.after ?? [])),
                 field(`chain-${task.id}`, words("labelChain"), (task.chain ?? []).length > 0 ? [chip(`chain-chip-${task.id}`, `⛓ ${[...task.chain, id].join(" → ")}`, warningColor)] : []),
@@ -398,11 +416,68 @@ export const register: Register = (on) => {
         };
         // A task's id, and for a large task its parts in a state too: a large task postponed or put back to do takes those parts along.
         const withParts = (task: Task, state: Task["state"]) => [`${prefix}-${task.id}`, ...snapshot.tasks.filter((part) => part.parent === `${prefix}-${task.id}` && part.state === state).map((part) => `${prefix}-${part.id}`)];
+        // A task's text written again, in the open task; a task archived on a second press, the first asks for a few seconds.
+        const saveText = (task: Task, value: string) => {
+            const text = value.replace(/\s+/g, " ").trim();
+            void update($, view, (old) => ({ ...old, editing: null }));
+
+            if (text && text !== task.text) {
+                void backlog($, ["set", `${prefix}-${task.id}`, "--text", text.replaceAll(" · ", " - ")]);
+            }
+        };
+        const askArchive = (task: Task) => {
+            void update($, view, (old) => ({ ...old, archiving: task.id }));
+            $.clock.after(archiveAskFor, () => void update($, view, (old) => (old.archiving === task.id ? { ...old, archiving: null } : old)));
+        };
+        const archive = (task: Task) => {
+            void update($, view, (old) => ({ ...old, archiving: null, expanded: null }));
+            void backlog($, ["archive", `${prefix}-${task.id}`]);
+        };
+        // A new task, written in the list to do with its priority, its type and the large task it is a part of: its creator is the
+        // person the panel is for, as the page's owner.
+        const draft = { priority: "P2", type: "", parent: "", ...panel.draft };
+        const addTask = (value: string) => {
+            const text = value.replace(/\s+/g, " ").trim();
+            newText = "";
+            void update($, view, (old) => ({ ...old, editing: null, draft: undefined }));
+
+            if (text) {
+                void backlog($, ["add", text.replaceAll(" · ", " - "), "--p", draft.priority, ...(draft.type ? ["--type", draft.type] : []), ...(draft.parent ? ["--in", draft.parent] : []), ...(decider ? ["--by", decider] : [])]);
+            }
+        };
+        const pick = (field: "priority" | "type" | "parent") => (value: string) => void update($, view, (old) => ({ ...old, draft: { ...draft, ...old.draft, [field]: value } }));
+        // A large task takes parts one level deep: the open tasks that are no part themselves.
+        const parents = snapshot.tasks.filter((task) => !task.parent).sort(byOrder);
+        const newTask = () => (panel.editing === "new"
+            ? (
+                <Box key="new-task-form" flexDirection="column" gap={1}>
+                    <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+                        <Select key="new-priority" label={words("fieldPriority")} value={draft.priority} options={(["P1", "P2", "P3"] as const).map((key) => ({ value: key, label: `${key} · ${snapshot.words.priorities[key] ?? key}` }))} onSelect={pick("priority")} />
+                        <Select key="new-type" label={words("fieldType")} value={draft.type} options={[{ value: "", label: "—" }, ...Object.entries(snapshot.types ?? {}).map(([key, name]) => ({ value: key, label: name }))]} onSelect={pick("type")} />
+                        <Select key="new-parent" label={words("fieldParent")} value={draft.parent} options={[{ value: "", label: "—" }, ...parents.map((task) => ({ value: `${prefix}-${task.id}`, label: `${prefix}-${task.id} · ${task.text.length > 40 ? `${task.text.slice(0, 40)}…` : task.text}` }))]} onSelect={pick("parent")} />
+                    </Box>
+                    <Input key="new-task" value={newText} placeholder={words("newTaskHint")} autoFocus submitLabel={words("addTask")} onInput={(value) => { newText = value; }} onSubmit={addTask} />
+                    <Button key="new-task-cancel" plain dimColor label={words("cancelEdit")} onPress={() => { newText = ""; void update($, view, (old) => ({ ...old, editing: null, draft: undefined })); }} />
+                </Box>
+            )
+            : <Button key="new-task" plain dimColor label={words("newTask")} onPress={() => void update($, view, (old) => ({ ...old, editing: "new" }))} />);
         const taskRow = (task: Task) => {
             const parts = snapshot.tasks.filter((part) => part.parent === `${prefix}-${task.id}`)
                 .sort((first, second) => (frozen ? 0 : Number(second.state === "doing") - Number(first.state === "doing")) || byOrder(first, second));
-            return card(`task-${task.id}`, [
+            // Its parts closed first, checked and without ▶, in the order they closed; then the open ones.
+            const closed = (snapshot.doneParts ?? []).filter((part) => part.parent === `${prefix}-${task.id}`)
+                .sort((first, second) => (first.done ?? "").localeCompare(second.done ?? "") || first.id - second.id);
+            return card(`task-${task.id}`, !isUnfolded(task) ? taskLines(task) : [
                 ...taskLines(task),
+                ...closed.map((part) => (
+                    <Box key={`done-part-${part.id}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center" paddingLeft={isDesktop ? 4 : 2}>
+                        {face(part.to, 18)}
+                        {typeMark({ id: part.id, type: part.type } as Task)}
+                        <Box flexShrink={0}><Text color={workColor}>✓</Text></Box>
+                        <Box flexShrink={0}><Text color={taskColor} dimColor>{`${prefix}-${part.id}`}</Text></Box>
+                        <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden"><Text dimColor strikethrough wrap="truncate-end">{part.text}</Text></Box>
+                    </Box>
+                )),
                 ...parts.map((part) => <Box key={`part-${part.id}`} flexDirection="column" paddingLeft={isDesktop ? 4 : 2}>{taskLines(part, true)}</Box>),
             ]);
         };
@@ -428,12 +503,18 @@ export const register: Register = (on) => {
                 isExpanded
                     ? (
                         <Box key={`details-${task.id}`} flexDirection="column" gap={1} paddingLeft={isDesktop ? 4 : 2}>
-                            {taskDetails(task)}
-                            <Box flexDirection="row" columnGap={2}>
+                            {panel.editing === key
+                                ? <Input key={`edit-${task.id}`} value={task.text} rows={2} autoFocus submitLabel={words("saveText")} onSubmit={(value) => saveText(task, value)} />
+                                : taskDetails(task, isPart)}
+                            <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
                                 <Button key={`done-${task.id}`} plain label={words("markDone")} onPress={() => markDone($, snapshot, task)} />
                                 {task.state === "postponed"
                                     ? <Button key={`resume-${task.id}`} plain label={words("backToDo")} onPress={() => backlog($, ["todo", ...withParts(task, "postponed")])} />
                                     : <Button key={`postpone-${task.id}`} plain dimColor label={words("postpone")} onPress={() => backlog($, ["postpone", ...withParts(task, "todo")])} />}
+                                <Button key={`edit-text-${task.id}`} plain dimColor label={words(panel.editing === key ? "cancelEdit" : "editText")} onPress={() => void update($, view, (old) => ({ ...old, editing: old.editing === key ? null : key }))} />
+                                {panel.archiving === task.id
+                                    ? <Button key={`archive-${task.id}`} plain label={words("archiveSure", { id: `${prefix}-${task.id}` })} onPress={() => archive(task)} />
+                                    : <Button key={`archive-${task.id}`} plain dimColor label={words("archive")} onPress={() => askArchive(task)} />}
                             </Box>
                         </Box>
                     )
@@ -441,10 +522,27 @@ export const register: Register = (on) => {
             ];
         };
         const taskSection = (key: "doing" | "rest" | "postponed", icon: string, title: string, tasks: Task[], none: string) => section(key, icon, `${title} · ${tasks.length}`, [
+            ...(key === "rest" ? [newTask()] : []),
             ...(tasks.length === 0 ? [<Text key={`none-${key}`} dimColor>{none}</Text>] : limited(key, tasks).map(taskRow)),
             more(key, tasks.length, "showAllTasks"),
         ]);
 
+        // The goals by phase: each phase's line, then its open goals; a phase whose goals are all closed, one line that says so.
+        const goalItems = () => {
+            const phases = snapshot.plan.phases ?? [];
+            const shown = limited("goals", openGoals);
+            return [
+                ...phases.flatMap((phase) => {
+                    if (phase.isClosed) {
+                        return [<Text key={`phase-${phase.number}`} color={workColor}>{words("phaseClosedLabel", { number: phase.number, name: phase.name })}</Text>];
+                    }
+
+                    const own = shown.filter((goal) => goal.phase === phase.number);
+                    return own.length > 0 ? [<Text key={`phase-${phase.number}`} dimColor bold>{words("phaseLabel", { number: phase.number, name: phase.name })}</Text>, ...own.map(goalRow)] : [];
+                }),
+                ...shown.filter((goal) => !phases.some((phase) => phase.number === goal.phase)).map(goalRow),
+            ];
+        };
         // The goals still open have their bars; those closed only a count, the page has them.
         const openGoals = snapshot.plan.goals.filter((goal) => !goal.closed);
         const closedGoals = snapshot.plan.goals.length - openGoals.length;
@@ -507,7 +605,7 @@ export const register: Register = (on) => {
             const cut = proposal.text.length > proposalLength ? `${proposal.text.slice(0, proposalLength)}…` : proposal.text;
             return card(key, [
                 <Box key={`proposal-row-${proposal.line}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
-                    {decider ? face(decider, 18) : null}
+                    {decider ? face(decider, 24) : null}
                     <Box flexShrink={0}><Text color={decisionColor}>{scales}</Text></Box>
                     {proposal.priority && Svg ? <Svg source={prioritySvg(proposal.priority) ?? ""} alt={proposal.priority} width={14} height={14} /> : null}
                     <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
@@ -525,31 +623,6 @@ export const register: Register = (on) => {
                                 <Button key={`choice-${key}`} plain label={words("asChoice")} onPress={() => submit($, words("promptChoice", { line: proposal.line, text: proposal.whole }))} />
                                 {cut !== proposal.text ? <Link key={`page-${key}`} href={`${snapshot.page}/#decisions`}>{words("continueInPage")}</Link> : null}
                             </Box>
-                        </Box>
-                    )
-                    : null,
-            ]);
-        };
-        const decisionRow = (decision: Snapshot["decisions"]["recent"][number]) => {
-            const key = `decision-${decision.number}`;
-            const isExpanded = panel.expanded === key;
-            return card(key, [
-                <Box key={`decision-row-${decision.number}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
-                    {decider ? face(decider, 18) : null}
-                    <Box flexShrink={0}><Text color={decisionColor}>{scales}</Text></Box>
-                    <Box flexShrink={0}><Text color={decisionColor} bold>{`${snapshot.prefixes.decision}-${decision.number}`}</Text></Box>
-                    <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
-                        <Button key={`open-${key}`} plain onPress={expand(key)}>
-                            <Text wrap="truncate-end">{`${isExpanded ? "▾" : "▸"} ${decision.text}`}</Text>
-                        </Button>
-                    </Box>
-                </Box>,
-                isExpanded
-                    ? (
-                        <Box key={`decision-details-${decision.number}`} flexDirection="column" gap={1} paddingLeft={2}>
-                            <Text>{decision.text}</Text>
-                            {decision.why ? <Text dimColor>{decision.why}</Text> : null}
-                            {(decision.tasks ?? []).length > 0 ? <Text dimColor>{words("tasksOf", { list: (decision.tasks ?? []).join(", ") })}</Text> : null}
                         </Box>
                     )
                     : null,
@@ -625,7 +698,7 @@ export const register: Register = (on) => {
                     ? section("links", "↗", words("sectionLinks"), [
                         <Box key="links-row" flexDirection="row" flexWrap="wrap" gap={1}>
                             {(snapshot.links ?? []).map((link, index) => (
-                                <Box key={`link-box-${index}`} borderStyle="round" {...border} paddingX={1} {...(isDesktop ? { hover: { backgroundColor: stateLayer } } : {})}>
+                                <Box key={`link-box-${index}`} paddingX={1} {...(isDesktop ? { backgroundColor: stateLayer, hover: { backgroundColor: chipHover } } : {})}>
                                     {link.href
                                         ? <Link key={`link-${index}`} href={link.href}>{link.label}</Link>
                                         : <Button key={`link-${index}`} plain label={link.label} onPress={() => postLink($, link.post ?? "")} />}
@@ -638,7 +711,7 @@ export const register: Register = (on) => {
                     ? section("documents", "📄", words("sectionDocuments"), [
                         <Box key="documents-row" flexDirection="row" flexWrap="wrap" gap={1}>
                             {(snapshot.documents ?? []).map((document, index) => (
-                                <Box key={`document-box-${index}`} borderStyle="round" {...border} paddingX={1} {...(isDesktop ? { hover: { backgroundColor: stateLayer } } : {})}>
+                                <Box key={`document-box-${index}`} paddingX={1} {...(isDesktop ? { backgroundColor: stateLayer, hover: { backgroundColor: chipHover } } : {})}>
                                     {document.exists ? <Link key={`document-${index}`} href={document.href}>{document.name}</Link> : <Text key={`document-${index}`} dimColor>{document.name}</Text>}
                                 </Box>
                             ))}
@@ -663,17 +736,13 @@ export const register: Register = (on) => {
                     ])
                     : null}
                 {section("goals", "⚑︎", `${words("sectionGoals")} · ${openGoals.length}`, [
-                    card("goals-card", limited("goals", openGoals).map(goalRow)),
+                    card("goals-card", goalItems()),
                     more("goals", openGoals.length, "showAllTasks"),
                     closedGoals > 0 ? <Link key="goals-closed" href={`${snapshot.page}/#overview`}>{`✓ ${words("goalsClosed", { count: closedGoals })}`}</Link> : null,
                 ], isDesktop && snapshot.plan.updated ? <Text dimColor>{words("planOf", { date: snapshot.plan.updated })}</Text> : null)}
-                {section("decisions", "⚖︎", `${words("sectionDecisions")} · ${words("decisionsCount", { count: proposals.length })}`, [
-                    <Text key="to-decide" dimColor>{words("toDecide")}</Text>,
+                {section("decisions", "⚖︎", `${words("toDecide")} · ${proposals.length}`, [
                     ...(proposals.length === 0 ? [<Text key="none-open" dimColor>{words("noneOpen")}</Text>] : limited("open", proposals).map(proposalRow)),
                     more("open", proposals.length, "showAllDecisions"),
-                    <Text key="decided-lately" dimColor>{words("decidedLately")}</Text>,
-                    ...snapshot.decisions.recent.slice(0, rows.recent).map(decisionRow),
-                    <Link key="all-decisions" href={`${snapshot.page}/#decisions`}>{words("allInPage")}</Link>,
                 ])}
             </Box>
         );

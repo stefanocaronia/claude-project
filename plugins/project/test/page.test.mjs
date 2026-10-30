@@ -28,7 +28,8 @@ test("the page draws a small project's data in every tab, without an error in it
 
         // What the data carries, drawn: tasks, a large task and its parts, a wait, a link, a note, a closed goal, a decision to take.
         assert.match(dom, /T-1<\/span>The release/);
-        assert.match(dom, /0\/2 parts/);
+        // A large task's parts as a chip that folds them, shown while one is in progress.
+        assert.match(dom, /data-fold="1" aria-expanded="true"[^>]*><span aria-hidden="true">▾ 0\/2/);
         assert.match(dom, /⛓ T-2/);
         assert.match(dom, /<b>see<\/b> D-1/);
         assert.match(dom, /href="\/note\/1"/);
@@ -41,6 +42,10 @@ test("the page draws a small project's data in every tab, without an error in it
         assert.match(dom, /class="wait stale"/);
         assert.match(dom, /<b>tasks<\/b> [^<]*T-1/);
         assert.match(dom, /<b>decisions<\/b> D-1/);
+        // A task added, changed and archived from the list; who created one.
+        assert.match(dom, /id="new-task"/);
+        assert.match(dom, /data-edit-task="1"/);
+        assert.match(dom, /created by Ann/);
         assert.doesNotMatch(dom, /That did not work/);
     } finally {
         server.closeAllConnections();
@@ -87,7 +92,7 @@ function project()
         "",
         "- T-1 · P1 · high · Claude · 2026-10-01 · Core · The release",
         "- T-3 · P2 · medium · Matteo · 2026-10-03 · Core · the log (after: T-2) (see: D-1) (in: T-1)",
-        "- T-4 · P3 · low · Ann · 2026-10-04 · — · a loose one (due: 2026-01-01) (type: bug)",
+        "- T-4 · P3 · low · Ann · 2026-10-04 · — · a loose one (due: 2026-01-01) (type: bug) (by: Ann)",
         "",
         "## Postponed",
         "",

@@ -4,7 +4,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { effortKey } from "../lib/backlog.mjs";
 import { numbering, proposalOf } from "../lib/decisions.mjs";
-import { planPhases, planUpdated } from "../lib/plan.mjs";
+import { phaseStates, planPhases, planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
@@ -79,7 +79,8 @@ function readPlan(config)
     }).filter((section) => section.total > 0);
     const phases = planPhases(text).map((phase) => {
         const own = sections.filter((section) => section.phase === phase.number);
-        return { ...phase, done: own.reduce((sum, section) => sum + section.done, 0), total: own.reduce((sum, section) => sum + section.total, 0) };
+        const isClosed = phaseStates([phase], goals)[0].isClosed;
+        return { ...phase, isClosed, done: own.reduce((sum, section) => sum + section.done, 0), total: own.reduce((sum, section) => sum + section.total, 0) };
     });
     const finishedByDay = {};
 
@@ -94,6 +95,8 @@ function readPlan(config)
         updated: planUpdated(text, config.words),
         phases,
         sections: shown,
+        // The goals a task can take: the plan's open ones, in its order.
+        openGoals: goals.filter((goal) => !goal.closed).map((goal) => goal.name),
         done: shown.reduce((sum, section) => sum + section.done, 0),
         total: shown.reduce((sum, section) => sum + section.total, 0),
         finishedByDay,
@@ -223,6 +226,7 @@ function readColleagues(config)
         return {
             id,
             name: profile.fullName,
+            short: name,
             role: profile.role,
             color: profile.color,
             open: (todo.match(/^\s*- \[ \]/gm) ?? []).length,

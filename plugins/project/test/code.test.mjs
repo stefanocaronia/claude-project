@@ -72,7 +72,7 @@ test("GitHub's issues read, a task's own, and the open ones no task does yet", (
 });
 
 test("a task takes a GitHub issue once; done asks Claude to ask about closing it; the check and show follow the issue; without gh, closing says how", () => {
-    assert.match(run("backlog.mjs", "add", "Fix the login", "--goal", "Core", "--issue", "40"), /T-3 added: .* · Fix the login \(issue: #40\)$/m);
+    assert.match(run("backlog.mjs", "add", "Fix the login", "--goal", "Core", "--issue", "40"), /T-3 added: .* · Fix the login \(issue: #40\) \(by: Claude\)$/m);
     assert.match(runAll("backlog.mjs", "add", "Again", "--issue", "#40"), /Issue #40 is already T-3's/);
     assert.match(run("backlog.mjs", "set", "T-2", "--issue", "39"), /· the log \(issue: #39\)$/m);
     assert.match(run("backlog.mjs", "show", "T-3"), /issue #40: Login fails \(open\)/);

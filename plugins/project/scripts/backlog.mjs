@@ -3,7 +3,7 @@
 //   node backlog.mjs add "text" [--goal "<goal of the plan>"] [--p P2] [--effort <word>] [--to <name>] [--state todo|doing|postponed|done]
 //   node backlog.mjs start|done|postpone|todo T-12 [T-13…]
 //   node backlog.mjs archive T-12… | archive --done
-//   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34] [--due 2026-11-15] [--type bug]
+//   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34] [--due 2026-11-15] [--type bug] [--by Stefano]
 //   node backlog.mjs add --issue 34 ["text"]   (a task from a GitHub issue, its title the text when none is given)
 //   node backlog.mjs issue-close T-12   (closes its GitHub issue with a comment: only on the user's yes)
 //   node backlog.mjs note T-12   (its note, written when missing: the path)
@@ -128,6 +128,8 @@ function execute(command, options, words, config, say)
             due: single("due", "due"),
             // A type by its key or by its name in the project's language: --type funzione is feature.
             type: single("type", "type", (value) => Object.entries(config.types).find(([, name]) => name.toLowerCase() === value.toLowerCase())?.[0] ?? value.toLowerCase()),
+            // Who created it: a name as the project writes it, whatever its case.
+            by: typeof options.by === "string" ? (assignees(config).find((name) => name.toLowerCase() === options.by.toLowerCase()) ?? options.by) : given !== undefined && split.by ? split.by : (old.by ?? null),
         };
     };
     const issueNumber = () => Number(String(options.issue).replace(/^#/, ""));
@@ -148,8 +150,10 @@ function execute(command, options, words, config, say)
             effort: options.effort ?? config.words.efforts.medium,
             to: options.to ?? config.people[0],
             created: today(),
-            goal: options.goal ?? config.words.noGoal,
-            ...linked(given),
+            // A part takes its large task's goal, unless one is given.
+            goal: options.goal ?? (typeof options.in === "string" ? tasks.find((one) => `${prefix}-${one.id}` === options.in.trim().toUpperCase())?.goal : undefined) ?? config.words.noGoal,
+            // Who created it: --by, else Claude, who runs the command.
+            ...linked(given, { by: config.people.includes("Claude") || assignees(config).includes("Claude") ? "Claude" : null }),
             done: state === "done" ? today() : null,
             archived: null,
             state,

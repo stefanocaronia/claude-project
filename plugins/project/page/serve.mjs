@@ -44,7 +44,9 @@ export async function pageServer(from)
                 const { ids } = JSON.parse((await body(request)) || "{}");
                 send(response, Array.isArray(ids) && apply(config, ids.map(String)) ? 200 : 409, "application/json", JSON.stringify(tidyState(config)));
             } else if (request.method === "POST" && url.pathname === "/backlog") {
-                const answer = changeBacklog(config, JSON.parse((await body(request)) || "{}"));
+                // Who adds through the page: the person gh is signed in as, else the first person of the project who is not Claude.
+                const creator = (await readOwner(config))?.name ?? config.people.find((person) => person !== "Claude") ?? null;
+                const answer = changeBacklog(config, JSON.parse((await body(request)) || "{}"), creator);
                 send(response, answer.ok ? 200 : 400, "application/json", JSON.stringify(answer));
             } else if (/^\/document\/\d+$/.test(url.pathname)) {
                 // A key document of the configuration, by its place in the list: never another file.
@@ -90,16 +92,22 @@ export async function listen(server, port)
 
 /** A change of the backlog the page asks, through the backlog's own command line as the panel's buttons do: a task moved to a state
  * (start, done, postpone, todo) or its priority set. Anything else is refused. */
-function changeBacklog(config, { command, id, priority, issue, title })
+/** A change of the backlog the page asks, run through its command line: a task's state, its fields, a new task, a task archived, a
+ * task made of a GitHub issue. A task the page adds is the creator's, the person the page's owner is. */
+function changeBacklog(config, { command, id, priority, issue, title, text, goal, type, to, due, effort, parent }, creator)
 {
     const task = /^[\w-]+-\d+$/.test(String(id)) ? String(id) : null;
-    const args = ["start", "done", "postpone", "todo"].includes(command) && task ? [command, task]
-        : command === "set" && task && /^P[1-3]$/.test(String(priority)) ? ["set", task, "--p", String(priority)]
-        : command === "issue" && /^\d+$/.test(String(issue)) ? ["add", ...(typeof title === "string" && title.trim() ? [title.replace(/\s+/g, " ").replaceAll(" · ", " - ").trim().slice(0, 300)] : []), "--issue", String(issue)]
+    // A field's value as one line of text, without the line's separator; "" clears a field that may be empty.
+    const clean = (value) => String(value).replace(/\s+/g, " ").replaceAll(" · ", " - ").trim().slice(0, 300);
+    const fields = Object.entries({ text, goal, p: priority, type, to, due, effort, in: parent }).filter(([, value]) => typeof value === "string").flatMap(([name, value]) => [`--${name}`, clean(value)]);
+    const args = ["start", "done", "postpone", "todo", "archive"].includes(command) && task ? [command, task]
+        : command === "set" && task && fields.length > 0 ? ["set", task, ...fields]
+        : command === "add" && typeof text === "string" && clean(text) ? ["add", clean(text), ...fields.filter((_, index, all) => all[index - (index % 2)] !== "--text"), ...(creator ? ["--by", creator] : [])]
+        : command === "issue" && /^\d+$/.test(String(issue)) ? ["add", ...(typeof title === "string" && clean(title) ? [clean(title)] : []), "--issue", String(issue), ...(creator ? ["--by", creator] : [])]
         : null;
 
     if (!args) {
-        return { ok: false, message: "The page changes a task's state (start, done, postpone, todo) or its priority (set with P1, P2 or P3), by its id, or makes a task of a GitHub issue (issue with its number)." };
+        return { ok: false, message: "The page changes a task's state (start, done, postpone, todo, archive) or its fields (set: text, goal, priority, type, to, due, effort), by its id; adds a task (add, with its text); or makes a task of a GitHub issue (issue with its number)." };
     }
 
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...env } = process.env;

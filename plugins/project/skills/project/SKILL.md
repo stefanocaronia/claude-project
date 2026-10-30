@@ -17,7 +17,7 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 
 | Command | Does |
 |---|---|
-| `add "text" --goal "<goal>" [--p P1\|P2\|P3] [--effort <word>] [--to <name>] [--state todo\|doing\|postponed\|done]` | a new task, numbered, dated today |
+| `add "text" --goal "<goal>" [--p P1\|P2\|P3] [--effort <word>] [--to <name>] [--state todo\|doing\|postponed\|done] [--type bug] [--in T-23] [--by <name>]` | a new task, numbered, dated today (a part, `--in`, takes its large task's goal unless one is given), with who created it: `(by: Claude)` unless `--by` names the person or colleague who asked for it |
 | `start`, `done`, `postpone`, `todo` `T-12 [T-13…]` | moves tasks to that state; done carries today's date |
 | `set T-12 [--p …] [--effort …] [--to …] [--goal …] [--text …] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34] [--due 2026-11-15] [--type bug]` | changes a task; `--after ""` clears; a wait that closes a cycle, or a number that does not exist, is refused |
 | `add --issue 34 ["text"]`, `issue-close T-12` | a task from a GitHub issue; the issue closed on GitHub, only on the user's yes |
@@ -28,6 +28,7 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 
 - **Priority**: P1 high (it blocks the work at hand or the next step), P2 normal (in the plan), P3 low (later, or only if the work asks). **Effort**: the project's words for Claude Code's levels, low to max, as much as the task needs.
 - **Who**: the people of the configuration and, when the project has Crew, its colleagues by first name. A colleague's real work is a task assigned to them; their `todo.md` cites it by number.
+- **Creator**: `(by: Stefano)` at the end of a task says who created it. A task you add because the user asked for that very task is theirs: `--by <their name>`; one you propose yourself, or one a colleague's review brought, is Claude's or that colleague's. The page and the panel add with their owner's name.
 - **Goal**: one of the plan's goals, as the plan's `###` heading names it without its phase, or the project's "no goal" mark.
 - **Waits**: a task blocked by one still open waits; start the chain from its first link, on one yes from the user (`show` gives it in order). A colleague's todo line that is their part of a backlog task carries its number where Crew puts its id: `- [ ] P1 · 2026-10-28 · T-61 · text`.
 - **Type and due day**: `(type: bug)` (bug, feature, chore, research, or a type of the project's `types:`; `--type` takes the key or its name in the project's language) and `(due: 2026-11-15)`, with `set --type` and `--due`. A due day near or past shows on the task; the check warns when it is past.
@@ -36,6 +37,7 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 - **Large tasks**: work too big for one task, not a goal, is a task whose parts each end with `(in: T-23)`, one level deep. A part started starts the large task; when its last part closes, the command says so and done is yours to say. Start the work from its next part (`show` names it); `list --atomic` leaves the large tasks out.
 - **The code**: a commit or a pull request that does a task cites its number in its message or title (`… (T-12)`): `show`, the panel and the page list them on the task, and the check notes a task still open that a merged pull request cites.
 - **GitHub issues** (with `gh` and a repo on GitHub): `add --issue 34` makes a task of an issue, its title the text unless one is given, ending with `(issue: #34)`; one task an issue. When a task with an open issue is done, the command says so: ask the user once whether to close it on GitHub, and only on a yes run `issue-close T-12`, which closes it with a comment naming the task and its commits.
+- **Reopened**: when the user says something new about a task already done or archived (it does not work, something is missing, a change to it), it is that task again, not a new one: `start T-12` brings it back in progress, out of the archive too, and what is new goes into its text or its note. A new task only when the work is a different one.
 - **The note**: when a task needs more than its line (the long context, what was tried, where the work got to), write it in its note with `note T-12`; before taking a task up again, read its note.
 - When a colleague is given a task whose number is in the brief, the panel moves it to in progress itself. **Done** is yours to say, after reading their report: work finished is not always a task closed.
 
@@ -45,7 +47,7 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 
 ## The plan
 
-Phases in its table (`| 2. Name | at the end you can… |`), goals as `### Name (phase 2)` under the goals heading, the line "updated on YYYY-MM-DD" kept true. A goal whose tasks are all done or archived closes with `plan.mjs close "<goal>"`: its heading gets its day, `· done 2026-10-30`, it leaves the open bars and takes no new tasks; `plan.mjs open "<goal>"` opens it again, `plan.mjs goals` lists them. The plan says where the project goes; the tasks say what is left.
+Phases in its table (`| 2. Name | at the end you can… |`), goals as `### Name (phase 2)` under the goals heading, the line "updated on YYYY-MM-DD" kept true. A goal whose tasks are all done or archived closes with `plan.mjs close "<goal>"`: its heading gets its day, `· done 2026-10-30`, it leaves the open bars and takes no new tasks; `plan.mjs open "<goal>"` opens it again, `plan.mjs goals` lists them by phase, `plan.mjs phases` says which phases are closed: a phase closes when every goal of it has. The plan says where the project goes; the tasks say what is left.
 
 ## Health: `check.mjs`
 
