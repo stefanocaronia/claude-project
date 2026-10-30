@@ -325,9 +325,24 @@ export const register: Register = (on) => {
                     : null,
             ]);
         };
-        // The proposals with a priority first, P1 before those without and P3 after; the newest first within each.
-        const rank = (proposal: Proposal) => (proposal.priority === "P1" ? 0 : proposal.priority === "P3" ? 2 : 1);
-        const proposals = snapshot.decisions.open.slice().sort((first, second) => rank(first) - rank(second) || (second.day ?? "").localeCompare(first.day ?? "") || second.line - first.line);
+        // The proposals ordered as the tasks are: by priority, those without one last, then the oldest (a point without a day by its place
+        // in the file, the earlier first).
+        const rank = (proposal: Proposal) => (proposal.priority ? Number(proposal.priority.slice(1)) : 4);
+        const proposals = snapshot.decisions.open.slice().sort((first, second) => rank(first) - rank(second) || (first.day ?? "9999").localeCompare(second.day ?? "9999") || first.line - second.line);
+        // What the buttons above the links start: the first task someone here can start, the first decision to take.
+        const nextTask = rest.find((task) => task.state === "todo" && (task.to === "Claude" || byName.has(task.to)));
+        const nextProposal = proposals[0];
+        const actions = (
+            <Box key="actions" flexDirection="row" flexWrap="wrap" gap={1}>
+                {nextTask
+                    ? isStarting(`task-${nextTask.id}`)
+                        ? <Button key="next-task" label={words("starting")} onPress={() => undefined} />
+                        : <Button key="next-task" variant="primary" label={words("nextTask", { id: `${prefix}-${nextTask.id}` })} onPress={() => startTask($, snapshot, nextTask, byName.get(nextTask.to))} />
+                    : null}
+                {nextProposal ? <Button key="next-decision" label={words("nextDecision")} onPress={() => submit($, words("promptChoice", { line: nextProposal.line, text: nextProposal.whole }))} /> : null}
+                <Button key="tidy-docs" label={words("tidyDocs")} onPress={() => submit($, words("promptTidy"))} />
+            </Box>
+        );
 
         // The project at a glance, in colored tiles as Crew's: each opens its tab of the page.
         const errors = snapshot.health?.errors ?? 0;
@@ -369,6 +384,7 @@ export const register: Register = (on) => {
                 </Box>
                 {[current.problem, ...(snapshot.problems ?? [])].filter((problem): problem is string => Boolean(problem)).map((problem, index) => <Text key={`problem-${index}`} color={errorColor}>{`⚠ ${problem}`}</Text>)}
                 <Box key="tiles" flexDirection="row" flexWrap="wrap" gap={1}>{tiles}</Box>
+                {actions}
                 {(snapshot.links ?? []).length > 0
                     ? section("links", "↗", words("sectionLinks"), [
                         <Box key="links-row" flexDirection="row" flexWrap="wrap" gap={1}>

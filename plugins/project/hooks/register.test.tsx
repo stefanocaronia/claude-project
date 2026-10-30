@@ -210,3 +210,17 @@ test("in a folder with no project the panel opens on nothing and says how to set
     expect(await ui.find({ type: "Text", text: /\/project:init/ })).toBeDefined();
     await ui.unmount();
 });
+
+test("the buttons above the links start the first task by priority and age, and bring the first decision as a choice", async ($, on) => {
+    const { prompts, commands } = world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    expect((await ui.find({ key: "next-task" }))?.props.label).toBe("▶ Prossimo compito (T-61)");
+    await ui.press({ key: "next-task" });
+    await ui.press({ key: "next-decision" });
+    await ui.press({ key: "tidy-docs" });
+    expect(commands).toEqual(["/crew:next Matteo -- T-61 · La plancia, in tre parti"]);
+    expect(prompts[0]).toMatch(/\(riga 553 delle decisioni\): P3 · Le cariche degli oggetti$/);
+    expect(prompts[1]).toMatch(/^Riordina i documenti del progetto/);
+    await ui.unmount();
+});
