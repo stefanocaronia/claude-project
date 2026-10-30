@@ -28,7 +28,17 @@ export type Task = {
     parts: string[];
     partsDone: number;
     nextPart: string | null;
+    /** The code that cites it: its latest commits and how many, its pull requests, the latest merged one. */
+    commits: { hash: string; day: string; subject: string; repo: string; url: string | null }[];
+    commitCount: number;
+    pulls: Pull[];
+    mergedPull: Pull | null;
+    /** Its GitHub issue, `(issue: #34)`, as GitHub has it; null without one, or without gh. */
+    issue?: string | null;
+    issueInfo?: { number: number; title: string; state: string; url: string | null; closed: string | null } | null;
 };
+
+export type Pull = { number: number; title: string; state: string; url: string | null; merged: string | null };
 
 /** A goal of the plan with its tasks counted; `closed`, the day it closed, out of the open bars. */
 export type Goal = { name: string; phase: number | null; done: number; total: number; isDoing: boolean; closed?: string | null };
@@ -54,6 +64,8 @@ export type Snapshot = {
     people: string[];
     /** The key documents, each opened through the project's page. */
     documents: { name: string; href: string; exists: boolean }[];
+    /** The open GitHub issues no task does yet, to take into the backlog; none without gh. */
+    issues?: { number: number; title: string; url: string | null }[];
     colleagues: Member[];
     tasks: Task[];
     plan: { updated: string | null; goals: Goal[] };

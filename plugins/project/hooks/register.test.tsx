@@ -15,17 +15,18 @@ const snapshot = {
     links: [{ label: "↗ betasim 1280", href: "http://localhost:5790/extension/game/betasim/1280/latest/index.html" }, { label: "▶ Demo · 5e", post: "http://localhost:5790/extension/game/demo/5e/start" }],
     people: ["Claude", "Stefano"],
     documents: [{ name: "GDD", href: "http://localhost:5790/document/0", exists: true }],
+    issues: [{ number: 40, title: "Il login fallisce", url: "https://github.com/a/b/issues/40" }],
     colleagues: [{ id: "matteo-conti", name: "Matteo", fullName: "Matteo Conti", role: "code review", color: "red" }],
     tasks: [
         { id: 62, priority: "P1", effort: "alto", effortKey: "high", to: "Matteo", colleague: "matteo-conti", created: "2026-10-28", goal: "Revisione", text: "I pacchetti nei loro repo", state: "doing", after: [], blockedBy: [], chain: [], waitedBy: ["T-72"], see: [], seenFrom: [], note: null, noteHref: null },
-        { id: 143, priority: "P2", effort: "alto", effortKey: "high", to: "Claude", colleague: null, created: "2026-10-29", goal: "—", text: "Il plugin claude-project", state: "doing", after: [], blockedBy: [], chain: [], waitedBy: [], see: ["D-541"], seenFrom: ["T-61"], note: "docs/compiti/T-143.md", noteHref: "http://localhost:5790/note/143" },
+        { id: 143, priority: "P2", effort: "alto", effortKey: "high", to: "Claude", colleague: null, created: "2026-10-29", goal: "—", text: "Il plugin claude-project", state: "doing", after: [], blockedBy: [], chain: [], waitedBy: [], see: ["D-541"], seenFrom: ["T-61"], note: "docs/compiti/T-143.md", noteHref: "http://localhost:5790/note/143", commits: [{ hash: "759cf6f", day: "2026-10-30", subject: "Project 0.3.0", repo: "progetto", url: "https://github.com/a/b/commit/759cf6f" }], commitCount: 3, pulls: [{ number: 12, title: "Il plugin", state: "merged", url: "https://github.com/a/b/pull/12", merged: "2026-10-30" }], mergedPull: { number: 12, title: "Il plugin", state: "merged", url: "https://github.com/a/b/pull/12", merged: "2026-10-30" } },
         { id: 61, priority: "P1", effort: "alto", effortKey: "high", to: "Matteo", colleague: "matteo-conti", created: "2026-10-28", goal: "Revisione", text: "La plancia, in tre parti", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: ["T-143"], seenFrom: [], note: null, noteHref: null },
         // The oldest P1 to do, but it waits for T-62, still in progress: the next-task button skips it.
         { id: 72, priority: "P1", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-20", goal: "Revisione", text: "Il rilascio", state: "todo", after: ["T-62", "#giulia-1"], blockedBy: ["T-62", "#giulia-1"], chain: ["#giulia-1", "T-62"], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
         // A large task, the oldest P1, is done through its parts: the next-task button skips it, its ▶ starts its next part.
         { id: 80, priority: "P1", effort: "alto", effortKey: "high", to: "Claude", colleague: null, created: "2026-10-01", goal: "Revisione", text: "I sotto-compiti", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null, parent: null, parts: ["T-81", "T-82"], partsDone: 1, nextPart: "T-81" },
         { id: 81, priority: "P2", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-02", goal: "Revisione", text: "Il formato", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null, parent: "T-80", parts: [], partsDone: 0, nextPart: null },
-        { id: 70, priority: "P1", effort: "medio", effortKey: "medium", to: "Stefano", colleague: null, created: "2026-10-28", goal: "—", text: "Il login di npm", state: "todo", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
+        { id: 70, priority: "P1", effort: "medio", effortKey: "medium", to: "Stefano", colleague: null, created: "2026-10-28", goal: "—", text: "Il login di npm", state: "todo", issue: "#33", issueInfo: { number: 33, title: "npm login", state: "open", url: "https://github.com/a/b/issues/33", closed: null }, after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
         { id: 71, priority: "P3", effort: "medio", effortKey: "medium", to: "Claude", colleague: null, created: "2026-10-28", goal: "Revisione", text: "Più avanti", state: "postponed", after: [], blockedBy: [], chain: [], waitedBy: [], see: [], seenFrom: [], note: null, noteHref: null },
     ],
     plan: { updated: "2026-10-29", goals: [{ name: "Revisione", phase: null, done: 6, total: 9, isDoing: true }, { name: "La 5e", phase: 4, done: 0, total: 3, isDoing: false }, { name: "Il nucleo", phase: 1, done: 5, total: 5, isDoing: false, closed: "2026-10-20" }] },
@@ -260,6 +261,10 @@ test("a task in progress: a colleague at work shows instead of ▶, the chat tha
     const again = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
     // This chat holds T-143 now: no ▶, once the start shown on the button is over.
     expect(await again.find({ key: "start-143" })).toBeUndefined();
+    // A chat at work on a task starts no other: no next task, no ▶, a line that says where another one starts.
+    expect(await again.find({ key: "next-task" })).toBeUndefined();
+    expect(await again.find({ key: "start-61" })).toBeUndefined();
+    expect(await again.find({ type: "Text", text: "Questa chat lavora a T-143: un altro compito si avvia in una nuova sessione del progetto." })).toBeDefined();
     await again.unmount();
 });
 
@@ -280,6 +285,10 @@ test("a blocked task shows what it waits for in place of its age, its ▶ asks f
         expect(await ui.find({ type: "Text", text: "vedi: D-541" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: "citato da: T-61" })).toBeDefined();
         expect((await ui.find({ type: "Link", text: "📄 Nota ↗" }))?.props.href).toBe("http://localhost:5790/note/143");
+        // The code that cites it: the commits, the latest a link; the pull request, merged, and that the task can close.
+        expect((await ui.find({ type: "Link", text: "⎇ 3 commit, l'ultimo il 2026-10-30" }))?.props.href).toBe("https://github.com/a/b/commit/759cf6f");
+        expect((await ui.find({ type: "Link", text: "pull request #12, unita il 2026-10-30: Il plugin" }))?.props.href).toBe("https://github.com/a/b/pull/12");
+        expect(await ui.find({ type: "Text", text: "✓ pull request #12 unita: si può chiudere" })).toBeDefined();
         await ui.press({ key: "open-143" });
         await ui.unmount();
     }
@@ -347,5 +356,20 @@ test("a large task shows its parts closed in place of its age, its ▶ starts th
     await ui.press({ key: "start-80" });
     expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "start", "T-81"]]);
     expect(prompts[0]).toBe("Lavora a T-81: Il formato");
+    await ui.unmount();
+});
+
+test("the open GitHub issues no task does yet show apart and go into the backlog; done on a task whose issue is open asks Claude to ask about closing it", async ($, on) => {
+    const { runs, prompts } = world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
+    expect((await ui.find({ key: "toggle-issues" }))?.props.label).toBe("▾ ◉ Issue di GitHub · 1");
+    runs.length = 0;
+    await ui.press({ key: "issue-take-40" });
+    await ui.press({ key: "open-70" });
+    expect((await ui.find({ type: "Link", text: "issue #33: npm login (aperta)" }))?.props.href).toBe("https://github.com/a/b/issues/33");
+    await ui.press({ key: "done-70" });
+    expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "add", "Il login fallisce", "--issue", "40"], ["backlog.mjs", "done", "T-70"]]);
+    expect(prompts[0]).toMatch(/^T-70 è fatto e la sua issue #33 su GitHub è ancora aperta: chiedimi se chiuderla/);
     await ui.unmount();
 });

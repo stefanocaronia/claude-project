@@ -85,15 +85,16 @@ export async function listen(server, port)
 
 /** A change of the backlog the page asks, through the backlog's own command line as the panel's buttons do: a task moved to a state
  * (start, done, postpone, todo) or its priority set. Anything else is refused. */
-function changeBacklog(config, { command, id, priority })
+function changeBacklog(config, { command, id, priority, issue, title })
 {
     const task = /^[\w-]+-\d+$/.test(String(id)) ? String(id) : null;
     const args = ["start", "done", "postpone", "todo"].includes(command) && task ? [command, task]
         : command === "set" && task && /^P[1-3]$/.test(String(priority)) ? ["set", task, "--p", String(priority)]
+        : command === "issue" && /^\d+$/.test(String(issue)) ? ["add", ...(typeof title === "string" && title.trim() ? [title.replace(/\s+/g, " ").replaceAll(" · ", " - ").trim().slice(0, 300)] : []), "--issue", String(issue)]
         : null;
 
     if (!args) {
-        return { ok: false, message: "The page changes a task's state (start, done, postpone, todo) or its priority (set with P1, P2 or P3), by its id." };
+        return { ok: false, message: "The page changes a task's state (start, done, postpone, todo) or its priority (set with P1, P2 or P3), by its id, or makes a task of a GitHub issue (issue with its number)." };
     }
 
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...env } = process.env;

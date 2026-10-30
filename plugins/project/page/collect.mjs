@@ -8,9 +8,11 @@ import { numbering, proposalOf } from "../lib/decisions.mjs";
 import { planPhases, planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
+import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
 import { check } from "../scripts/check.mjs";
+import { readCode, readIssues } from "../scripts/code.mjs";
 import { context } from "../scripts/extensions.mjs";
-import { colleagues, git, profileOf, projectName, read, readBacklog, readDecisions, readGoals, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
+import { colleagues, git, profileOf, projectName, read, readBacklog, readDecisions, projectRepos, readGoals, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 const lastDecisions = 8;
@@ -47,6 +49,7 @@ export async function collect(config, say, extensions = [])
         colleagues: readColleagues(config),
         tasks: readTasks(config),
         board: readBoard(config),
+        issues: freeIssues(readIssues(config), readBacklog(config).tasks).map(({ number, title, url }) => ({ number, title, url })),
         boardDays,
         holds: readHolds(config),
         health: check(config, say),
@@ -164,6 +167,8 @@ function readBoard(config)
     const { tasks } = readBacklog(config);
     const planned = new Set(readGoals(config).map((goal) => goal.name));
     const links = taskLinks(config, tasks);
+    const code = readCode(config);
+    const issues = readIssues(config);
     // Each with its links, as the panel has them: after, see, blockedBy, chain, waitedBy, seenFrom; its note's path, and where the page serves it.
     return tasks
         // An archived task whose goal the plan no longer has is history: the board's rows are the plan's goals.
@@ -175,6 +180,8 @@ function readBoard(config)
             effortKey: effortKey(task.effort, config.words) ?? "none",
             colleague: ids.get(task.to) ?? null,
             noteHref: links.get(task.id).note ? `/note/${task.id}` : null,
+            ...codeView(code.get(task.id)),
+            issueInfo: issueOf(issues, task),
         }));
 }
 
@@ -257,16 +264,8 @@ function readTasks(config)
 function activity(config)
 {
     const since = new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10);
-    const repos = config.repos ?? defaultRepos(config);
+    const repos = projectRepos(config);
     return repos.map((repo) => ({ name: repo.name, days: commitsPerDay(repo.path, since) }));
-}
-
-function defaultRepos(config)
-{
-    const top = (folder) => git(folder, ["rev-parse", "--show-toplevel"]).trim().toLowerCase();
-    const project = top(config.root);
-    const docs = existsSync(config.docs) ? top(realPath(config.docs)) : "";
-    return [{ name: config.words.repoProject, path: config.root }, ...(docs && docs !== project ? [{ name: config.words.repoDocs, path: realPath(config.docs) }] : [])];
 }
 
 function commitsPerDay(root, since)

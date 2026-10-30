@@ -1072,10 +1072,34 @@
         opacity: 0.7;
     }
 
+    /* The open GitHub issues not yet in the backlog */
+    .issues {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .issue-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 6px 0;
+        border-top: 1px solid var(--grid);
+        font-size: 13px;
+    }
+
     /* A part under its large task, a step in, with a rule on its left */
     .task.part, .row.part {
         margin-left: 18px;
         border-left: 2px solid var(--axis);
+    }
+
+    /* A part's face smaller than its large task's */
+    .part .face, .part .face svg {
+        width: 16px;
+        height: 16px;
+        font-size: 8px;
     }
 
     /* The board: a column by state, a lane by goal */
@@ -2498,6 +2522,8 @@ function tasksPanel()
             <div id="task-list">${taskListBody()}</div>
         </section>
 
+        ${issuesCard()}
+
         <section class="card span-12">
             <h2>${t("tasksTitle")}</h2>
             <p class="hint">${t("tasksHint", tasks.length)}</p>
@@ -2728,8 +2754,44 @@ function taskLinks(task)
         line(t("linkSee"), task.see),
         line(t("linkSeenFrom"), task.seenFrom),
         task.noteHref ? `<a href="${attribute(task.noteHref)}" target="_blank" rel="noopener">${escape(t("openNote"))}</a>` : "",
+        ...codeLinks(task),
     ].filter(Boolean);
     return parts.length > 0 ? `<div class="task-links">${parts.join("")}</div>` : "";
+}
+
+/** The code that cites a task: how many commits, the latest a link and the others under the pointer; each pull request, a link, with
+ * its state; on a task still open, a merged one says it can close. */
+function codeLinks(task)
+{
+    const commits = task.commits ?? [];
+    const link = (href, text, tip = "") => (href ? `<a href="${attribute(href)}" target="_blank" rel="noopener" ${tip ? `data-tip="${attribute(tip)}"` : ""}>${escape(text)}</a>` : `<span ${tip ? `data-tip="${attribute(tip)}"` : ""}>${escape(text)}</span>`);
+    const list = commits.map((commit) => `${escape(commit.hash)} ${escape(commit.day)} ${escape(commit.subject.slice(0, 90))}`).join("<br>");
+    const state = (pull) => (pull.merged ? t("pullMerged", formatDay(pull.merged)) : t(pull.state === "open" ? "pullOpen" : "pullClosed"));
+    const open = columnOf(task) !== "done";
+    const issue = task.issueInfo;
+    return [
+        issue ? link(issue.url, `${t("linkIssue")} #${issue.number} · ${t(issue.state === "open" ? "pullOpen" : "pullClosed")}`, escape(issue.title)) : "",
+        commits.length ? link(commits[0].url, t("commitsCount", task.commitCount, formatDay(commits[0].day)), list) : "",
+        ...(task.pulls ?? []).map((pull) => link(pull.url, `#${pull.number} · ${state(pull)}`, escape(pull.title))),
+        open && task.mergedPull ? `<span class="work">${escape(t("mergedCanClose", task.mergedPull.number))}</span>` : "",
+    ];
+}
+
+/** The open GitHub issues no task does yet, each a link with the button that makes it a task of the backlog; nothing without them. */
+function issuesCard()
+{
+    const issues = data.issues ?? [];
+
+    if (!issues.length) {
+        return "";
+    }
+
+    const rows = issues.map((issue) => `<li class="issue-row">${issue.url ? `<a href="${attribute(issue.url)}" target="_blank" rel="noopener"><b>#${issue.number}</b> ${escape(issue.title)}</a>` : `<span><b>#${issue.number}</b> ${escape(issue.title)}</span>`}<button type="button" id="issue-take-${issue.number}" data-take-issue="${issue.number}" data-title="${attribute(issue.title)}">${escape(t("issueToBacklog"))}</button></li>`).join("");
+    return `<section class="card span-12">
+            <h2>${escape(t("issuesTitle"))} <span class="badge">${issues.length}</span></h2>
+            <p class="hint">${escape(t("issuesHint"))}</p>
+            <ul class="issues">${rows}</ul>
+        </section>`;
 }
 
 /** Puts the board's hands on the page once: drags, the moves, the priorities, the texts that open, the filters and the search. */
@@ -2756,6 +2818,8 @@ function setupBoard()
         } else if (target.hasAttribute("data-clear-filters")) {
             Object.assign(taskFilter, { state: "open", priority: "all", who: "all", goal: "all" });
             refreshTaskList("filter-state-open");
+        } else if (target.dataset.takeIssue) {
+            changeTask({ command: "issue", issue: target.dataset.takeIssue, title: target.dataset.title }, t("issueTaken", target.dataset.takeIssue));
         } else if (target.dataset.goLane !== undefined) {
             goToLane(target.dataset.goLane);
         } else if (target.dataset.goTasks !== undefined) {

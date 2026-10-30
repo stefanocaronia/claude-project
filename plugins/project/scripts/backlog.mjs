@@ -3,14 +3,18 @@
 //   node backlog.mjs add "text" [--goal "<goal of the plan>"] [--p P2] [--effort <word>] [--to <name>] [--state todo|doing|postponed|done]
 //   node backlog.mjs start|done|postpone|todo T-12 [T-13…]
 //   node backlog.mjs archive T-12… | archive --done
-//   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23]
+//   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34]
+//   node backlog.mjs add --issue 34 ["text"]   (a task from a GitHub issue, its title the text when none is given)
+//   node backlog.mjs issue-close T-12   (closes its GitHub issue with a comment: only on the user's yes)
 //   node backlog.mjs note T-12   (its note, written when missing: the path)
 //   node backlog.mjs show T-12… | list [--atomic] [--state doing] [--to <name>] [--p P1] [--goal "…"] [--json] | find <words>… | goals
 import { existsSync } from "node:fs";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
+import { codeView, issueOf } from "../lib/code.mjs";
 import { listOf, nestedParts, splitLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { stateKeys } from "../lib/words.mjs";
+import { closeIssue, readCode, readIssue, readIssues } from "./code.mjs";
 import { assignees, isMain, loadProject, notePath, ProjectError, readBacklog, readDecisions, readDependencies, readGoals, runCli, shown, taskLinks, today, withBacklogLock, write, writeBacklog } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
@@ -98,21 +102,27 @@ function execute(command, options, words, config, say)
         const all = [...tasks.filter((one) => one.id !== task.id), task];
         // A goal given now must be open; a task keeps the goal it had, closed or not.
         const closed = typeof options.goal === "string" ? readGoals(config).find((goal) => goal.name === options.goal && goal.closed) : undefined;
+        // An issue is done by one task only.
+        const taken = task.issue ? tasks.find((one) => one.id !== task.id && one.issue === task.issue) : undefined;
         const errors = [
             ...(closed ? [say("goalIsClosed", { value: closed.name, day: closed.closed })] : []),
+            ...(taken ? [say("issueTaken", { issue: task.issue, id: `${prefix}-${taken.id}` })] : []),
             ...taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), prefix, decisionPrefix: config.prefixes.decision, say }),
             ...linkErrors(task, all, config, say),
         ];
         return errors.length > 0 ? fail(errors.join("\n")) : task;
     };
-    // The links of a text, `(after: …)`, `(see: …)` and `(in: …)` at its end, with those of the options on top: an option given replaces.
-    const linked = (given, old = { after: [], see: [], parent: null }) => {
+    // The links of a text, `(after: …)`, `(see: …)`, `(in: …)` and `(issue: …)` at its end, with those of the options on top: an option
+    // given replaces.
+    const linked = (given, old = { after: [], see: [], parent: null, issue: null }) => {
         const split = splitLinks(given ?? old.text);
         const isGiven = (kind) => options[kind] !== undefined && options[kind] !== true;
         const pick = (kind) => (isGiven(kind) ? listOf(options[kind]) : given !== undefined && split[kind].length > 0 ? split[kind] : old[kind]);
         const parent = isGiven("in") ? (listOf(options.in)[0] ?? null) : given !== undefined && split.parent ? split.parent : (old.parent ?? null);
-        return { text: split.text, after: pick("after"), see: pick("see"), parent };
+        const issue = isGiven("issue") ? (listOf(options.issue)[0]?.replace(/^#?/, "#") ?? null) : given !== undefined && split.issue ? split.issue : (old.issue ?? null);
+        return { text: split.text, after: pick("after"), see: pick("see"), parent, issue };
     };
+    const issueNumber = () => Number(String(options.issue).replace(/^#/, ""));
     const save = (all, said) => {
         writeBacklog(config, all);
         console.log(said);
@@ -121,7 +131,8 @@ function execute(command, options, words, config, say)
     if (command === "next") {
         console.log(`${prefix}-${nextId(tasks)}`);
     } else if (command === "add") {
-        const given = words.join(" ").trim() || fail(say("noText"));
+        // A task made from a GitHub issue takes the issue's title, when it is given no text of its own.
+        const given = words.join(" ").trim() || (typeof options.issue === "string" ? readIssue(config, issueNumber()).title.replaceAll(" · ", " - ") : fail(say("noText")));
         const state = options.state ?? "todo";
         const task = checked({
             id: nextId(tasks),
@@ -143,6 +154,14 @@ function execute(command, options, words, config, say)
         const parents = state === "doing" ? ids.map((id) => tasks.find((task) => task.id === id).parent).filter(Boolean).map(find).filter((task) => ["todo", "postponed"].includes(task.state)).map((task) => task.id) : [];
         const moved = moveTasks(moveTasks(tasks, ids, state, today()).tasks, parents, "doing", today()).tasks;
         save(moved, [...ids, ...parents].map((id) => say("moved", { id: `${prefix}-${id}`, state: config.words.states[state] })).join("\n"));
+        // A task done whose GitHub issue is still open: Claude asks whether to close it, and closes it on a yes.
+        const issues = state === "done" ? readIssues(config) : [];
+
+        for (const task of ids.map((id) => moved.find((one) => one.id === id)).filter((one) => one.issue)) {
+            if (issues.find((issue) => `#${issue.number}` === task.issue)?.state === "open") {
+                console.log(say("issueAskClose", { id: `${prefix}-${task.id}`, issue: task.issue }));
+            }
+        }
         // A large task whose parts are now all closed: done is still to say, as for any task.
         const isClosed = (task) => task.state === "done" || task.state === "archived";
 
@@ -166,6 +185,12 @@ function execute(command, options, words, config, say)
             ...linked(typeof options.text === "string" ? options.text : undefined, task),
         });
         save(tasks.map((one) => (one.id === task.id ? changed : one)), line(changed));
+    } else if (command === "issue-close") {
+        const task = find(words[0]);
+        const number = Number(String(task.issue ?? fail(say("noIssue", { id: `${prefix}-${task.id}` }))).slice(1));
+        const commits = readCode(config).get(task.id)?.commits ?? [];
+        closeIssue(config, number, say("issueComment", { id: `${prefix}-${task.id}`, project: config.name ? ` (${config.name})` : "", commits: commits.length > 0 ? say("issueCommits", { list: commits.slice(0, 10).map((commit) => commit.hash).join(", ") }) : "" }).trim());
+        console.log(say("issueClosed", { issue: task.issue, id: `${prefix}-${task.id}` }));
     } else if (command === "note") {
         const task = find(words[0]);
         const path = notePath(config, task.id);
@@ -178,7 +203,13 @@ function execute(command, options, words, config, say)
     } else if (command === "show") {
         const shownTasks = words.map(find);
         const links = linksOf(tasks, config, say, stateName);
-        print(shownTasks, options.json, (task) => [line(task), `  ${say("stateLabel", { state: stateName(task) })}`, ...links(task).map((one) => `  ${one}`)].join("\n"));
+        const code = readCode(config);
+        const issues = shownTasks.some((task) => task.issue) ? readIssues(config) : [];
+        const issueLine = (task) => {
+            const issue = issueOf(issues, task);
+            return issue ? [say("issueLabel", { issue: task.issue, title: issue.title, state: say(issue.state === "open" ? "issueStateOpen" : "issueStateClosed") })] : [];
+        };
+        print(shownTasks, options.json, (task) => [line(task), ...[say("stateLabel", { state: stateName(task) }), ...links(task), ...issueLine(task), ...codeLines(code.get(task.id), say)].map((one) => `  ${one}`)].join("\n"));
     } else if (command === "list") {
         const shownTasks = tasks.filter((task) => (options.state ? task.state === options.state : task.state !== "archived" && task.state !== "done"))
             .filter((task) => !options.to || task.to === options.to)
@@ -250,6 +281,17 @@ function linksOf(tasks, config, say, stateName)
             note ? say("noteLabel", { path: note }) : null,
         ].filter(Boolean);
     };
+}
+
+/** The lines `show` adds for a task's code: how many commits cite it and the latest, each pull request that cites it and its state. */
+function codeLines(cited, say)
+{
+    const { commits, commitCount, pulls } = codeView(cited, 1);
+    const state = (pull) => (pull.merged ? say("pullMerged", { day: pull.merged }) : say(pull.state === "open" ? "pullOpen" : "pullClosed"));
+    return [
+        commitCount > 0 ? say("codeCommits", { count: commitCount, hash: commits[0].hash, day: commits[0].day, subject: commits[0].subject }) : null,
+        ...pulls.map((pull) => say("codePull", { number: pull.number, state: state(pull), title: pull.title })),
+    ].filter(Boolean);
 }
 
 function print(tasks, json, line, footer)

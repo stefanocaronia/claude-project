@@ -4,7 +4,7 @@
 import { atom, read, update } from "claude-code";
 import type { EngineInterface, Register } from "claude-code";
 
-import type { Board, Goal, Member, Proposal, Snapshot, Task, View } from "../types";
+import type { Board, Goal, Member, Proposal, Pull, Snapshot, Task, View } from "../types";
 
 import { barEndSvg, claudeSvg, effortSvg, faceSvg, prioritySvg, wideBarSvg } from "./draw.ts";
 import { citedTasks } from "../lib/backlog.mjs";
@@ -17,9 +17,9 @@ const board = atom({ plugin: "project", key: "board" } as const, { snapshot: nul
 const holdsLast = 24 * 3_600_000;
 const view = atom({ plugin: "project", key: "view" } as const, { sections: {}, expanded: null, whole: {}, starting: {} }, { shape: "view-1" });
 // The sections open at the start, as Joseph's sketch has them: the decisions closed, the tile above says how many wait.
-const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, goals: true, decisions: false };
+const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, issues: true, goals: true, decisions: false };
 // How many rows a section shows before "show all".
-const rows: Record<string, number> = { doing: 5, rest: 10, goals: 5, open: 3, recent: 3 };
+const rows: Record<string, number> = { doing: 5, rest: 10, issues: 5, goals: 5, open: 3, recent: 3 };
 const proposalLength = 400;
 // Crew's marks: a priority as an issue tracker draws it, the green of work, the purple of decisions, the red of errors.
 const priorities = { P1: { glyph: "⇈", color: "#E5493A" }, P2: { glyph: "=", color: "#E2852B" }, P3: { glyph: "↓", color: "#4C8FE0" } } as const;
@@ -142,6 +142,11 @@ export const register: Register = (on) => {
         const shownIds = new Set(snapshot.tasks.map((task) => `${snapshot.prefixes.task}-${task.id}`));
         const isGrouped = (task: Task) => Boolean(task.parent && shownIds.has(task.parent));
         const doing = snapshot.tasks.filter((task) => task.state === "doing" && !isGrouped(task));
+        // The task this chat is at work on, itself and not through a colleague: while it holds one, it starts no other.
+        const busyWith = doing.concat(snapshot.tasks.filter(isGrouped)).find((task) => {
+            const held = current.holds[String(task.id)];
+            return task.state === "doing" && held && held.session === current.session && !held.colleague;
+        });
         // Everything still to do, as Crew's backlog lists it: by priority, then the oldest; the postponed after.
         const order = (task: Task) => `${task.state === "postponed" ? 1 : 0}${task.priority}${task.created}`;
         const rest = snapshot.tasks.filter((task) => (task.state === "todo" || task.state === "postponed") && !isGrouped(task)).sort((first, second) => order(first).localeCompare(order(second)));
@@ -216,6 +221,11 @@ export const register: Register = (on) => {
             const key = `task-${task.id}`;
             const member = byName.get(task.to);
 
+            // A chat at work on a task starts no other: another task is for a new session of the project.
+            if (busyWith && busyWith.id !== task.id) {
+                return null;
+            }
+
             // A large task is done through its parts: its ▶ starts the next one, by priority and age, free and to do.
             if (isLarge(task)) {
                 const part = snapshot.tasks.find((one) => `${prefix}-${one.id}` === task.nextPart);
@@ -285,22 +295,37 @@ export const register: Register = (on) => {
             (task.seenFrom ?? []).length > 0 ? words("seenFrom", { list: task.seenFrom.join(", ") }) : null,
         ].filter((line): line is string => Boolean(line)).map((line, index) => <Text key={`link-${task.id}-${index}`} dimColor>{line}</Text>);
         // A task's card; a large task's holds its open parts under it, those in progress first, then as the lists order them.
+        // The code that cites a task, under its links: its commits, the latest a link, and each pull request, a link, with its state; a
+        // merged one on a task still open says it can close.
+        const codeLines = (task: Task) => {
+            const latest = (task.commits ?? [])[0];
+            const issue = task.issueInfo;
+            const state = (pull: Pull) => (pull.merged ? words("pullMerged", { day: pull.merged }) : words(pull.state === "open" ? "pullOpen" : "pullClosed"));
+            const line = (key: string, text: string, href: string | null | undefined, color?: string) => (href ? <Link key={key} href={href}>{text}</Link> : <Text key={key} dimColor={!color} color={color}>{text}</Text>);
+            return [
+                issue ? line(`issue-${task.id}`, words("issueLabel", { issue: `#${issue.number}`, title: issue.title, state: words(issue.state === "open" ? "issueStateOpen" : "issueStateClosed") }), issue.url) : null,
+                latest ? line(`commits-${task.id}`, words("commitsCount", { count: task.commitCount, day: latest.day }), latest.url) : null,
+                ...(task.pulls ?? []).map((pull) => line(`pull-${task.id}-${pull.number}`, words("codePull", { number: pull.number, state: state(pull), title: pull.title }), pull.url)),
+                task.mergedPull ? line(`merged-${task.id}`, `✓ ${words("mergedCanClose", { number: task.mergedPull.number })}`, null, workColor) : null,
+            ].filter((element): element is JSX.Element => element !== null);
+        };
         const taskRow = (task: Task) => {
             const parts = snapshot.tasks.filter((part) => part.parent === `${prefix}-${task.id}`)
                 .sort((first, second) => Number(second.state === "doing") - Number(first.state === "doing") || order(first).localeCompare(order(second)));
             return card(`task-${task.id}`, [
                 ...taskLines(task),
-                ...parts.map((part) => <Box key={`part-${part.id}`} flexDirection="column" paddingLeft={isDesktop ? 4 : 2}>{taskLines(part)}</Box>),
+                ...parts.map((part) => <Box key={`part-${part.id}`} flexDirection="column" paddingLeft={isDesktop ? 4 : 2}>{taskLines(part, true)}</Box>),
             ]);
         };
-        const taskLines = (task: Task) => {
+        // A part, under its large task, has a smaller face.
+        const taskLines = (task: Task, isPart = false) => {
             const key = `task-${task.id}`;
             const isExpanded = panel.expanded === key;
             const member = byName.get(task.to);
             const facts = [`${prefix}-${task.id}`, `${task.priority} ${words("priorityLabel", { name: snapshot.words.priorities[task.priority] ?? "" })}`, `${words("effort")} ${task.effort}`, member?.fullName ?? task.to, task.goal === snapshot.words.noGoal ? null : task.goal, words("born", { date: task.created })];
             return [
                 <Box key={`row-${task.id}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
-                    {face(task.to, 24)}
+                    {face(task.to, isPart ? 18 : 24)}
                     {priorityMark(task)}
                     <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
                         <Button key={`open-${task.id}`} plain onPress={expand(key)}>
@@ -317,9 +342,10 @@ export const register: Register = (on) => {
                             <Text>{task.text}</Text>
                             <Text dimColor>{facts.filter(Boolean).join(" · ")}</Text>
                             {linkLines(task)}
+                            {codeLines(task)}
                             <Box flexDirection="row" columnGap={2}>
                                 {task.noteHref ? <Link key={`note-${task.id}`} href={task.noteHref}>{words("openNote")}</Link> : null}
-                                <Button key={`done-${task.id}`} plain label={words("markDone")} onPress={() => backlog($, ["done", `${prefix}-${task.id}`])} />
+                                <Button key={`done-${task.id}`} plain label={words("markDone")} onPress={() => markDone($, snapshot, task)} />
                                 {task.state === "postponed" ? null : <Button key={`postpone-${task.id}`} plain dimColor label={words("postpone")} onPress={() => backlog($, ["postpone", `${prefix}-${task.id}`])} />}
                             </Box>
                         </Box>
@@ -445,10 +471,11 @@ export const register: Register = (on) => {
         const proposals = snapshot.decisions.open.slice().sort((first, second) => rank(first) - rank(second) || (first.day ?? "9999").localeCompare(second.day ?? "9999") || first.line - second.line);
         // What the buttons above the links start: the first task someone here can start, the first decision to take.
         // A blocked task is skipped: its chain starts from its own ▶.
-        const nextTask = rest.find((task) => task.state === "todo" && !isBlocked(task) && !isLarge(task) && (task.to === "Claude" || byName.has(task.to)));
+        const nextTask = busyWith ? undefined : rest.find((task) => task.state === "todo" && !isBlocked(task) && !isLarge(task) && (task.to === "Claude" || byName.has(task.to)));
         const nextProposal = proposals[0];
         const actions = (
-            <Box key="actions" flexDirection="row" flexWrap="wrap" gap={1}>
+            <Box key="actions" flexDirection="row" flexWrap="wrap" gap={1} alignItems="center">
+                {busyWith ? <Text key="busy" dimColor>{words("busyChat", { id: `${prefix}-${busyWith.id}` })}</Text> : null}
                 {nextTask
                     ? isStarting(`task-${nextTask.id}`)
                         ? <Button key="next-task" label={words("starting")} onPress={() => undefined} />
@@ -527,6 +554,20 @@ export const register: Register = (on) => {
                     : null}
                 {taskSection("doing", "⚒︎", words("sectionDoing"), doing, words("noneDoing"))}
                 {taskSection("rest", "☰", words("sectionRest"), rest, words("noneRest"))}
+                {(snapshot.issues ?? []).length > 0
+                    ? section("issues", "◉", `${words("sectionIssues")} · ${(snapshot.issues ?? []).length}`, [
+                        <Text key="issues-hint" dimColor>{words("issuesHint")}</Text>,
+                        ...limited("issues", snapshot.issues ?? []).map((issue) => card(`issue-${issue.number}`, [
+                            <Box key={`issue-row-${issue.number}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
+                                <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
+                                    {issue.url ? <Link href={issue.url}>{`#${issue.number} ${issue.title}`}</Link> : <Text wrap="truncate-end">{`#${issue.number} ${issue.title}`}</Text>}
+                                </Box>
+                                <Button key={`issue-take-${issue.number}`} plain dimColor label={words("issueToBacklog")} onPress={() => backlog($, ["add", issue.title.replaceAll(" · ", " - "), "--issue", String(issue.number)])} />
+                            </Box>,
+                        ])),
+                        more("issues", (snapshot.issues ?? []).length, "showAllTasks"),
+                    ])
+                    : null}
                 {section("goals", "⚑︎", `${words("sectionGoals")} · ${openGoals.length}`, [
                     card("goals-card", limited("goals", openGoals).map(goalRow)),
                     more("goals", openGoals.length, "showAllTasks"),
@@ -757,6 +798,16 @@ async function startTask($: EngineInterface, snapshot: Snapshot, task: Task, mem
 
     await hold($, (held) => applyHold(held, [task.id], { colleague: null, agentId: null })).catch(() => undefined);
     await submit($, words(isGoingOn ? "promptResume" : "promptWork", { id, text: task.text }) + (task.note ? words("promptNote", { path: task.note }) : ""));
+}
+
+/** Done: the task closes through the backlog's command; when its GitHub issue is still open, Claude is asked to ask whether to close it. */
+async function markDone($: EngineInterface, snapshot: Snapshot, task: Task): Promise<void>
+{
+    await backlog($, ["done", `${snapshot.prefixes.task}-${task.id}`]);
+
+    if (task.issueInfo?.state === "open") {
+        await submit($, sayer(snapshot.language)("promptIssueClose", { id: `${snapshot.prefixes.task}-${task.id}`, issue: `#${task.issueInfo.number}` }));
+    }
 }
 
 /** ▶ on a task that waits for others: Claude shows the whole chain, the first first, and starts it on one yes. */

@@ -5,7 +5,9 @@ import { parseBacklog, citedTasks } from "../lib/backlog.mjs";
 import { citedDecisions, dayOf, numbering } from "../lib/decisions.mjs";
 import { planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
+import { codeView, issueOf } from "../lib/code.mjs";
 import { parseTodo } from "../lib/todos.mjs";
+import { readCode, readIssues } from "./code.mjs";
 import { backlogProblems } from "./backlog.mjs";
 import { citingFiles, isMain, loadProject, read, readBacklog, readDecisions, readDependencies, readGoals, readTodos, runCli, shown, today, todoFiles, todoIdsEver } from "./project.mjs";
 
@@ -22,6 +24,7 @@ export function check(config, say)
     checkTodos(config, say, add);
     checkBacklog(config, say, add);
     checkLinks(config, say, add);
+    checkCode(config, say, add);
     checkPlan(config, say, add);
     checkOpen(config, say, add);
     checkMarkdown(config, say, add);
@@ -242,6 +245,35 @@ function checkLinks(config, say, add)
 
         if (id && !ids.has(Number(id))) {
             add("warning", "links", `${config.files.notes}/${name}`, null, say("noteOrphan", { id: `${prefix}-${id}` }));
+        }
+    }
+}
+
+/** A task still open that a merged pull request cites: the work may be finished, the task not yet closed. */
+function checkCode(config, say, add)
+{
+    const prefix = config.prefixes.task;
+    const code = readCode(config);
+
+    for (const task of readBacklog(config).tasks.filter((one) => ["doing", "todo", "postponed"].includes(one.state))) {
+        const merged = codeView(code.get(task.id)).mergedPull;
+
+        if (merged) {
+            add("note", "code", task.file, task.line, say("mergedOpen", { id: `${prefix}-${task.id}`, number: merged.number, day: merged.merged }));
+        }
+    }
+
+    // A task and its GitHub issue that no longer agree: one closed, the other open.
+    const issues = readIssues(config);
+
+    for (const task of readBacklog(config).tasks.filter((one) => one.issue)) {
+        const issue = issueOf(issues, task);
+        const isClosed = task.state === "done" || task.state === "archived";
+
+        if (issue?.state === "open" && isClosed) {
+            add("note", "code", task.file, task.line, say("issueDoneOpen", { id: `${prefix}-${task.id}`, issue: task.issue }));
+        } else if (issue?.state === "closed" && !isClosed) {
+            add("note", "code", task.file, task.line, say("issueClosedTaskOpen", { id: `${prefix}-${task.id}`, issue: task.issue, day: issue.closed ?? "?" }));
         }
     }
 }

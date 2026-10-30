@@ -15,7 +15,7 @@ const en = wordsOf("en");
 test("a task line reads and writes back the same, done and archived marks included", () => {
     const line = "- T-12 · P2 · medio · Matteo · 2026-10-29 · Revisione e pulizia · La plancia, in tre parti · fatto 2026-10-30 · archiviato 2026-10-31";
     const task = parseLine(line, "archived", it);
-    assert.deepEqual({ ...task }, { id: 12, priority: "P2", effort: "medio", to: "Matteo", created: "2026-10-29", goal: "Revisione e pulizia", text: "La plancia, in tre parti", after: [], see: [], parent: null, done: "2026-10-30", archived: "2026-10-31", state: "archived" });
+    assert.deepEqual({ ...task }, { id: 12, priority: "P2", effort: "medio", to: "Matteo", created: "2026-10-29", goal: "Revisione e pulizia", text: "La plancia, in tre parti", after: [], see: [], parent: null, issue: null, done: "2026-10-30", archived: "2026-10-31", state: "archived" });
     assert.equal(formatLine(task, it), line);
     assert.equal(parseLine("- [ ] P2 · 2026-10-29 · a todo line", "todo", it), null);
 });

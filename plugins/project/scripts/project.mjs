@@ -307,6 +307,19 @@ export function realPath(path)
     }
 }
 
+/** The project's repos: the configured ones, else the project's and, when the docs are a repo of their own, theirs. */
+export function projectRepos(config)
+{
+    if (config.repos) {
+        return config.repos;
+    }
+
+    const top = (folder) => git(folder, ["rev-parse", "--show-toplevel"]).trim().toLowerCase();
+    const project = top(config.root);
+    const docs = existsSync(config.docs) ? top(realPath(config.docs)) : "";
+    return [{ name: config.words.repoProject, path: config.root }, ...(docs && docs !== project ? [{ name: config.words.repoDocs, path: realPath(config.docs) }] : [])];
+}
+
 /** A git command in a folder, its output; empty when git fails or is missing. */
 export function git(folder, args)
 {

@@ -6,7 +6,9 @@ import { proposalOf } from "../lib/decisions.mjs";
 import { planUpdated } from "../lib/plan.mjs";
 import { configFile } from "../lib/config.mjs";
 import { plainMarkdown } from "../lib/text.mjs";
+import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
 import { check } from "./check.mjs";
+import { readCode, readIssues } from "./code.mjs";
 import { extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
 import { colleagues, findRoot, isMain, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readGoals, runCli, taskLinks, today, todoFiles } from "./project.mjs";
 
@@ -30,6 +32,8 @@ export async function snapshot(config, say, withHealth = true)
     const page = `http://localhost:${config.page.port}`;
     const extensions = await loadExtensions(config);
     const links = taskLinks(config, tasks);
+    const code = readCode(config);
+    const issues = readIssues(config);
 
     return {
         project: projectName(config),
@@ -42,6 +46,8 @@ export async function snapshot(config, say, withHealth = true)
         problems: extensionErrors(extensions),
         people: config.people,
         // The key documents, each opened through the project's page.
+        // The open GitHub issues no task does yet, to take into the backlog.
+        issues: freeIssues(issues, tasks).map(({ number, title, url }) => ({ number, title, url })),
         documents: config.documents.map((document, index) => ({ name: document.name, href: `${page}/document/${index}`, exists: existsSync(document.path) })),
         colleagues: team,
         // Each with its links: what it waits for, still open, and the chain to do first; what points to it; its note.
@@ -52,6 +58,8 @@ export async function snapshot(config, say, withHealth = true)
             effortKey: effortKey(task.effort, config.words) ?? "none",
             colleague: idOf.get(task.to) ?? null,
             noteHref: links.get(task.id).note ? `${page}/note/${task.id}` : null,
+            ...codeView(code.get(task.id)),
+            issueInfo: issueOf(issues, task),
         })),
         plan: {
             updated: planUpdated(read(config.files.plan), config.words),

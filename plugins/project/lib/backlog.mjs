@@ -19,8 +19,8 @@ export function parseLine(line, state, words, prefix = "T")
     const [, id, priority, effort, to, created, goal, rest] = match;
     const marks = new RegExp(`^(.*?)(?: · ${escapeRegex(words.doneMarker)} (\\d{4}-\\d{2}-\\d{2}))?(?: · ${escapeRegex(words.archivedMarker)} (\\d{4}-\\d{2}-\\d{2}))?$`);
     const [, whole, done, archived] = marks.exec(rest);
-    const { text, after, see, parent } = splitLinks(whole);
-    return { id: Number(id), priority, effort: effort.trim(), to: to.trim(), created, goal: goal.trim(), text, after, see, parent, done: done ?? null, archived: archived ?? null, state };
+    const { text, after, see, parent, issue } = splitLinks(whole);
+    return { id: Number(id), priority, effort: effort.trim(), to: to.trim(), created, goal: goal.trim(), text, after, see, parent, issue, done: done ?? null, archived: archived ?? null, state };
 }
 
 /** The task as a line again, its links at the end of its text. */
@@ -28,7 +28,7 @@ export function formatLine(task, words, prefix = "T")
 {
     const done = task.done ? `${separator}${words.doneMarker} ${task.done}` : "";
     const archived = task.archived ? `${separator}${words.archivedMarker} ${task.archived}` : "";
-    const text = joinLinks(task.text, task.after, task.see, task.parent);
+    const text = joinLinks(task.text, task.after, task.see, task.parent, task.issue);
     return `- ${prefix}-${task.id}${separator}${[task.priority, task.effort, task.to, task.created, task.goal, text].join(separator)}${done}${archived}`;
 }
 
@@ -141,10 +141,10 @@ export function taskErrors(task, { words, people, goals, prefix = "T", decisionP
         errors.push(say("badText", { prefix }));
     }
 
-    const lists = { after: task.after ?? [], see: task.see ?? [], in: task.parent ? [task.parent] : [] };
-    const messages = { after: "badAfter", see: "badSee", in: "badIn" };
+    const lists = { after: task.after ?? [], see: task.see ?? [], in: task.parent ? [task.parent] : [], issue: task.issue ? [task.issue] : [] };
+    const messages = { after: "badAfter", see: "badSee", in: "badIn", issue: "badIssue" };
 
-    for (const kind of ["after", "see", "in"]) {
+    for (const kind of ["after", "see", "in", "issue"]) {
         const bad = badLinks(kind, lists[kind], { task: prefix, decision: decisionPrefix });
 
         if (bad.length > 0) {
