@@ -2203,11 +2203,13 @@ setupBoard();
 setupReader();
 addEventListener("resize", measureTabs);
 addEventListener("hashchange", () => {
-    const button = document.getElementById(`tab-${location.hash.slice(1)}`);
+    const button = document.getElementById(`tab-${location.hash.slice(1).split("/")[0]}`);
 
     if (button) {
         selectTab(button);
     }
+
+    openAskedDocument();
 });
 load();
 loadTidy();
@@ -2238,6 +2240,7 @@ async function load()
     words = pageWords[data.language] ?? pageWords.en;
     loadExtensions(data.extensions ?? []);
     render();
+    openAskedDocument();
 }
 
 /** A word of the page in its language, English when the language lacks it; a word that is a function is called with the values. */
@@ -2309,7 +2312,8 @@ function render()
         }
     }
 
-    const asked = location.hash.slice(1);
+    // A tab by its id after the #; #documents/2 is the documents' tab with the third key document open in the reader.
+    const asked = location.hash.slice(1).split("/")[0];
     const active = tabs.some((tab) => tab.id === asked) ? asked : "overview";
 
     document.getElementById("tabs").innerHTML = tabs.map(({ id, label, badge }) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}">${escape(label)}${badge ? `<span class="badge">${escape(badge)}</span>` : ""}</button>`).join("");
@@ -3619,6 +3623,17 @@ function documentIcon(name, path, small = false)
     const [color, drawing] = documentDrawings[kind];
 
     return `<span class="doc-icon ${small ? "small" : ""}" style="--kind:${color}" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${drawing}</svg></span>`;
+}
+
+/** The key document the address asks for, #documents/2 (the panel's links), opened in the reader once; the address keeps the tab. */
+function openAskedDocument()
+{
+    const asked = /^#documents\/(\d+)$/.exec(location.hash);
+
+    if (asked && data?.keyDocuments?.[Number(asked[1])]) {
+        history.replaceState(null, "", "#documents");
+        openDocument(Number(asked[1]));
+    }
 }
 
 /** Opens a key document in the page's reader, its markdown made readable; the plain text stays a link away. */

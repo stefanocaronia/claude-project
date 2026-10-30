@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { request } from "node:http";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -161,6 +161,27 @@ function statusOf(port, host)
         done(response.statusCode);
     }).on("error", fail).end());
 }
+
+test("a decision revised whole is read by its whole number, and a revision that goes on past the number is in part", () => {
+    const table = [
+        "| 34 | Trentaquattro. | |", "| 344 | Trecentoquarantaquattro. | |", "| 349 | Rivede D-344 (1). | |", "| 350 | Rivede D-344 per le estensioni. | |",
+        "| 351 | Rivede D-34, corregge D-344 sul dado. | |", "| 352 | Rivede D-344 per intero. | |", "| 353 | Rivede D-34. | |",
+    ];
+    const root = project({ "docs/DECISIONI.md": `| # | Decisione | Perché |\n|---|---|---|\n${table.join("\n")}\n\n## Da decidere\n` });
+    const notes = JSON.parse(cli(root, "check.mjs", "--json").stdout).filter((finding) => finding.kind === "superseded").map((finding) => finding.message);
+    assert.deepEqual(notes.map((message) => message.split(":")[0]).sort(), ["D-352 Rivede D-344 per intero", "D-353 Rivede D-34 per intero"]);
+    rmSync(root, { recursive: true, force: true });
+});
+
+test("a change to an open task leaves the archive alone, so a reader that holds it does not stop the change", () => {
+    const root = project({ "docs/archivio/TASKS-archivio.md": "# Archivio\n\n- T-9 · P2 · medio · Claude · 2026-10-01 · — · nove · fatto 2026-10-02 · archiviato 2026-10-03\n" });
+    const archive = join(root, "docs/archivio/TASKS-archivio.md");
+    const before = statSync(archive).mtimeMs;
+    assert.equal(cli(root, "backlog.mjs", "set", "T-1", "--type", "bug").status, 0);
+    assert.equal(statSync(archive).mtimeMs, before);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /- T-1 · .* · uno \(type: bug\)/);
+    rmSync(root, { recursive: true, force: true });
+});
 
 test("a task a failed write left in both files is written once by the next change", () => {
     const root = project({ "docs/archivio/TASKS-archivio.md": "# Archivio\n\n- T-3 · P2 · medio · Claude · 2026-10-01 · — · tre · fatto 2026-10-02 · archiviato 2026-10-03\n" });

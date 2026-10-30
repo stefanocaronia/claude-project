@@ -15,7 +15,7 @@ const snapshot = {
     page: "http://localhost:5790",
     links: [{ label: "↗ betasim 1280", href: "http://localhost:5790/extension/game/betasim/1280/latest/index.html" }, { label: "▶ Demo · 5e", post: "http://localhost:5790/extension/game/demo/5e/start" }],
     people: ["Claude", "Stefano"],
-    documents: [{ name: "GDD", href: "http://localhost:5790/document/0", exists: true }],
+    documents: [{ name: "GDD", href: "http://localhost:5790/#documents/0", exists: true }],
     issues: [{ number: 40, title: "Il login fallisce", url: "https://github.com/a/b/issues/40" }],
     colleagues: [{ id: "matteo-conti", name: "Matteo", fullName: "Matteo Conti", role: "code review", color: "red" }],
     tasks: [
@@ -353,7 +353,7 @@ test("the button for where the project stands asks Claude for a short report", a
     await ui.press({ key: "where-we-stand" });
     expect(prompts[0]).toMatch(/^Fammi il punto della situazione del progetto, in al massimo 30 righe/);
     await ui.press({ key: "tidy-backlog" });
-    expect(prompts[1]).toMatch(/^Riordina il backlog e le decisioni da prendere con la skill tidy, sezione 4: .*mai di deciderlo/);
+    expect(prompts[1]).toMatch(/^Riordina il backlog e le decisioni da prendere con la skill tidy, sezione 4: prima da solo il minimo.*mai di decidere un punto aperto/);
     await ui.unmount();
 });
 

@@ -49,7 +49,7 @@ export async function snapshot(config, say, withHealth = true)
         // The key documents, each opened through the project's page.
         // The open GitHub issues no task does yet, to take into the backlog.
         issues: freeIssues(issues, tasks).map(({ number, title, url }) => ({ number, title, url })),
-        documents: config.documents.map((document, index) => ({ name: document.name, href: `${page}/document/${index}`, exists: existsSync(document.path) })),
+        documents: config.documents.map((document, index) => ({ name: document.name, href: `${page}/#documents/${index}`, exists: existsSync(document.path) })),
         colleagues: team,
         // The person this machine's gh is signed in as, with their GitHub picture inline: on their tasks and on every decision.
         owner: ownerOf(await readOwner(config)),

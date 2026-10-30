@@ -28,21 +28,29 @@ Tidying never asks the user to decide anything. For a decision, a point to decid
 - **Docs outside the index**: into it, or into the archive folder if the work is closed.
 - **Heavy files**: the superseded rows first, then the lines that repeat what another already says.
 
-**Ask only where you cannot tell**, and ask only whether the item stands: «still open, or closed by D-427?», «still to do, or done by 0715a26?». Never «decide this», never the content of a decision. An item you cannot tell and that nothing contradicts stays as it is, with no question. The questions go in the question form (AskUserQuestion), never as a wall of text: one an item, at most four a form, few in all. The options are the answer you think likely, first, and «it stands», always a normal answer and never a retreat.
+**First do all you can alone; then ask, in the question form, only what you cannot decide** because it is not trivial: the evidence points both ways, or the answer is the user's to know. Never before the work you can do is done, never for what is clear, never «decide this» about an open point's content: a question asks whether an item stands («still open, or closed by D-427?», «still to do, or done by 0715a26?»), or settles a form choice really in doubt. An item you cannot tell and that nothing contradicts stays as it is, with no question. The questions go in the question form (AskUserQuestion), never as a wall of text: one an item, at most four a form. The options are the answer you think likely, first, and «it stands», always a normal answer and never a retreat.
 
 ## 4. The backlog
 
-When the user asks to tidy the backlog (the panel's «Tidy the backlog», or the page's), read it whole with `backlog.mjs list --json` and `backlog.mjs list --state done --json`, the plan's goals, the decisions and the points still to decide, then, as section 3 says:
+When the user asks to tidy the backlog (the panel's «Tidy the backlog», or the page's), read it whole with `backlog.mjs list --json` and `backlog.mjs list --state done --json`, the plan's goals, the decisions and the points still to decide, then, in this order, as section 3 says:
 
-- **Do yourself**, without asking, what is clear, through `backlog.mjs` (the points to decide with Edit, only under their heading):
-  - a task's text that breaks the line's rules or reads badly (one line, clear, no « · »), a part whose goal differs from its large task's;
-  - a type missing or wrong, a priority that no longer fits (P1 only for what blocks the work at hand or the next step), who should do a task (`set T-n --to …`: Claude for work in the code and the docs it can do alone; the user for what only a person can do: an account, a purchase, a test in their hands, a choice of taste; with Crew, the colleague whose field it is, as their profile in `.claude/agents/` says);
-  - tasks plainly done by another task or a commit (`show` names the code that cites a task), closed with `done`; tasks a later accepted decision made moot or contradicted, archived or rewritten to agree with it;
-  - duplicates: one archived, the other pointing to it with `(see: T-n)`; two points to decide on the same question merged into one that keeps who asked and the older date; waits that no longer hold, goals that changed;
-  - points to decide that a decision already took or later work made moot, removed.
-- **Ask** only for what you cannot tell, as section 3 says: whether a task or a point still stands, never what to decide. A form choice that is really doubtful (a large task's grouping, say) may be asked too; few.
-- **Leave** an open point, a vague task or anything not superseded as it is, with no question.
-- At the end `check.mjs`, and a short report of what you changed and why, by item.
+1. **First, the minimum**, yourself and without asking, through `backlog.mjs`, for every task to do, in progress or postponed, large tasks included:
+   - its type, when missing or wrong;
+   - its priority, when it no longer fits: P1 only for what blocks the work at hand or the next step;
+   - who does it (`set T-n --to …`): Claude for work in the code and the docs it can do alone; the user for what only a person can do (an account, a purchase, a test in their hands, a choice of taste); with Crew, the colleague whose field it is, as their profile in `.claude/agents/` says;
+   - a part's goal, its large task's;
+   - its text, kept to the line's rules: one line, clear, no « · »;
+   - no colleague's todo line citing a task closed or missing.
+
+   When this is done, every open task has a type, a priority and who does it.
+2. **Then the rest that is clear**, yourself (the points to decide with Edit, only under their heading):
+   - tasks plainly done by another task or a commit (`show` names the code that cites a task), closed with `done`; tasks a later accepted decision made moot or contradicted, archived or rewritten to agree with it;
+   - tasks that belong together as one piece of work, grouped as a large task with its parts, `(in: T-n)`, one level deep, when it is clear (when it is not, it is a question of step 3);
+   - duplicates: one archived, the other pointing to it with `(see: T-n)`; two points to decide on the same question merged into one that keeps who asked and the older date; waits that no longer hold, goals that changed;
+   - points to decide that a decision already took or later work made moot, removed.
+3. **Then ask**, in the question form, only what you could not decide alone because it is not trivial: whether a task or a point still stands, or a form choice really in doubt (a large task's grouping, say). Never what to decide about an open point.
+4. **Leave** an open point, a vague task or anything not superseded as it is, with no question.
+5. At the end `check.mjs`, and a short report of what you changed and why, by item.
 
 ## The rules that stay
 

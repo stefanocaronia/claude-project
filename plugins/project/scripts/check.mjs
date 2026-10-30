@@ -124,13 +124,16 @@ function checkReferences(config, say, decisions, add)
     }
 }
 
-/** Decisions that a later one revises whole: the candidates to mark as superseded. */
+/** Decisions that a later one revises whole: the candidates to mark as superseded. A number is read whole (D-34 is not D-344), and a
+ * revision that goes on past the number, «rivede D-34 (1)», «rivede D-34 per le estensioni», is in part; whole is a number that ends
+ * the clause, or one said whole, «rivede D-34 per intero». */
 function checkRevisions(config, say, decisions, add)
 {
     const { words } = config;
     const prefix = config.prefixes.decision;
     const superseded = new Set(decisions.filter((row) => row.text.startsWith(`${words.superseded} ${prefix}-`)).map((row) => row.number));
-    const verbs = new RegExp(`\\b(${words.revises.join("|")})\\s+(?:\\w{1,3}\\s+)?${escapeRegex(prefix)}-(\\d+)(?!\\s*\\()`, "g");
+    const whole = words.wholly.map(escapeRegex).join("|");
+    const verbs = new RegExp(`\\b(${words.revises.join("|")})\\s+(?:\\w{1,3}\\s+)?${escapeRegex(prefix)}-(\\d+)(?!\\d)(?=\\s*(?:[.;|]|$|(?:${whole})\\b))`, "gi");
 
     for (const row of decisions) {
         for (const match of row.text.matchAll(verbs)) {

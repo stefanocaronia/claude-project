@@ -78,8 +78,19 @@ export function writeBacklog(config, tasks)
     // One task a number: a write that failed halfway left a task in both files, and the change at hand settles where it goes.
     const clean = [...new Map(tasks.map(({ file, line, ...task }) => [task.id, task])).values()];
     const say = sayer(config.language);
-    writeWhole(config.files.archive, renderArchive(clean, read(config.files.archive), config.words, prefix), say);
-    writeWhole(config.files.tasks, renderBacklog(clean, read(config.files.tasks), config.words, prefix), say);
+    const archive = read(config.files.archive);
+    const backlog = read(config.files.tasks);
+    const archived = renderArchive(clean, archive, config.words, prefix);
+    const rendered = renderBacklog(clean, backlog, config.words, prefix);
+
+    // Only a file that changes is written: a change to an open task leaves the archive alone, even while a reader holds it.
+    if (archived !== archive) {
+        writeWhole(config.files.archive, archived, say);
+    }
+
+    if (rendered !== backlog) {
+        writeWhole(config.files.tasks, rendered, say);
+    }
 }
 
 /** Runs a change of the backlog alone: two commands at once, a press in the panel while Claude adds a task, wait for each other. */
@@ -414,13 +425,31 @@ function configOf(text, root, file)
 }
 
 /** A file written whole or not at all: to a temporary file beside it, then renamed; a file another program holds says so. */
+/** A file put in place of another; on Windows a reader that holds the old one (the page, an editor) refuses it for a moment: tried
+ * again for a second before giving up. */
+function replace(from, to)
+{
+    for (let tries = 0; ; tries++) {
+        try {
+            renameSync(from, to);
+            return;
+        } catch (error) {
+            if (!["EPERM", "EBUSY", "EACCES"].includes(error.code) || tries >= 20) {
+                throw error;
+            }
+
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+        }
+    }
+}
+
 function writeWhole(path, text, say)
 {
     const temporary = `${path}.${process.pid}.tmp`;
 
     try {
         write(temporary, text);
-        renameSync(temporary, path);
+        replace(temporary, path);
     } catch (error) {
         try {
             unlinkSync(temporary);
