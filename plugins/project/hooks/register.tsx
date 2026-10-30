@@ -12,7 +12,9 @@ import { sayer } from "../lib/messages.mjs";
 
 const pane = "project";
 const command = "project-panel";
-const board = atom({ plugin: "project", key: "board" } as const, { snapshot: null, problem: null, readAt: 0, stamp: "" }, { shape: "board-1" });
+const board = atom({ plugin: "project", key: "board" } as const, { snapshot: null, problem: null, readAt: 0, stamp: "", holds: {}, session: "" }, { shape: "board-2" });
+// A chat's holds older than this are of a chat long gone that never said so.
+const holdsLast = 24 * 3_600_000;
 const view = atom({ plugin: "project", key: "view" } as const, { sections: {}, expanded: null, whole: {}, starting: {} }, { shape: "view-1" });
 // The sections open at the start, as Joseph's sketch has them: the decisions closed, the tile above says how many wait.
 const openAtStart: Record<string, boolean> = { links: true, doing: true, rest: true, goals: true, decisions: false };
@@ -69,15 +71,43 @@ export const register: Register = (on) => {
     on("agent.spawn", async ($, e, next) => {
         const spawned = await next(e);
         // Whatever goes wrong here, the colleague has started: the backlog waits for the next turn.
-        await moveCited($, e).catch(() => undefined);
+        await moveCited($, e, spawned.agentId).catch(() => undefined);
         return spawned;
     });
 
-    // The files are read again once a turn ends, Claude's or a colleague's, when one of them changed.
+    // A task this chat starts or closes through the backlog's command line: this chat holds it, or no longer does.
+    on("tool.call", async ($, e, next) => {
+        const result = await next(e);
+        const command = !e.agentId && typeof (e as { command?: unknown }).command === "string" ? (e as { command: string }).command : "";
+        const change = /backlog\.mjs["']?\s+(start|done|postpone|todo|archive)\b/.exec(command);
+
+        if (change) {
+            const { snapshot } = await read($, board);
+            const ids = citedTasks(command, snapshot?.prefixes.task ?? "T");
+            await hold($, (held) => applyHold(held, ids, change[1] === "start" ? { colleague: null, agentId: null } : null)).catch(() => undefined);
+        }
+
+        return result;
+    });
+
+    // The files are read again once a turn ends, Claude's or a colleague's, when one of them changed; a colleague who finished lets go
+    // of the tasks they held.
     on("turn.complete", async ($, e, next) => {
         const completed = await next(e);
+
+        if (e.agentId) {
+            const agentId = e.agentId;
+            await hold($, (held) => Object.fromEntries(Object.entries(held).filter(([, one]) => one.agentId !== agentId))).catch(() => undefined);
+        }
+
         await refresh($, false).catch(() => undefined);
         return completed;
+    });
+
+    // A chat that ends holds nothing any longer.
+    on("session.end", async ($, e, next) => {
+        await $.fs.write(await holdFile($), JSON.stringify({ root: "", at: 0, tasks: {} })).catch(() => undefined);
+        return next(e);
     });
 
     on("ui.render", { component: "Pane", requestId: pane }, async ($, e) => {
@@ -178,11 +208,24 @@ export const register: Register = (on) => {
                 return null;
             }
 
+            // Who holds it now decides what ▶ does; the user sees only whether there is one. A colleague at work, or this very chat, needs
+            // no ▶; another chat goes on through a message here; a task nobody holds is taken up again.
+            const held = task.state === "doing" ? current.holds[String(task.id)] : undefined;
+
+            if (held?.colleague) {
+                const at = snapshot.colleagues.find((colleague) => colleague.id === held.colleague);
+                return <Box key={`working-${task.id}`} flexShrink={0}><Text color={workColor} wrap="truncate">{`⚒︎ ${at?.name ?? held.colleague}`}</Text></Box>;
+            }
+
+            if (held && held.session === current.session) {
+                return null;
+            }
+
             if (isStarting(key)) {
                 return <Box key={`starting-${task.id}`} flexShrink={0}><Text dimColor wrap="truncate">{words("starting")}</Text></Box>;
             }
 
-            return <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={() => startTask($, snapshot, task, member)} />;
+            return <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={() => startTask($, snapshot, task, member, held?.session)} />;
         };
         const taskRow = (task: Task) => {
             const key = `task-${task.id}`;
@@ -452,7 +495,8 @@ async function refresh($: EngineInterface, force: boolean): Promise<void>
         const snapshot = JSON.parse(stdout) as Snapshot;
         const readAt = await $.clock.now();
         const fresh = await stampOf($, snapshot.watch);
-        await update($, board, () => ({ snapshot, problem: null, readAt, stamp: fresh }));
+        await update($, board, (old) => ({ ...old, snapshot, problem: null, readAt, stamp: fresh }));
+        await readHolds($).catch(() => undefined);
     } catch (error) {
         const problem = sayer(current.snapshot?.language ?? "en")("paneProblem", { problem: error instanceof Error ? error.message : String(error) });
         await update($, board, (old) => ({ ...old, problem }));
@@ -470,7 +514,7 @@ async function stampOf($: EngineInterface, files: string[]): Promise<string>
 }
 
 /** The tasks of the colleague just started that their brief cites, moved to in progress; nothing for an agent that is no colleague. */
-async function moveCited($: EngineInterface, e: { prompt: string; subagentType: string }): Promise<void>
+async function moveCited($: EngineInterface, e: { prompt: string; subagentType: string }, agentId: string | undefined): Promise<void>
 {
     const { snapshot } = await read($, board);
     const member = snapshot?.colleagues.find((colleague) => colleague.id === e.subagentType || e.subagentType.endsWith(`:${colleague.id}`));
@@ -480,11 +524,86 @@ async function moveCited($: EngineInterface, e: { prompt: string; subagentType: 
     }
 
     const cited = new Set(citedTasks(e.prompt, snapshot.prefixes.task));
-    const ids = snapshot.tasks.filter((task) => cited.has(task.id) && task.to === member.name && task.state !== "doing").map((task) => `${snapshot.prefixes.task}-${task.id}`);
-
+    const own = snapshot.tasks.filter((task) => cited.has(task.id) && task.to === member.name);
+    const ids = own.filter((task) => task.state !== "doing").map((task) => `${snapshot.prefixes.task}-${task.id}`);
     if (ids.length > 0) {
         await backlog($, ["start", ...ids]);
     }
+
+    // The colleague holds their tasks while they work: the panel shows them at work, and nobody starts them twice.
+    await hold($, (held) => applyHold(held, own.map((task) => task.id), { colleague: member.id, agentId: agentId ?? null })).catch(() => undefined);
+}
+
+/** Where this chat writes what it holds: one file a chat, beside the other chats' of every project, in the system's temporary folder. */
+async function holdFile($: EngineInterface): Promise<string>
+{
+    const isWindows = (await $.env.get("OS")) === "Windows_NT";
+    const temp = (isWindows ? (await $.env.get("TEMP")) || (await $.env.get("TMP")) : (await $.env.get("TMPDIR")) || (await $.env.get("TMP"))) || "/tmp";
+    return `${temp.replace(/\\/g, "/").replace(/\/+$/, "")}/claude-project/held-${(await $.session.id()).replace(/[^\w-]/g, "_")}.json`;
+}
+
+/** Changes what this chat holds, writes it for the other chats to read, and reads every chat's again. */
+async function hold($: EngineInterface, change: (held: Record<string, { colleague: string | null; agentId: string | null }>) => Record<string, { colleague: string | null; agentId: string | null }>): Promise<void>
+{
+    const file = await holdFile($);
+    const root = await projectRoot($);
+    const mine = await readHoldFile($, file);
+    const held = change(mine && mine.root === root ? mine.tasks : {});
+    await $.fs.write(file, JSON.stringify({ root, at: await $.clock.now(), tasks: held }));
+    await readHolds($);
+}
+
+/** Every chat's holds for this project, the fresh ones, by task number: this chat's win over another's. */
+async function readHolds($: EngineInterface): Promise<void>
+{
+    const file = await holdFile($);
+    const folder = file.slice(0, file.lastIndexOf("/"));
+    const root = await projectRoot($);
+    const session = await $.session.id();
+    const now = await $.clock.now();
+    const holds: Board["holds"] = {};
+    const entries = (await $.fs.exists(folder)) ? await $.fs.list(folder) : [];
+
+    for (const entry of entries.filter((one) => /^held-.+\.json$/.test(one.name)).sort((first) => (`${folder}/${first.name}` === file ? 1 : -1))) {
+        const content = await readHoldFile($, `${folder}/${entry.name}`);
+
+        if (!content || content.root !== root || now - content.at > holdsLast) {
+            continue;
+        }
+
+        const owner = entry.name.slice("held-".length, -".json".length);
+
+        for (const [id, one] of Object.entries(content.tasks)) {
+            holds[id] = { session: owner, colleague: one.colleague, agentId: one.agentId };
+        }
+    }
+
+    await update($, board, (old) => ({ ...old, holds, session: session.replace(/[^\w-]/g, "_") }));
+}
+
+async function readHoldFile($: EngineInterface, file: string): Promise<{ root: string; at: number; tasks: Record<string, { colleague: string | null; agentId: string | null }> } | null>
+{
+    try {
+        return JSON.parse(await $.fs.read(file));
+    } catch {
+        return null;
+    }
+}
+
+/** The holds with these tasks given to a holder, or let go with none. */
+function applyHold<T>(held: Record<string, T>, ids: number[], holder: T | null): Record<string, T>
+{
+    const next = { ...held };
+
+    for (const id of ids) {
+        if (holder) {
+            next[String(id)] = holder;
+        } else {
+            delete next[String(id)];
+        }
+    }
+
+    return next;
 }
 
 /** Claude Code's /reload-plugins, as the user would type it: a plugin changed in its folder is read again. */
@@ -522,13 +641,20 @@ async function backlog($: EngineInterface, args: string[]): Promise<void>
     await refresh($, true);
 }
 
-/** ▶: a colleague's task goes to Crew's next command, which starts it; Claude's is asked in the chat, as the user would. */
-async function startTask($: EngineInterface, snapshot: Snapshot, task: Task, member: Member | undefined): Promise<void>
+/** ▶: a task to do starts, one in progress goes on. A colleague's goes to Crew's next command; Claude's is asked in the chat, as the
+ * user would: here, or, when another chat holds it, through that chat. */
+async function startTask($: EngineInterface, snapshot: Snapshot, task: Task, member: Member | undefined, elsewhere?: string): Promise<void>
 {
     const words = sayer(snapshot.language);
     const id = `${snapshot.prefixes.task}-${task.id}`;
     const at = await $.clock.now();
+    const isGoingOn = task.state === "doing";
     await update($, view, (old) => ({ ...old, starting: { ...Object.fromEntries(Object.entries(old.starting).filter(([, when]) => at - when < startingFor)), [`task-${task.id}`]: at } }));
+
+    if (elsewhere) {
+        await submit($, words("promptElsewhere", { id, text: task.text, session: elsewhere }));
+        return;
+    }
 
     if (member) {
         const started = await $.command.run({ command: "crew:next", args: `${member.name} -- ${id} · ${task.text}` }).then(() => true, () => false);
@@ -540,7 +666,8 @@ async function startTask($: EngineInterface, snapshot: Snapshot, task: Task, mem
         return;
     }
 
-    await submit($, words("promptWork", { id, text: task.text }));
+    await hold($, (held) => applyHold(held, [task.id], { colleague: null, agentId: null })).catch(() => undefined);
+    await submit($, words(isGoingOn ? "promptResume" : "promptWork", { id, text: task.text }));
 }
 
 async function submit($: EngineInterface, text: string): Promise<void>

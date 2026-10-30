@@ -42,8 +42,11 @@ export type Snapshot = {
     health: { errors: number; warnings: number; notes: number } | null;
 };
 
-/** The panel's data, or why it has none. */
-export type Board = { snapshot: Snapshot | null; problem: string | null; readAt: number; stamp: string };
+/** Who holds a task in progress now: a chat of the project (this one or another), or a colleague at work in one. */
+export type Hold = { session: string; colleague: string | null; agentId: string | null };
+
+/** The panel's data, or why it has none; the holds of every chat of the project, by task number. */
+export type Board = { snapshot: Snapshot | null; problem: string | null; readAt: number; stamp: string; holds: Record<string, Hold>; session: string };
 
 /** What the user opened and closed: the sections, the one row open, the lists shown whole, the starts asked. */
 export type View = {

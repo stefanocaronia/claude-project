@@ -52,6 +52,17 @@ function world(on: On, answers: Answer[] = [good]): { runs: string[][]; prompts:
     mock.store(on);
     on("session.start", () => ({ cwd: "/p" }) as never);
     on("session.root", () => ({ value: "/p" }));
+    on("session.id", () => ({ value: "s1" }));
+    // The chats' hold files, in memory; the engine resolves "/tmp" against the drive on Windows, so the paths are kept without it.
+    const files: Record<string, string> = {};
+    const posix = (path: string) => path.replace(/\\/g, "/").replace(/^[A-Za-z]:/, "");
+    on("fs.write", (_, e) => {
+        files[posix(e.path)] = e.text;
+        return { value: undefined } as never;
+    });
+    on("fs.read", (_, e) => (posix(e.path) in files ? { value: files[posix(e.path)] } : { deny: "missing" }) as never);
+    on("fs.exists", (_, e) => ({ value: Object.keys(files).some((path) => path.startsWith(posix(e.path))) }));
+    on("fs.list", (_, e) => ({ value: Object.keys(files).filter((path) => path.startsWith(`${posix(e.path)}/`)).map((path) => ({ name: path.slice(posix(e.path).length + 1), kind: "file", size: 1, mtimeMs: 1, isLink: false })) }) as never);
     on("command.register", () => ({ value: {} }) as never);
     on("fs.stat", () => ({ value: { kind: "file", size: 10, mtimeMs: stamp.mtimeMs, isLink: false } }) as never);
     on("process.run", (_, e) => {
@@ -128,7 +139,8 @@ test("▶ gives a colleague's task to Crew's next command and asks Claude for it
     await ui.press({ key: "start-61" });
     await ui.press({ key: "start-143" });
     expect(commands).toEqual(["/crew:next Matteo -- T-61 · La plancia, in tre parti"]);
-    expect(prompts).toEqual(["Lavora a T-143: Il plugin claude-project"]);
+    // T-143 is in progress and nobody holds it: ▶ takes it up again.
+    expect(prompts[0]).toMatch(/^Riprendi T-143: Il plugin claude-project. È già in corso/);
     // While it starts, the ▶ waits.
     expect(await ui.find({ key: "start-61" })).toBeUndefined();
     await ui.unmount();
@@ -223,4 +235,20 @@ test("the buttons above the links start the first task by priority and age, and 
     expect(prompts[0]).toMatch(/\(riga 553 delle decisioni\): P3 · Le cariche degli oggetti$/);
     expect(prompts[1]).toMatch(/^Riordina i documenti del progetto/);
     await ui.unmount();
+});
+
+test("a task in progress: a colleague at work shows instead of ▶, the chat that holds it needs none, another chat goes on through a message", async ($, on) => {
+    const { prompts } = world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    await $.agent.spawn({ prompt: "Fai T-62.", description: "pacchetti", subagentType: "matteo-conti" } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    expect(await ui.find({ key: "start-62" })).toBeUndefined();
+    expect(await ui.find({ type: "Text", text: "⚒︎ Matteo" })).toBeDefined();
+    await ui.press({ key: "start-143" });
+    expect(prompts[0]).toMatch(/^Riprendi T-143/);
+    await ui.unmount();
+    const again = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    // This chat holds T-143 now: no ▶, once the start shown on the button is over.
+    expect(await again.find({ key: "start-143" })).toBeUndefined();
+    await again.unmount();
 });

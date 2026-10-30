@@ -4,6 +4,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { effortKey } from "../lib/backlog.mjs";
 import { proposalOf } from "../lib/decisions.mjs";
 import { planUpdated } from "../lib/plan.mjs";
+import { configFile } from "../lib/config.mjs";
 import { plainMarkdown } from "../lib/text.mjs";
 import { check } from "./check.mjs";
 import { extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
@@ -56,7 +57,7 @@ export async function snapshot(config, say, withHealth = true)
             recent: decided.slice().sort((first, second) => second.number - first.number).slice(0, recentDecisions).map((decision) => ({ number: decision.number, text: plainMarkdown(decision.text), why: plainMarkdown(decision.why) })),
         },
         // The files whose change makes the panel read the project again.
-        watch: [config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, ...todoFiles(config).map((one) => one.file)],
+        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, ...todoFiles(config).map((one) => one.file)],
         health: findings && { errors: count(findings, "error"), warnings: count(findings, "warning"), notes: count(findings, "note") },
     };
 }
