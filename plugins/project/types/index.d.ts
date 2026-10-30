@@ -1,0 +1,60 @@
+/** A task of the backlog, as snapshot.mjs gives it. */
+export type Task = {
+    id: number;
+    priority: "P1" | "P2" | "P3";
+    effort: string;
+    effortKey: string;
+    to: string;
+    /** The Crew colleague who holds it, by agent id; null for a person or Claude. */
+    colleague: string | null;
+    created: string;
+    goal: string;
+    text: string;
+    state: "doing" | "todo" | "postponed";
+};
+
+export type Goal = { name: string; phase: number | null; done: number; total: number; isDoing: boolean };
+
+export type Proposal = { priority: string | null; day: string | null; text: string; whole: string; line: number };
+
+export type Decision = { number: number; text: string; why: string };
+
+export type Member = { id: string; name: string; fullName: string; role: string; color: string; portrait?: string };
+
+/** What the panel draws, read from the project's files by snapshot.mjs. */
+export type Snapshot = {
+    project: string;
+    language: string;
+    words: { states: Record<string, string>; priorities: Record<string, string>; noGoal: string };
+    prefixes: { task: string; decision: string };
+    today: string;
+    page: string;
+    /** The extensions' links: a page to open, or a path of the project's page to POST to. */
+    links: { label: string; href?: string; post?: string }[];
+    /** What did not load: an extension's error, say. */
+    problems: string[];
+    people: string[];
+    colleagues: Member[];
+    tasks: Task[];
+    plan: { updated: string | null; goals: Goal[] };
+    decisions: { open: Proposal[]; recent: Decision[] };
+    watch: string[];
+    health: { errors: number; warnings: number; notes: number } | null;
+};
+
+/** The panel's data, or why it has none. */
+export type Board = { snapshot: Snapshot | null; problem: string | null; readAt: number; stamp: string };
+
+/** What the user opened and closed: the sections, the one row open, the lists shown whole, the starts asked. */
+export type View = {
+    sections: Record<string, boolean>;
+    expanded: string | null;
+    whole: Record<string, boolean>;
+    starting: Record<string, number>;
+};
+
+declare module "claude-code" {
+    interface PluginState {
+        "project": { board: Shaped<Board>; view: Shaped<View> };
+    }
+}

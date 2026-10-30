@@ -1,0 +1,19 @@
+{
+  "description": "Serves the project's page at the start of a session, and draws the project's panel beside the chat.",
+  "modules": [
+    "./register.tsx"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/page/ensure.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
