@@ -70,7 +70,7 @@ Then:
 
 ## 6. Releases on GitHub
 
-A version is written first with `release.mjs` (the project skill says when one is due). Then, on the user's word: the project's own version files, a commit, and `release <version> --write`: `git tag -a v<version>`, `git push origin v<version>`, `gh release create v<version> --title … --notes-file …`, the notes being the release's own without their frontmatter. A release of a library to npm or another registry is the project's own step, after it.
+A version is written first with `release.mjs` (the project skill says when one is due). Then, on the user's word: the project's own version files, a commit, and `release <version> --write`: `git tag -a v<version>`, `git push origin v<version>`, `gh release create v<version> --title v<version> --notes-file …`, the notes being the release's own without their frontmatter. The title is the version alone; the summary opens the notes. A release of a library to npm or another registry is the project's own step, after it.
 
 ## When something goes wrong
 
