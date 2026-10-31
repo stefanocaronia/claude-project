@@ -187,7 +187,7 @@ function readReleasesData(config)
     const releases = readReleases(config);
     const state = releaseState(releases, readBacklog(config).tasks, readGoals(config), config.prefixes.task);
     return {
-        list: [...releases].reverse().map(({ version, day, summary, tasks, text }) => ({ version, day, summary, count: tasks.length, text })),
+        list: [...releases].reverse().map(({ version, day, summary, tasks, text, tagOnly }) => ({ version, day, summary, count: tasks.length, text, tagOnly: Boolean(tagOnly) })),
         pending: state.pending.map((task) => ({ id: task.id, text: clean(task.text), type: task.type, done: task.done })),
         counts: state.counts,
         suggested: state.suggested,

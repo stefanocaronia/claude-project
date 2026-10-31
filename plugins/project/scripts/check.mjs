@@ -11,7 +11,7 @@ import { readCode, readIssues } from "./code.mjs";
 import { backlogProblems } from "./backlog.mjs";
 import { extensionChecks, loadExtensions } from "./extensions.mjs";
 import { readable } from "../lib/words.mjs";
-import { splitFrontmatter } from "../lib/frontmatter.mjs";
+import { betterDescription, joinFrontmatter, splitFrontmatter } from "../lib/frontmatter.mjs";
 import { citingFiles, docFiles, isMain, legacyFormat, stampDoc, loadProject, read, readBacklog, readDecisions, readDependencies, readGoals, readTodos, runCli, shown, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
 
 /** Every finding about the docs, from errors that must be fixed to notes for the cleanup: { severity, kind, file, line, message }. */
@@ -438,11 +438,13 @@ function checkIndex(config, say, add)
 function checkFrontmatter(config, say, add)
 {
     for (const file of docFiles(config)) {
-        const { data } = splitFrontmatter(read(file));
+        const { data, body } = splitFrontmatter(read(file));
         const missing = ["title", "description", "type", "created", "updated"].filter((key) => !data[key]);
 
         if (missing.length > 0) {
             add("note", "frontmatter", file, 1, say(missing.length === 5 ? "frontmatterNone" : "frontmatterMissing", { list: missing.join(", ") }));
+        } else if (data.type === "doc" && betterDescription(data.description, body)) {
+            add("note", "frontmatter", file, 1, say("frontmatterWeak", { text: data.description }));
         }
     }
 }
@@ -455,9 +457,21 @@ export function fixFrontmatter(config, isWritten = true)
 
     for (const file of docFiles(config)) {
         const text = read(file);
+        const { data, body } = splitFrontmatter(text);
         const keys = ["title", "description", "type", "created", "updated"];
 
-        if (keys.every((key) => splitFrontmatter(text).data[key])) {
+        if (keys.every((key) => data[key])) {
+            // A description an older version made from a code line or a label is written again from the first paragraph; the days stay.
+            const better = data.type === "doc" ? betterDescription(data.description, body) : "";
+
+            if (better) {
+                if (isWritten) {
+                    writeFileSync(file, joinFrontmatter({ ...data, description: better }, body));
+                }
+
+                changed.push(shown(config, file));
+            }
+
             continue;
         }
 

@@ -1,6 +1,6 @@
 // Starts the project's page in the background unless it is already up; the plugin's SessionStart hook runs it. In a git repo without
 // .claude/project.yaml it says once, the first time, how to set the project up, and is silent there after.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -30,14 +30,15 @@ async function ensure()
     const answer = await whoServes(port);
     const owner = answer === null ? null : answer.root ?? "";
     const here = dirname(fileURLToPath(import.meta.url));
-    // This project's page run by another copy of the plugin (an older version, before an update): it makes way for this one's.
-    const isStale = owner?.toLowerCase() === config.root.toLowerCase() && answer.plugin && !same(answer.plugin, join(here, "..")) && Number.isInteger(answer.pid);
+    // This project's page run by another copy of the plugin (an older version, before an update), or by a version older than 0.8.1, which
+    // does not say its folder and does not restart itself: it makes way for this one's.
+    const isStale = owner?.toLowerCase() === config.root.toLowerCase() && (!answer.plugin || !same(answer.plugin, join(here, "..")));
 
     if (isStale) {
         try {
-            process.kill(answer.pid);
+            process.kill(Number.isInteger(answer.pid) ? answer.pid : listener(port));
         } catch {
-            // already gone
+            // already gone, or not found: the new page waits for the port, then gives up
         }
     }
 
@@ -87,6 +88,23 @@ async function whoServes(port)
         return response.ok ? await response.json() : {};
     } catch (error) {
         return error?.cause?.code === "ECONNREFUSED" || error?.name === "TimeoutError" ? null : {};
+    }
+}
+
+/** The process listening on a port on this machine, for a page too old to say its own: netstat's table on Windows (its local address and
+ * a foreign one of :0, whatever language it speaks), lsof elsewhere; null when unknown. */
+function listener(port)
+{
+    try {
+        if (process.platform === "win32") {
+            const row = execFileSync("netstat", ["-ano", "-p", "tcp"], { encoding: "utf8", windowsHide: true }).split(/\r?\n/)
+                .map((line) => new RegExp(`^\\s*TCP\\s+\\S+:${port}\\s+(?:0\\.0\\.0\\.0|\\[::\\]):0\\s+\\S+\\s+(\\d+)\\s*$`, "i").exec(line)).find(Boolean);
+            return row ? Number(row[1]) : null;
+        }
+
+        return Number(execFileSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], { encoding: "utf8" }).split("\n")[0]) || null;
+    } catch {
+        return null;
     }
 }
 

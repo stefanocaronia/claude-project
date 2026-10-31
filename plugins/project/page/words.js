@@ -32,6 +32,8 @@ const pageWords = {
         releasesHint: "Each version with its notes, the newest first: release.mjs write keeps them in the docs' releases folder.",
         releasesNone: "No version written yet: release.mjs status says what is done and which number it suggests.",
         releaseTasks: (count) => `${count} tasks`,
+        releaseTagOnlyShort: "tag",
+        releaseTagOnly: "Known by its tag in the repo (or the package's version): no notes were written for it.",
         errorsBadge: (count) => (count === 1 ? "1 error" : `${count} errors`),
 
         ringLabel: (percent) => `Plan ${percent}% done`,
@@ -275,6 +277,8 @@ const pageWords = {
         releasesHint: "Ogni versione con le sue note, la più recente prima: release.mjs write le tiene nella cartella releases dei documenti.",
         releasesNone: "Ancora nessuna versione scritta: release.mjs status dice cosa è fatto e quale numero suggerisce.",
         releaseTasks: (count) => `${count} compiti`,
+        releaseTagOnlyShort: "tag",
+        releaseTagOnly: "Conosciuta dal suo tag nel repo (o dalla versione del pacchetto): per questa non ci sono note.",
         errorsBadge: (count) => (count === 1 ? "1 errore" : `${count} errori`),
 
         ringLabel: (percent) => `Piano completato al ${percent}%`,

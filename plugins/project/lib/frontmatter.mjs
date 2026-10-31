@@ -41,12 +41,47 @@ export function titleOf(body, name)
     return heading ? plainLine(heading) : name.replace(/\.md$/i, "");
 }
 
-/** A document's description: the first line of its first paragraph that is no heading, a table or a list, shortened; "" for none. */
+/** A document's description: its first paragraph of prose, the summary quoted under its title included, shortened; not a heading, a
+ * table, a list, a label in bold, a line that opens a list (ending with a colon), nor anything in a code block; "" for none. */
 export function firstParagraph(body)
 {
+    const lines = (body ?? "").split(/\r?\n/).map((one) => one.trim());
+    const paragraph = [];
+    let isCode = false;
+
+    for (const line of lines) {
+        if (/^(```|~~~)/.test(line)) {
+            isCode = !isCode;
+            continue;
+        }
+
+        const text = line.replace(/^>\s*(\[!\w+\]\s*)?/, "");
+        const isProse = !isCode && text && !/^(#|\||[-*+] |\d+\. |---|<|!\[)/.test(text) && !/^\*\*[^*]+\*\*:?$/.test(text);
+
+        if (isProse && (paragraph.length > 0 || !/:$/.test(text))) {
+            paragraph.push(text);
+        } else if (paragraph.length > 0) {
+            break;
+        }
+    }
+
+    return shortened(plainLine(paragraph.join(" ")));
+}
+
+/** The description to write in place of one the plugin made before 0.8.2, which took the first line that was no heading, table, list
+ * or quote: a code line ("flowchart LR"), a label in bold, a line opening a list. "" when the description is not that one (the user's
+ * or Claude's own stays), or the first paragraph says the same. */
+export function betterDescription(description, body)
+{
     const line = (body ?? "").split(/\r?\n/).map((one) => one.trim()).find((one) => one && !/^(#|\||[-*+] |\d+\. |>|```|---|<)/.test(one));
-    const plain = line ? plainLine(line) : "";
-    return plain.length > 200 ? `${plain.slice(0, 197).replace(/\s+\S*$/, "")}…` : plain;
+    const made = line ? shortened(plainLine(line)) : "";
+    const now = firstParagraph(body);
+    return made && description === made && now && now !== made ? now : "";
+}
+
+function shortened(text)
+{
+    return text.length > 200 ? `${text.slice(0, 197).replace(/\s+\S*$/, "")}…` : text;
 }
 
 /** A line of markdown as plain words: links as their text, no emphasis or code marks. */

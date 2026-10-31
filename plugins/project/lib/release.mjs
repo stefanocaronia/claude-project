@@ -43,11 +43,13 @@ export function releaseState(releases, tasks, goals, prefix = "T")
     };
 }
 
-/** The tasks done and in no release yet, the oldest first: done, or archived after being done. */
+/** The tasks done and in no release yet, the oldest first: done, or archived after being done. A release known only by its tag, with no
+ * notes to list its tasks, holds every task done by its day. */
 export function unreleased(tasks, releases)
 {
     const released = new Set(releases.flatMap((release) => release.tasks));
-    return tasks.filter((task) => task.done && !released.has(task.id)).sort((first, second) => first.done.localeCompare(second.done) || first.id - second.id);
+    const tagged = releases.filter((release) => release.tagOnly && release.day).map((release) => release.day).sort().at(-1) ?? "";
+    return tasks.filter((task) => task.done && !released.has(task.id) && !(tagged && task.done <= tagged)).sort((first, second) => first.done.localeCompare(second.done) || first.id - second.id);
 }
 
 /** The next version for these tasks, by the rule of Semantic Versioning: a change that breaks what users rely on raises MAJOR (MINOR

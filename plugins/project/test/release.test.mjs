@@ -61,6 +61,30 @@ test("a release groups the work since the last one: status says what is done and
     assert.ok(!JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: root, encoding: "utf8", env: env() }).stdout).some((finding) => /releases/.test(finding.file ?? "")));
 });
 
+test("the repo's tags are the versions, the notes go with theirs; with neither, the package's version; a tag holds the work done by its day", { skip: spawnSync("git", ["--version"]).status === 0 ? false : "no git here" }, () => {
+    const tagged = mkdtempSync(join(tmpdir(), "claude-project-tags-"));
+    const write = (path, text) => {
+        mkdirSync(dirname(join(tagged, path)), { recursive: true });
+        writeFileSync(join(tagged, path), text);
+    };
+    const release = (...args) => spawnSync(process.execPath, [join(scripts, "release.mjs"), ...args], { cwd: tagged, encoding: "utf8", env: env() });
+    write(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\n");
+    write("package.json", JSON.stringify({ name: "engine", version: "1.2.3" }));
+    write("docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n## Postponed\n\n## Done\n\n- T-1 · P2 · medium · Claude · 2026-10-01 · — · the dice (type: feature) · done 2026-10-10\n- T-2 · P2 · medium · Claude · 2026-10-01 · — · the map (type: feature) · done 2099-01-01\n");
+    assert.match(release("status").stdout, /Last release: v1\.2\.3[\s\S]*Done since: 2 tasks[\s\S]*Suggested: v1\.3\.0/);
+
+    const git = (...args) => spawnSync("git", ["-C", tagged, ...args], { encoding: "utf8" });
+    git("init", "-q", "-b", "main");
+    git("-c", "user.name=T", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "one");
+    git("tag", "v0.9.1");
+    git("tag", "weather-v0.2.3");
+    // The tag holds T-1, done before its day; T-2 is still to release, from v0.9.1 and not from the package.
+    assert.match(release("status").stdout, /Last release: v0\.9\.1[\s\S]*Done since: 1 tasks[\s\S]*Suggested: v0\.10\.0/);
+    assert.match(release("write", "0.10.0", "--summary", "The map comes.").stdout, /v0\.10\.0/);
+    assert.match(release("status").stdout, /Last release: v0\.10\.0[\s\S]*Nothing done since the last release/);
+    rmSync(tagged, { recursive: true, force: true });
+});
+
 function env()
 {
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...rest } = process.env;

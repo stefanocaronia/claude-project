@@ -8,9 +8,20 @@ import { sayer } from "../lib/messages.mjs";
 import { closeGoal, planGoals, planPhases, planUpdated } from "../lib/plan.mjs";
 import { firstName, formatTodo, parseTodo } from "../lib/todos.mjs";
 import { wordsOf } from "../lib/words.mjs";
+import { betterDescription, firstParagraph } from "../lib/frontmatter.mjs";
 
 const it = wordsOf("it");
 const en = wordsOf("en");
+
+test("a doc's description is its first paragraph of prose, its quoted summary too; never a code line, a label or a line opening a list", () => {
+    assert.equal(firstParagraph("# Mechanics\n\n> The engine's exact rules,\n> one code each.\n\n## Inheritance\n\n**Who and from whom**\n- INH-1 · …\n"), "The engine's exact rules, one code each.");
+    assert.equal(firstParagraph("# Architecture\n\n```mermaid\nflowchart LR\n  a --> b\n```\n\nThe tool in three [parts](x.md).\n"), "The tool in three parts.");
+    assert.equal(firstParagraph("# GDD\n\n## Goal\nThe world is:\n- persistent;\n\nNPCs act on their own.\n"), "NPCs act on their own.");
+    // One an older version made from a code line or a label is written again; the user's own, however short, stays.
+    assert.equal(betterDescription("flowchart LR", "# A\n\n```mermaid\nflowchart LR\n```\n\nThe tool in three parts.\n"), "The tool in three parts.");
+    assert.equal(betterDescription("Who and from whom", "# M\n\n> The rules.\n\n**Who and from whom**\n"), "The rules.");
+    assert.equal(betterDescription("The rules, short.", "# M\n\n> The rules.\n"), "");
+});
 
 test("a task line reads and writes back in the format's English words, an old Italian line read as well", () => {
     const line = "- T-12 · P2 · medio · Matteo · 2026-10-29 · Revisione e pulizia · La plancia, in tre parti · fatto 2026-10-30 · archiviato 2026-10-31";

@@ -2441,8 +2441,8 @@ function releasesPanel()
             <h2>${t("releasesTitle")}</h2>
             <p class="hint">${escape(t("releasesHint"))}</p>
             ${list.map((release, index) => `<details class="section release" id="release-${attribute(release.version)}" ${index === 0 ? "open" : ""}>
-                <summary><div class="title"><b>v${escape(release.version)}</b> <span class="hint">${escape(formatDay(release.day))}</span>${release.summary ? ` · ${escape(release.summary)}` : ""}</div><div></div><div class="count"></div><div class="pct">${escape(t("releaseTasks", release.count))}</div></summary>
-                <div class="release-notes">${notes(release)}</div>
+                <summary><div class="title"><b>v${escape(release.version)}</b> <span class="hint">${escape(release.day ? formatDay(release.day) : "")}</span>${release.summary ? ` · ${escape(release.summary)}` : ""}</div><div></div><div class="count"></div><div class="pct">${escape(release.tagOnly ? t("releaseTagOnlyShort") : t("releaseTasks", release.count))}</div></summary>
+                <div class="release-notes">${release.tagOnly ? `<p class="hint">${escape(t("releaseTagOnly"))}</p>` : notes(release)}</div>
             </details>`).join("") || `<p class="hint">${escape(t("releasesNone"))}</p>`}
         </section>`;
 }

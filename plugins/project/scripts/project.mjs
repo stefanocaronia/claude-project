@@ -435,22 +435,42 @@ function normalized(path)
 }
 
 /** Where a path really is, past any link on the way; the path itself when it does not exist. */
-/** The releases written in <docs>/releases, the oldest version first: { version, day, summary, tasks, text }. */
+/** The project's releases, the oldest version first: { version, day, summary, tasks, text, tagged, tagOnly }. The repo's tags make them
+ * (v1.2.3 or 1.2.3), each on its tag's day; the notes in <docs>/releases go with their version's tag. Notes not tagged yet (written,
+ * the tag still to make) are releases too, `tagged` false; a tag without notes has `tagOnly`. With neither, the version of the project's
+ * package.json, without a day: a project that released before the plugin starts from where it is. */
 export function readReleases(config)
 {
-    if (!existsSync(config.files.releases)) {
-        return [];
-    }
-
-    return readdirSync(config.files.releases)
+    const notes = new Map((!existsSync(config.files.releases) ? [] : readdirSync(config.files.releases))
         .filter((name) => /^v\d+\.\d+\.\d+\.md$/.test(name))
         .map((name) => {
             const text = read(join(config.files.releases, name));
             const release = parseRelease(text, config.prefixes.task);
-            return release ? { ...release, text } : null;
+            return release ? [release.version, { ...release, text }] : null;
         })
-        .filter(Boolean)
+        .filter(Boolean));
+    const tags = new Map(git(config.root, ["for-each-ref", "--format=%(refname:short) %(creatordate:short)", "refs/tags"]).split("\n")
+        .map((line) => /^v?(\d+\.\d+\.\d+) (\d{4}-\d{2}-\d{2})$/.exec(line.trim())).filter(Boolean)
+        .map(([, version, day]) => [version, day]));
+    const releases = [...new Set([...tags.keys(), ...notes.keys()])].map((version) => {
+        const written = notes.get(version);
+        const day = tags.get(version);
+        return written ? { ...written, day: day ?? written.day, tagged: day !== undefined, tagOnly: false } : { version, day, summary: "", tasks: [], text: "", tagged: true, tagOnly: true };
+    });
+    const packaged = releases.length === 0 ? packageVersion(config) : null;
+    return [...releases, ...(packaged ? [{ version: packaged, day: "", summary: "", tasks: [], text: "", tagged: false, tagOnly: true }] : [])]
         .sort((first, second) => compareVersions(first.version, second.version));
+}
+
+/** The version of the project's package.json, when it has one as MAJOR.MINOR.PATCH; else null. */
+function packageVersion(config)
+{
+    try {
+        const version = JSON.parse(read(join(config.root, "package.json"))).version;
+        return /^\d+\.\d+\.\d+$/.test(String(version)) ? version : null;
+    } catch {
+        return null;
+    }
 }
 
 /** Whether a program is on the path, without running it: `git`, `gh`; on Windows with its .exe or .cmd. */
