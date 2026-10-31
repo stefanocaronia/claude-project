@@ -81,7 +81,7 @@ test("a repo not on GitHub: connect gives the commands, private by default; page
     assert.match(run(root, ["release", "0.1.0"], env).stderr, /No notes for v0\.1\.0/);
     put(root, "docs/releases/v0.1.0.md", "---\ntitle: v0.1.0\ndescription: The dice roll.\ntype: release\n---\n\n# v0.1.0 · 2026-10-31\n\nThe dice roll.\n\n## Added\n\n- T-1 · the dice\n");
     const release = run(root, ["release", "0.1.0", "--write"], env).stdout;
-    assert.match(release, /git tag -a v0\.1\.0[\s\S]*gh release create v0\.1\.0 --title "v0\.1\.0 · The dice roll\." --notes-file "([^"]+)"/);
+    assert.match(release, /git tag -a v0\.1\.0[\s\S]*gh release create v0\.1\.0 --title "v0\.1\.0" --notes-file "([^"]+)"/);
     const notes = /--notes-file "([^"]+)"/.exec(release)[1];
     assert.equal(readFileSync(notes, "utf8"), "The dice roll.\n\n## Added\n\n- T-1 · the dice\n");
     assert.ok(existsSync(notes));

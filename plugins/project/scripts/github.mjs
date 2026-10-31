@@ -321,14 +321,15 @@ function releaseSteps(config, state, say, version, options)
         throw new ProjectError(say("githubNoRelease", { version: clean }));
     }
 
-    const { data, body } = splitFrontmatter(read(source));
+    const { body } = splitFrontmatter(read(source));
     const notes = join(tmpdir(), "claude-project", `release-v${clean}.md`).replaceAll("\\", "/");
 
     if (options.write) {
         write(notes, body.replace(/^#[^\n]*\n+/, ""));
     }
 
-    const title = data.description && data.description !== `v${clean}` ? `v${clean} · ${data.description}` : `v${clean}`;
+    // The title, the version alone, as GitHub's releases have it; the summary opens the notes.
+    const title = `v${clean}`;
     return [
         say("githubReleaseSteps", { version: clean }),
         `  git tag -a v${clean} -m "v${clean}"`,
