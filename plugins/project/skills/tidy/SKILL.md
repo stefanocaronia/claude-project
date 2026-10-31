@@ -1,6 +1,6 @@
 ---
 name: tidy
-description: Tidy the project - the docs made compliant with the plugin's architecture (the core's English names and format, every doc's frontmatter, spacing, links, the index, the folders), and the backlog with the decisions (types, priorities, who does each task, tasks done or made moot, duplicates; decisions superseded, doubled or scattered, reordered and merged, never resolved). Use when the user asks to tidy, clean up or compact the docs, the backlog, the tasks or the decisions, or when check.mjs reports errors.
+description: Tidy the project - the docs made compliant with the plugin's architecture (the core's English names and format, every doc's frontmatter, spacing, links, the index, the folders), and the backlog with the decisions (types, priorities, who does each task, tasks done or made moot, duplicates; decisions superseded, doubled or scattered, reordered and merged, never resolved; with Crew, the colleagues' todo lines that are work for the project brought into the backlog). Use when the user asks to tidy, clean up or compact the docs, the backlog, the tasks or the decisions, or when check.mjs reports errors.
 ---
 
 # Tidying the project
@@ -8,7 +8,7 @@ description: Tidy the project - the docs made compliant with the plugin's archit
 Two tidies, each with its own button, never mixed:
 
 - **The docs** (the panel's «Tidy the docs»; on the page, «Fix names, frontmatter and spacing» for the mechanical part and «Prepare the proposals» for the rest): the docs made compliant with the plugin's architecture. Their form, never their content: no decision, no point to decide, no task changes here.
-- **The backlog and the decisions** (the panel's and the page's «Tidy the backlog»): the tasks and the decisions together, since each speaks of the other. Reordered, cleared of what is superseded or done, merged where doubled; an open point is never resolved.
+- **The backlog and the decisions** (the panel's and the page's «Tidy the backlog»): the tasks and the decisions together, since each speaks of the other. Reordered, cleared of what is superseded or done, merged where doubled; an open point is never resolved. With Crew, the colleagues' todo lines that are work for the project come into the backlog here: Crew's own tidy of the todos only cleans them.
 
 Half deterministic, half judgment: the script finds; you fix what is mechanical and what is clear, and ask the user only whether an item still stands, where you cannot tell. Tidying never asks them to decide. Speak to the user in the project's language.
 
@@ -49,10 +49,11 @@ When the user asks to tidy the backlog (the panel's «Tidy the backlog», or the
    - **A heavy decisions' file**: the superseded rows first, then the lines that repeat what another already says.
    - **The specifications**, where the project keeps them (`specs.mjs`), the same way: a spec a later accepted decision changed is written again to say what is now true, naming the decision; one it dropped keeps its number, its text opening with the superseded marker and the decision; two that ask the same thing: the later one dropped, pointing to the first; a number used twice: the newer takes `specs.mjs next`, after reading what cites it. A task that plainly does a spec and does not cite it gets `(see: S-12)`. Never a spec invented, never one removed because no task does it yet.
 3. **Then the rest of the backlog that is clear**, yourself:
+   - **with Crew, the colleagues' todos**: `backlog.mjs todos` lists their open lines that cite no task. A colleague's todo is their own notebook; a line in it that is work for the project instead (a fix, a change, a feature, something to tell Claude: «A Claude: …», «Riferire a Claude…», «Tell Claude…») becomes a task: `backlog.mjs take <id>:<line> --to <who> [--type …] [--text "<one clear line>"]`, created by the colleague, done by whom the minimum's rule says (Claude for what was to be told to Claude), the line then ticked and citing it; `--keep` when the colleague still has a part of their own, a retest once it is done. A line already done or made moot is not taken: the colleague's tidy clears it. A reminder, a retest, a check, a reading, or a proposal waiting for the user stays in the todo;
    - tasks plainly done by another task or a commit (`show` names the code that cites a task), closed with `done`; tasks a later accepted decision made moot or contradicted, archived or rewritten to agree with it;
    - tasks that belong together as one piece of work, grouped as a large task with its parts, `(in: T-n)`, one level deep, when it is clear (when it is not, it is a question of step 4);
    - duplicates: one archived, the other pointing to it with `(see: T-n)`; waits that no longer hold, cycles of waits and links to tasks that are not there (`set T-n --after …` / `--see …`), goals that changed, the note of a task long archived.
-4. **Then ask**, in the question form, only what you could not decide alone because it is not trivial: whether a task or a point still stands, or a form choice really in doubt (a large task's grouping, say). Never what to decide about an open point.
+4. **Then ask**, in the question form, only what you could not decide alone because it is not trivial: whether a task or a point still stands, whether a colleague's todo line is work for the project or their own note, or a form choice really in doubt (a large task's grouping, say). Never what to decide about an open point.
 5. **Leave** an open point, a vague task or anything not superseded as it is, with no question.
 6. At the end `check.mjs`, and a short report of what you changed and why, by item, so that the user can undo it.
 

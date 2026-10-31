@@ -230,7 +230,7 @@ const pageWords = {
         tidyTickFirst: "Tick the proposals to apply first.",
         tidyConfirmApply: (count, ids) => `Claude Code applies ${count === 1 ? "1 proposal" : `${count} proposals`} (${ids}) and nothing else, then checks again.\n\nIt costs tokens of the week. Go ahead?`,
         failed: (text) => `That did not work: ${text}`,
-        proposalKinds: { superseded: "superseded", compact: "compact", decision: "decision", "to decide": "to decide", index: "index", link: "link", folder: "folder", task: "task", weight: "weight", other: "other" },
+        proposalKinds: { superseded: "superseded", compact: "compact", decision: "decision", "to decide": "to decide", index: "index", link: "link", folder: "folder", task: "task", todo: "todo", weight: "weight", other: "other" },
 
         healthTitle: "The health of the docs",
         healthHint: "From the plugin's check, <code>node ${CLAUDE_PLUGIN_ROOT}/scripts/check.mjs</code>; the tidy skill fixes the mechanical part and proposes the rest.",
@@ -490,7 +490,7 @@ const pageWords = {
         tidyTickFirst: "Spunta prima le proposte da applicare.",
         tidyConfirmApply: (count, ids) => `Claude Code applica ${count === 1 ? "1 proposta" : `${count} proposte`} (${ids}) e nient'altro, poi ricontrolla.\n\nCosta token della settimana. Procedo?`,
         failed: (text) => `Non è andata: ${text}`,
-        proposalKinds: { superseded: "superata", compact: "da compattare", decision: "decisione", "to decide": "da decidere", index: "indice", link: "link", folder: "cartella", task: "compito", weight: "peso", other: "altro" },
+        proposalKinds: { superseded: "superata", compact: "da compattare", decision: "decisione", "to decide": "da decidere", index: "indice", link: "link", folder: "cartella", task: "compito", todo: "todo", weight: "peso", other: "altro" },
 
         healthTitle: "La salute dei documenti",
         healthHint: "Dal controllo del plugin, <code>node ${CLAUDE_PLUGIN_ROOT}/scripts/check.mjs</code>; la skill tidy corregge il meccanico e propone il resto.",

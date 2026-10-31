@@ -11,20 +11,24 @@
 //   node backlog.mjs show T-12… | list [--atomic] [--state doing] [--to <name>] [--p P1] [--goal "…"] [--json] | find <words>… | goals
 //   node backlog.mjs export [--format json|csv|<an extension's>] [--state todo] [--all]   (the open tasks, or all of them, on stdout)
 //   node backlog.mjs import <file> [--format json|csv|<an extension's>] [--by <name>]   (new tasks, numbered here; all or none)
+//   node backlog.mjs todos [--to <colleague>] [--json]   (with Crew: the colleagues' open todo lines that cite no task, each as <id>:<line>)
+//   node backlog.mjs take matteo-conti:8 [--to <name>] [--text "…"] [--p P1] [--type bug] [--goal "…"] [--keep]   (a todo line that is
+//     work for the project made a task, created by the colleague; the line then cites it, ticked as handed over, or open with --keep)
 import { existsSync, readFileSync } from "node:fs";
 import { parseCsv, toCsv } from "../lib/csv.mjs";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
 import { codeView, issueOf } from "../lib/code.mjs";
-import { listOf, nestedParts, splitLinks } from "../lib/links.mjs";
+import { listOf, nestedParts, splitLinks, todoLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
+import { formatTodo, parseTodo } from "../lib/todos.mjs";
 import { effortWord, stateKeys } from "../lib/words.mjs";
 import { closeIssue, readCode, readIssue, readIssues } from "./code.mjs";
 import { context, loadExtensions } from "./extensions.mjs";
-import { assignees, isMain, loadProject, notePath, ProjectError, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, today, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
+import { assignees, isMain, loadProject, notePath, ProjectError, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
-const changes = ["add", "start", "done", "postpone", "todo", "archive", "set", "import"];
-const flags = ["json", "done", "atomic", "all"];
+const changes = ["add", "start", "done", "postpone", "todo", "archive", "set", "import", "take"];
+const flags = ["json", "done", "atomic", "all", "keep"];
 // The columns of the backlog as CSV, the project's own fields after them.
 const csvColumns = ["id", "state", "priority", "effort", "to", "created", "goal", "type", "due", "parent", "after", "see", "by", "text", "started", "done", "archived"];
 
@@ -370,6 +374,51 @@ function execute(command, options, words, config, say)
         }
 
         save([...tasks, ...added], say("imported", { count: added.length, ids: added.map((task) => `${prefix}-${task.id}`).join(", ") }));
+    } else if (command === "todos") {
+        const open = openTodos(config).filter((todo) => typeof options.to !== "string" || todo.name.toLowerCase() === options.to.toLowerCase());
+
+        if (options.json === true) {
+            console.log(JSON.stringify(open.map((todo) => ({ ...todo, file: shown(config, todo.file) })), null, 2));
+        } else {
+            open.forEach((todo) => console.log(`${todo.ref} · ${todo.priority ?? "-"} · ${todo.created ?? "-"} · ${todo.text}`));
+            console.log(say("todosCount", { count: open.length }));
+        }
+    } else if (command === "take") {
+        // A colleague's todo line that is work for the project made a task of the backlog, created by the colleague. The line then cites
+        // it where Crew puts its id: ticked, handed over; open with --keep, when the colleague keeps a part of their own (a retest).
+        const todo = openTodos(config).find((one) => one.ref === words[0]) ?? fail(say("todoNotFound", { ref: words[0] ?? "" }));
+        const task = checked({
+            id: nextId(tasks),
+            priority: options.p ?? todo.priority ?? "P2",
+            effort: options.effort ? effortWord(config.words, options.effort) : config.words.efforts.medium,
+            to: options.to ?? config.people[0],
+            // Raised the day the line was written, not the day it moved.
+            created: todo.created ?? today(),
+            goal: options.goal ?? config.words.noGoal,
+            ...linked(typeof options.text === "string" ? options.text : todo.text.replaceAll(" · ", " - "), { by: todo.name }),
+            done: null,
+            archived: null,
+            state: "todo",
+        });
+        const id = `${prefix}-${task.id}`;
+        // The line's own id, when it had one, becomes the task's in every wait that named it, in the todos and in the backlog.
+        const renamed = (text) => (todo.id ? text.replace(new RegExp(`${escapeRegex(todo.id)}(?![\\w-])`, "g"), id) : text);
+
+        for (const { file } of todoFiles(config)) {
+            const old = read(file);
+            const newline = old.includes("\r\n") ? "\r\n" : "\n";
+            const lines = old.split(/\r?\n/).map((text, index) => {
+                const parsed = file === todo.file && index === todo.line - 1 ? parseTodo(text) : null;
+                return parsed ? formatTodo({ ...parsed, done: options.keep !== true, text: `${id} · ${renamed(todo.text)}` }) : renamed(text);
+            });
+
+            if (lines.join(newline) !== old) {
+                write(file, lines.join(newline));
+            }
+        }
+
+        const waits = (task) => ({ ...task, after: task.after.map((one) => (one === todo.id ? id : one)) });
+        save([...tasks.map(waits), task], say("todoTaken", { id, ref: todo.ref, name: todo.name, line: line(task) }));
     } else if (command === "goals") {
         for (const goal of [...new Set(tasks.map((task) => task.goal))]) {
             const own = tasks.filter((task) => task.goal === goal);
@@ -379,6 +428,23 @@ function execute(command, options, words, config, say)
     } else {
         fail(say("backlogUsage"));
     }
+}
+
+/** The colleagues' open todo lines that cite no task of the backlog, each with where it is, `matteo-conti:8`, and its own id if any; a
+ * line under another is a detail of it, not a line of its own. */
+function openTodos(config)
+{
+    const prefix = config.prefixes.task;
+    return todoFiles(config).flatMap(({ id: colleague, name, file }) => read(file).split(/\r?\n/).flatMap((text, index) => {
+        const todo = parseTodo(text);
+        const own = todo ? todoLinks(todo.text, prefix).id : null;
+
+        if (!todo || todo.done || todo.indent || own?.startsWith(`${prefix}-`)) {
+            return [];
+        }
+
+        return [{ ref: `${colleague}:${index + 1}`, colleague, name, file, line: index + 1, priority: todo.priority, created: todo.created, id: own, text: own ? todo.text.slice(own.length + 3) : todo.text }];
+    }));
 }
 
 /** What a task's links would break, among all the tasks: a task or a decision that does not exist, a wait that closes a cycle. */

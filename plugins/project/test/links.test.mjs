@@ -267,3 +267,21 @@ test("a large task postponed with its parts starts again from its next part, a p
     assert.match(run("show", "T-1"), /the next part to start: T-3/);
     assert.match(run("start", "T-3"), /T-3: In progress\nT-1: In progress/);
 });
+
+test("with Crew, the todo lines that cite no task are listed; take makes one a task created by the colleague, the line citing it and the waits following", () => {
+    put("docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n- T-1 · P1 · high · Claude · 2026-10-01 · Core · the dice (after: #giulia-1)\n\n## Postponed\n\n## Done\n");
+    put(".claude/agent-memory/giulia-ferri/todo.md", "# Todo\r\n\r\n- [ ] P1 · 2026-10-28 · #giulia-1 · Tell Claude: the rolls · lose their sign\r\n  - [ ] a detail\r\n- [ ] P2 · 2026-10-29 · T-1 · retest the dice\r\n- [ ] P3 · 2026-10-30 · read the rules (after: #giulia-1)\r\n- [x] 2026-10-20 · closed\r\n");
+    assert.equal(run("todos"), "giulia-ferri:3 · P1 · 2026-10-28 · Tell Claude: the rolls · lose their sign\ngiulia-ferri:6 · P3 · 2026-10-30 · read the rules (after: #giulia-1)\n2 open lines of the colleagues' todos cite no task.");
+    assert.deepEqual(JSON.parse(run("todos", "--json")).map((todo) => [todo.ref, todo.id, todo.name]), [["giulia-ferri:3", "#giulia-1", "Giulia"], ["giulia-ferri:6", null, "Giulia"]]);
+    assert.match(fails("take", "giulia-ferri:5"), /giulia-ferri:5 is no open line/);
+
+    // Handed over: the task is Claude's, the line ticked and citing it, the waits on its old id now on the task.
+    assert.match(run("take", "giulia-ferri:3", "--to", "Claude", "--type", "bug"), /^T-2 added from giulia-ferri:3, created by Giulia: - T-2 · P1 · medium · Claude · 2026-10-28 · .* · Tell Claude: the rolls - lose their sign \(type: bug\) \(by: Giulia\)$/);
+    assert.equal(read(".claude/agent-memory/giulia-ferri/todo.md"), "# Todo\r\n\r\n- [x] 2026-10-28 · T-2 · Tell Claude: the rolls · lose their sign\r\n  - [ ] a detail\r\n- [ ] P2 · 2026-10-29 · T-1 · retest the dice\r\n- [ ] P3 · 2026-10-30 · read the rules (after: T-2)\r\n- [x] 2026-10-20 · closed\r\n");
+    assert.match(read("docs/TASKS.md"), /· the dice \(after: T-2\)\n/);
+
+    // Kept: the line stays open, citing the task.
+    assert.match(run("take", "giulia-ferri:6", "--to", "Giulia", "--keep"), /^T-3 added from giulia-ferri:6, created by Giulia: .* · Giulia · 2026-10-30 · .* · read the rules \(after: T-2\) \(by: Giulia\)$/);
+    assert.match(read(".claude/agent-memory/giulia-ferri/todo.md"), /\r\n- \[ \] P3 · 2026-10-30 · T-3 · read the rules \(after: T-2\)\r\n/);
+    assert.match(run("todos"), /^0 open lines/);
+});
