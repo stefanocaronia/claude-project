@@ -4,7 +4,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { isMain, loadProject, notePath } from "../scripts/project.mjs";
 import { context, loadExtensions } from "../scripts/extensions.mjs";
 import { collect } from "./collect.mjs";
@@ -168,14 +168,24 @@ if (isMain(import.meta.url)) {
 }
 
 /** A page that outlives a change of the plugin's code or of the project's configuration (its core files renamed, say) would read the
- * docs as they were: it starts a new one in its place, once no run of Claude Code is going. */
+ * docs as they were: it starts a new one in its place, once no run of Claude Code is going, and only once the new code loads and reads
+ * the project — code caught halfway through an edit would leave no page at all; this one serves on and tries the next change. */
 function restartOnChange(port)
 {
     const started = stamp();
+    let tried = started;
     setInterval(() => {
         const now = stamp();
 
-        if (now === null || now === started || isRunning()) {
+        if (now === null || now === started || now === tried || isRunning()) {
+            return;
+        }
+
+        tried = now;
+        const self = pathToFileURL(fileURLToPath(import.meta.url)).href;
+        const loads = spawnSync(process.execPath, ["--input-type=module", "-e", `const page = await import(${JSON.stringify(self)}); await page.pageServer(); process.exit(0);`], { cwd: process.cwd(), env: process.env, windowsHide: true, timeout: 30000 });
+
+        if (loads.status !== 0) {
             return;
         }
 

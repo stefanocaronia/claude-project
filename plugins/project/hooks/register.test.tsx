@@ -255,7 +255,7 @@ test("the buttons above the links start the first task by priority and age, and 
     expect(commands[0]).toBe("/crew:next Matteo -- T-61 · La plancia, in tre parti");
     expect(prompts[0]).toMatch(/\(riga 553 delle decisioni\): P3 · Le cariche degli oggetti$/);
     // The tidying runs the skill's own command, so that the skill is loaded whole.
-    expect(commands[1]).toMatch(/^\/project:tidy i documenti del progetto: .*mai di deciderlo/);
+    expect(commands[1]).toMatch(/^\/project:tidy sezione 2, i documenti: conformi all'architettura della mod, .*frontmatter.*qui non cambia nessuna decisione e nessun compito/);
     await ui.unmount();
 });
 
@@ -354,7 +354,7 @@ test("the button for where the project stands asks Claude for a short report, an
     await ui.press({ key: "where-we-stand" });
     expect(prompts[0]).toMatch(/^Fammi il punto della situazione del progetto, in al massimo 30 righe/);
     await ui.press({ key: "tidy-backlog" });
-    expect(commands[0]).toMatch(/^\/project:tidy sezione 4, il backlog e le decisioni da prendere: prima da solo il minimo.*mai farmi decidere un punto aperto/);
+    expect(commands[0]).toMatch(/^\/project:tidy sezione 3, il backlog e le decisioni: prima da solo il minimo.*poi le decisioni insieme.*mai risolti.*mai farmi decidere un punto aperto/);
     await ui.unmount();
 });
 

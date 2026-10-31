@@ -53,7 +53,7 @@ Phases in its table (`| 2. Name | at the end you can… |`), goals as `### Name 
 
 ## Health: `check.mjs`
 
-`check.mjs` reports errors, warnings and notes with file and line: decision numbers twice or missing, decisions cited that do not exist, backlog lines that do not read, links to tasks that do not exist, cycles of waits, a todo id nobody gave, a note of a task that is not there, a colleague's todo citing a task that is not there, old proposals, broken links, heavy files. `--fix` mends only whitespace. After changing the docs, run it; errors are fixed before the work is called done. The cleanup beyond that is the `tidy` skill.
+`check.mjs` reports errors, warnings and notes with file and line: decision numbers twice or missing, decisions cited that do not exist, backlog lines that do not read, links to tasks that do not exist, cycles of waits, a todo id nobody gave, a note of a task that is not there, a colleague's todo citing a task that is not there, old proposals, broken links, heavy files. `--fix` mends whitespace and the docs' frontmatter. After changing the docs, run it; errors are fixed before the work is called done. The cleanup beyond that is the `tidy` skill: the docs' form (names, frontmatter, links, index) on one side, the backlog with the decisions (reordered, cleared, merged, never resolved) on the other.
 
 ## The docs' frontmatter
 

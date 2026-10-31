@@ -125,13 +125,15 @@ function ownerOf(owner)
     return { name: owner.name, fullName: owner.fullName, ...(portrait ? { portrait } : {}) };
 }
 
-/** The releases for the panel: the last five, the newest first, and the work done since the last one with the version it suggests. */
+/** The releases for the panel: the last ten, the newest first, how many there are in all (the page lists them all), and the work done
+ * since the last one with the version it suggests. A version known only by its tag has no count of tasks. */
 function releasesOf(config, tasks, goals)
 {
     const releases = readReleases(config);
     const { pending, suggested } = releaseState(releases, tasks, goals, config.prefixes.task);
     return {
-        list: [...releases].reverse().slice(0, 5).map(({ version, day, summary, tasks: listed }) => ({ version, day, summary, count: listed.length })),
+        list: [...releases].reverse().slice(0, 10).map(({ version, day, summary, tasks: listed, tagOnly }) => ({ version, day, summary, count: tagOnly ? null : listed.length })),
+        total: releases.length,
         pending: pending.length,
         next: suggested.version,
     };

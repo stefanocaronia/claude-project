@@ -59,12 +59,12 @@ export function propose(config, scope = "docs")
         return proposeBacklog(config);
     }
 
-    const brief = `Run the tidy skill of the project plugin: read ${pluginRoot}/skills/tidy/SKILL.md and do only its section 3, the proposals. Change no file.
-Start from the report of \`${check}\`, whose files are relative to the project's root. Read with Read and Grep; Bash is only for that command. Read only the lines the findings point at (Read with offset and limit) and what you need to judge them: the decisions' file can be very large, never read it whole. If while reading you find something else the skill asks to propose, propose it.
-Every proposal changes something: what stays as it is (a revision in part, say) is not a proposal. The whitespace, the blank lines, the docs' frontmatter, the core's English names and format and the tasks' dates the page fixes itself: do not propose them.
-A proposal that cannot be applied now carries in "waits" what it waits for: "user" (a decision of theirs), "colleagues" (Crew's cleanup or a colleague's work) or "a run of its own" (a long piece of work, apart); the others have "waits": null, and "change" says exactly what will change in the file.
+    const brief = `Run the tidy skill of the project plugin: read ${pluginRoot}/skills/tidy/SKILL.md and do only its section 2, the docs, as proposals. Change no file.
+Start from the report of \`${check}\`, whose files are relative to the project's root. Read with Read and Grep; Bash is only for that command. Read only the lines the findings point at (Read with offset and limit) and what you need to judge them.
+The docs' form only: links, the index, the folders. No decision, no point to decide, no task, no colleague's todo: those are the backlog's tidy. Every proposal changes something. The whitespace, the blank lines, the docs' frontmatter, the core's English names and format and the tasks' dates the page fixes itself: do not propose them.
+A proposal that cannot be applied now carries in "waits" what it waits for: "user" (a choice of theirs) or "a run of its own" (a long piece of work, apart); the others have "waits": null, and "change" says exactly what will change in the file.
 Answer with a JSON array and nothing else, at most 25 proposals, the most useful first, written in the project's language (${config.language}):
-[{"id": "p1", "kind": "superseded | compact | to decide | index | task | weight | other", "file": "${shown(config, config.files.decisions)}", "line": 314, "title": "one line", "why": "the reason, in one or two sentences", "change": "exactly what will change in the file", "waits": null}]`;
+[{"id": "p1", "kind": "index | link | folder | weight | other", "file": "${shown(config, config.files.index)}", "line": 12, "title": "one line", "why": "the reason, in one or two sentences", "change": "exactly what will change in the file", "waits": null}]`;
 
     return startRun(config, "propose", brief, ["Read", "Grep", "Glob", `Bash(${check})`], (state, result) => {
         state.proposals = proposalsOf(result);
@@ -74,15 +74,16 @@ Answer with a JSON array and nothing else, at most 25 proposals, the most useful
     });
 }
 
-/** The backlog tidied as the chat tidies it: the minimum done at once (a type, a priority and who does it for every open task, the parts'
- * goals, the texts), then proposals to tick for what is left (tasks already done or made moot, large tasks, duplicates, points to decide
- * obsolete, doubled or to rewrite). The minimum is the only change this run makes. */
+/** The backlog tidied as the chat tidies it, with the decisions: the minimum done at once (a type, a priority and who does it for every
+ * open task, the parts' goals, the texts), then proposals to tick for what is left (tasks already done or made moot, large tasks,
+ * duplicates; decisions superseded or doubled, points to decide already taken, moot or doubled: never resolved). The minimum is the only
+ * change this run makes. */
 function proposeBacklog(config)
 {
     const backlog = `node ${pluginRoot}/scripts/backlog.mjs`;
-    const brief = `Run the tidy skill of the project plugin on the backlog: read ${pluginRoot}/skills/tidy/SKILL.md, sections 3 and 4. The user is not here to answer: the proposals they tick on the page are your questions.
+    const brief = `Run the tidy skill of the project plugin on the backlog and the decisions: read ${pluginRoot}/skills/tidy/SKILL.md, section 3 and «Asking, in both». The user is not here to answer: the proposals they tick on the page are your questions.
 Read the backlog with \`${backlog} list --json\`, the done ones with \`${backlog} list --state done --json\`, a task whole with \`${backlog} show T-n\`; the plan's goals in ${shown(config, config.files.plan)}; the decisions a task cites, and the later ones, in ${shown(config, config.files.decisions)} with Grep (never read it whole); who can do a task: the people ${config.people.join(", ")} and, with Crew, the colleagues of .claude/agents/, each with their field in their profile; the points still to decide under the "to decide" heading of ${shown(config, config.files.decisions)} (find it with Grep, then Read from its line).
-First the minimum, yourself, at once, with \`${backlog} set T-n\` and only its --type, --p, --to, --goal and --text: a type, a priority and who does it for every open task (to do, in progress, postponed, large tasks included) that lacks one or has a wrong one, a part's goal its large task's, a text that breaks the line's rules (one line, clear, no « · »). Change no other file and nothing else. Then propose only what is plainly closed, superseded, contradicted by an accepted decision, done, doubled or wrong, as the skill's section 3 says: whether an item still stands, never what to decide; an open point or a vague task stays as it is, with no proposal. Few proposals are better than many. Run each command alone, exactly as written here: no cd, no pipes, no other program. Every proposal changes something, and "change" is the exact \`${backlog} …\` command or commands that apply it; a large task's new parts are added with \`--in T-n\`, the large task's number. A proposal on the points to decide has "kind": "to decide", "file": "${shown(config, config.files.decisions)}", the line of the first point it touches, and in "change" exactly which lines go and which come. A proposal that cannot be applied now carries in "waits" what it waits for: "user" (a decision of theirs) or "a run of its own"; the others have "waits": null.
+First the minimum, yourself, at once, with \`${backlog} set T-n\` and only its --type, --p, --to, --goal and --text: a type, a priority and who does it for every open task (to do, in progress, postponed, large tasks included) that lacks one or has a wrong one, a part's goal its large task's, a text that breaks the line's rules (one line, clear, no « · »). Change no other file and nothing else. Then propose only what is plainly closed, superseded, contradicted by an accepted decision, done, doubled or wrong, as the skill's section 3 says: the decisions reordered, cleared and merged, never resolved; whether an item still stands, never what to decide; an open point or a vague task stays as it is, with no proposal. Few proposals are better than many. Run each command alone, exactly as written here: no cd, no pipes, no other program. Every proposal changes something, and "change" is the exact \`${backlog} …\` command or commands that apply it; a large task's new parts are added with \`--in T-n\`, the large task's number. A proposal on the decisions has "kind": "decision" (a row superseded or doubled, reduced as the skill says) or "to decide" (a point removed, merged or moved beside its subject), "file": "${shown(config, config.files.decisions)}", the line of the first row or point it touches, and in "change" exactly which lines go and which come. A proposal that cannot be applied now carries in "waits" what it waits for: "user" (a decision of theirs) or "a run of its own"; the others have "waits": null.
 Answer with a JSON object and nothing else, at most 25 proposals, the most useful first, written in the project's language (${config.language}): "minimum" the changes you made, "proposals" the rest to tick:
 {"minimum": [{"task": "T-12", "change": "type bug, priority P2", "why": "a crash, not a feature"}], "proposals": [{"id": "p1", "kind": "task", "file": "${shown(config, config.files.tasks)}", "line": null, "title": "one line", "why": "the reason, in one or two sentences", "change": "${backlog} done T-12", "waits": null}]}`;
 
@@ -112,9 +113,9 @@ export function apply(config, ids)
     if (readState(config).scope === "backlog") {
         const backlog = `node ${pluginRoot}/scripts/backlog.mjs`;
         const decisions = shown(config, config.files.decisions);
-        const brief = `Apply these proposals on the backlog and on the points to decide, approved by the user, and only these: a task's with the \`${backlog} …\` commands its "change" names, a point to decide's with Edit in ${decisions}, only under its "to decide" heading:
+        const brief = `Apply these proposals on the backlog and on the decisions, approved by the user, and only these: a task's with the \`${backlog} …\` commands its "change" names, a decision's or a point to decide's with Edit in ${decisions}, exactly as its "change" says; an open point is never resolved:
 ${JSON.stringify(chosen, null, 2)}
-Follow ${pluginRoot}/skills/tidy/SKILL.md, section 4 and "The rules that stay". If a command is refused, read its message, fix the command once, or skip the proposal and say why. At the end run \`${check}\`.
+Follow ${pluginRoot}/skills/tidy/SKILL.md, section 3 and "The rules that stay". If a command is refused, read its message, fix the command once, or skip the proposal and say why. At the end run \`${check}\`.
 Answer with a JSON object and nothing else, its summary in the project's language (${config.language}): {"applied": ["p1"], "skipped": [{"id": "p3", "why": "..."}], "summary": "two or three sentences"}`;
         return startRun(config, "apply", brief, ["Read", "Grep", `Edit(${decisions})`, `Bash(${backlog} *)`, `Bash(${check})`], (state, result) => {
             const outcome = objectOf(result);
@@ -129,7 +130,7 @@ Answer with a JSON object and nothing else, its summary in the project's languag
     const memory = shown(config, config.memory);
     const brief = `Apply these proposals of the cleanup, approved by the user, and only these:
 ${JSON.stringify(chosen, null, 2)}
-Follow ${pluginRoot}/skills/tidy/SKILL.md, above all "The rules that stay". The proposals' files are relative to the project's root. Change only those files, with Edit, and read them with Read and Grep. Bash is only for \`${check}\` and \`${check} --fix\` (whitespace, blank lines and the docs' frontmatter). Another session may change a file while you work: if an Edit is refused or the line is gone, read the file again and try once more. If a proposal cannot be applied as written, skip it and say why. At the end run \`${check}\`.
+Follow ${pluginRoot}/skills/tidy/SKILL.md, section 2 and "The rules that stay". The proposals' files are relative to the project's root. Change only those files, with Edit, and read them with Read and Grep; never a decision, a point to decide or a task. Bash is only for \`${check}\` and \`${check} --fix\` (whitespace, blank lines and the docs' frontmatter). Another session may change a file while you work: if an Edit is refused or the line is gone, read the file again and try once more. If a proposal cannot be applied as written, skip it and say why. At the end run \`${check}\`.
 Answer with a JSON object and nothing else, its summary in the project's language (${config.language}): {"applied": ["p1"], "skipped": [{"id": "p3", "why": "..."}], "summary": "two or three sentences"}`;
 
     // The colleagues' memory may sit past a link (.claude into a private repo): the rule names both paths.

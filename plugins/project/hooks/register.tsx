@@ -768,16 +768,20 @@ export const register: Register = (on) => {
                     ...(proposals.length === 0 ? [<Text key="none-open" dimColor>{words("noneOpen")}</Text>] : limited("open", proposals).map(proposalRow)),
                     more("open", proposals.length, "showAllDecisions"),
                 ])}
-                {/* The versions, the newest first, each opening its notes in the page; what waits for the next. */}
-                {section("releases", "🏷︎", `${words("sectionReleases")} · ${releases.list.length}`, [
+                {/* The versions, the repo's tags, the newest first, each opening its notes in the page; what waits for the next; the whole
+                    history in the page when there are more. */}
+                {section("releases", "🏷︎", `${words("sectionReleases")} · ${releases.total ?? releases.list.length}`, [
                     <Text key="releases-pending" dimColor>{releases.pending > 0 ? words("releasesPending", { count: releases.pending, next: releases.next }) : words("releasesNothing")}</Text>,
                     ...releases.list.map((release) => (
                         <Box key={`release-${release.version}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
                             <Box flexShrink={0}><Link key={`release-link-${release.version}`} href={`${snapshot.page}/#releases/${release.version}`}>{`v${release.version}`}</Link></Box>
-                            <Box flexShrink={0}><Text dimColor>{`${release.day} · ${words("releaseTasks", { count: release.count })}`}</Text></Box>
+                            <Box flexShrink={0}><Text dimColor>{[release.day, release.count === null ? words("releaseTagOnly") : words("releaseTasks", { count: release.count })].filter(Boolean).join(" · ")}</Text></Box>
                             {release.summary ? <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden"><Text wrap="truncate-end">{release.summary}</Text></Box> : null}
                         </Box>
                     )),
+                    ...((releases.total ?? 0) > releases.list.length
+                        ? [<Link key="releases-all" href={`${snapshot.page}/#releases`}>{words("releasesAll", { count: releases.total })}</Link>]
+                        : []),
                 ])}
             </Box>
         );

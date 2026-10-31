@@ -78,7 +78,7 @@ export type Snapshot = {
     /** Whether git and gh are here, and the project's repo on GitHub, owner/name, or null. */
     github?: { tools: boolean; repo: string | null };
     /** The last versions, the newest first, and how many tasks wait for the next one, with the number it suggests. */
-    releases?: { list: { version: string; day: string; summary: string; count: number }[]; pending: number; next: string };
+    releases?: { list: { version: string; day: string; summary: string; count: number | null }[]; total?: number; pending: number; next: string };
     /** The project's own fields on a task, by key: their name, and the values allowed when the configuration lists them. */
     fields?: Record<string, { name: string; values: string[] | null }>;
     today: string;
