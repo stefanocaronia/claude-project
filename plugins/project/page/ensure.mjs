@@ -3,7 +3,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sayer } from "../lib/messages.mjs";
 import { findRoot, git, loadProject, onPath, ProjectError, projectCommandOnPath, projectName } from "../scripts/project.mjs";
@@ -27,10 +27,22 @@ async function ensure()
     const { config, say } = loadProject(from);
     const port = config.page.port;
     const url = `http://localhost:${port}`;
-    const owner = await whoServes(port);
+    const answer = await whoServes(port);
+    const owner = answer === null ? null : answer.root ?? "";
+    const here = dirname(fileURLToPath(import.meta.url));
+    // This project's page run by another copy of the plugin (an older version, before an update): it makes way for this one's.
+    const isStale = owner?.toLowerCase() === config.root.toLowerCase() && answer.plugin && !same(answer.plugin, join(here, "..")) && Number.isInteger(answer.pid);
 
-    if (owner === null) {
-        spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "serve.mjs"), "--port", String(port)], { cwd: config.root, env: { ...process.env, CLAUDE_PROJECT_DIR: config.root }, detached: true, stdio: "ignore", windowsHide: true }).unref();
+    if (isStale) {
+        try {
+            process.kill(answer.pid);
+        } catch {
+            // already gone
+        }
+    }
+
+    if (owner === null || isStale) {
+        spawn(process.execPath, [join(here, "serve.mjs"), "--port", String(port)], { cwd: config.root, env: { ...process.env, CLAUDE_PROJECT_DIR: config.root }, detached: true, stdio: "ignore", windowsHide: true }).unref();
     }
 
     const context = owner === null || owner.toLowerCase() === config.root.toLowerCase() ? say("served", { url })
@@ -66,13 +78,20 @@ function invite()
     console.log(JSON.stringify({ systemMessage: say("invite"), hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: say("inviteContext") } }));
 }
 
-/** The root of the project whose page answers on the port; "" when something else answers; null when nothing does. */
+/** What answers on the port: the page of a project, its root, the plugin's folder and its process; {} when something else answers; null
+ * when nothing does. */
 async function whoServes(port)
 {
     try {
         const response = await fetch(`http://127.0.0.1:${port}/whoami`, { signal: AbortSignal.timeout(800) });
-        return response.ok ? (await response.json()).root ?? "" : "";
+        return response.ok ? await response.json() : {};
     } catch (error) {
-        return error?.cause?.code === "ECONNREFUSED" || error?.name === "TimeoutError" ? null : "";
+        return error?.cause?.code === "ECONNREFUSED" || error?.name === "TimeoutError" ? null : {};
     }
+}
+
+function same(one, other)
+{
+    const plain = (path) => resolve(path).replaceAll("\\", "/").replace(/\/$/, "").toLowerCase();
+    return plain(one) === plain(other);
 }

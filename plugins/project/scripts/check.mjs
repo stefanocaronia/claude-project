@@ -1,4 +1,4 @@
-// The health of the project docs: node check.mjs [--fix] [--json]. Read-only without --fix, which fixes only whitespace.
+// The health of the project docs: node check.mjs [--fix] [--json]. Read-only without --fix, which fixes whitespace and the docs' frontmatter.
 import { existsSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseBacklog, citedTasks } from "../lib/backlog.mjs";
@@ -447,17 +447,27 @@ function checkFrontmatter(config, say, add)
     }
 }
 
-/** The documents whose frontmatter is missing or partial, written whole, the days from git; their shown paths. */
-export function fixFrontmatter(config)
+/** The documents whose frontmatter is missing or partial, written whole, the days from git (without `isWritten`, only found); their shown
+ * paths. */
+export function fixFrontmatter(config, isWritten = true)
 {
     const changed = [];
 
     for (const file of docFiles(config)) {
         const text = read(file);
+        const keys = ["title", "description", "type", "created", "updated"];
+
+        if (keys.every((key) => splitFrontmatter(text).data[key])) {
+            continue;
+        }
+
         const stamped = stampDoc(config, file, text);
 
         if (stamped !== text && Object.keys(splitFrontmatter(text).data).length < Object.keys(splitFrontmatter(stamped).data).length) {
-            writeFileSync(file, stamped);
+            if (isWritten) {
+                writeFileSync(file, stamped);
+            }
+
             changed.push(shown(config, file));
         }
     }

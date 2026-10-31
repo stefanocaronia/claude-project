@@ -221,6 +221,34 @@ test("a doc edited by hand gets its frontmatter whole and its last change today 
     rmSync(root, { recursive: true, force: true });
 });
 
+test("every doc of the plugin has its frontmatter, the core and the project-management docs added; not a folder added in the docs, nor the project's own markdown", async () => {
+    const root = project({
+        ".claude/project.yaml": "language: it\ndocs: docs\npeople: [Claude]\nmarkdown: [docs, docs/playtest]\ndocuments: [{ name: GDD, path: design/GDD.md }]\n",
+        "docs/GLOSSARIO.md": "# Le parole\n",
+        "docs/archive/PLAN-2026-10-01.md": "# Il piano vecchio\n\nCome era.\n",
+        "docs/branding/README.md": "# Il marchio\n",
+        "docs/playtest/01.md": "# Primo\n",
+        "design/GDD.md": "# Il gioco\n",
+        "src/README.md": "# Il codice\n",
+    });
+    const own = ["design/GDD.md", "docs/DECISIONI.md", "docs/GLOSSARIO.md", "docs/PLAN.md", "docs/TASKS.md", "docs/archive/PLAN-2026-10-01.md"];
+    const missing = () => JSON.parse(cli(root, "check.mjs", "--json").stdout).filter((finding) => finding.kind === "frontmatter").map((finding) => finding.file).sort();
+    assert.deepEqual(missing(), own);
+
+    // The page's mechanical fix: the core's English names and format, and the frontmatter, in one go; the rest left alone.
+    const { runFix, tidyState } = await import("../page/tidy.mjs");
+    const config = (await import("../scripts/project.mjs")).loadProject(root).config;
+    assert.ok(tidyState(config).whitespace.includes("docs/DECISIONI.md"));
+    runFix(config, "whitespace");
+    assert.deepEqual(missing(), []);
+    assert.ok(existsSync(join(root, "docs/DECISIONS.md")));
+    assert.equal(splitFrontmatter(readFileSync(join(root, "docs/archive/PLAN-2026-10-01.md"), "utf8")).data.title, "Il piano vecchio");
+    for (const [path, text] of [["src/README.md", "# Il codice\n"], ["docs/branding/README.md", "# Il marchio\n"], ["docs/playtest/01.md", "# Primo\n"]]) {
+        assert.equal(readFileSync(join(root, path), "utf8"), text);
+    }
+    rmSync(root, { recursive: true, force: true });
+});
+
 test("a project made before the core went English is read as it is, and rename writes its names and format in English, its own text kept", () => {
     const root = project({
         "docs/PLAN.md": "# Piano\n\n> Aggiornato il 2026-10-29. Breve.\n\n## Traguardi\n\n### Nucleo (fase 1) · fatto 2026-10-20\n\nIl primo.\n",

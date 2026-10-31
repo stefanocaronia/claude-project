@@ -350,12 +350,18 @@ export function write(path, text)
     writeFileSync(path, text);
 }
 
-/** The project's markdown documents: those of the docs' folder and of its folders one level down (the archive, the tasks' notes, the
- * releases), or those of the folders the configuration names in `markdown:`. The colleagues' memory is Crew's, not here. */
+/** The plugin's own markdown documents: the core (the plan, the backlog, the decisions, the index, with the archive's, the tasks' notes'
+ * and the releases' folders) and the project-management docs the user adds beside them (a GDD, a specification) or names in
+ * `documents:`; each once. Not the folders the user adds in the docs (playtests, branding), nor the project's own markdown, nor the
+ * colleagues' memory, which is Crew's. */
 export function docFiles(config)
 {
-    const folders = config.markdown ?? [config.docs, ...(existsSync(config.docs) ? readdirSync(config.docs, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => `${config.docs}/${entry.name}`) : [])];
-    return folders.filter(existsSync).flatMap((folder) => readdirSync(folder).filter((name) => name.toLowerCase().endsWith(".md")).map((name) => `${folder}/${name}`));
+    const markdown = (folder) => (existsSync(folder) ? readdirSync(folder).filter((name) => name.toLowerCase().endsWith(".md")).map((name) => `${folder.replaceAll("\\", "/")}/${name}`) : []);
+    const files = [
+        ...[config.docs, dirname(config.files.archive), config.files.notes, config.files.releases].flatMap(markdown),
+        ...(config.documents ?? []).map((document) => document.path).filter((path) => path.toLowerCase().endsWith(".md") && existsSync(path)),
+    ];
+    return [...new Map(files.map((file) => [normalized(file), file])).values()];
 }
 
 /** Whether a path is one of the project's documents, whatever its slashes and case. */

@@ -194,6 +194,13 @@ async function pageChecks(port)
     const two = data.board.find((task) => task.id === 2);
     assert.deepEqual([two.after, two.blockedBy, two.waitedBy, two.note, two.noteHref], [["T-3"], ["T-3"], [], "docs/tasks/T-2.md", "/note/2"]);
     assert.deepEqual(data.board.find((task) => task.id === 3).see, ["T-50", "T-1"]);
+
+    // Every document of the docs opens in the page: its address, its frontmatter's description; nothing outside the docs.
+    const plan = data.documents.find((document) => document.name === "PLAN.md");
+    assert.equal(plan.href, "/doc/PLAN.md");
+    assert.equal((await fetch(`http://127.0.0.1:${port}${plan.href}`)).status, 200);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/doc/..%2F.claude%2Fproject.md`)).status, 404);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/doc/NONE.md`)).status, 404);
 }
 
 test("a goal closes once its tasks are closed, refuses new tasks while closed, opens again, and the check says when a closed goal has open ones", () => {

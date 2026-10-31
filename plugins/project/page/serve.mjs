@@ -1,7 +1,7 @@
 // The project's page: node serve.mjs, from the project's folder or with CLAUDE_PROJECT_DIR; then http://localhost:<page.port>.
 // It serves the page, its data, the cleanup, the colleagues' portraits, and each extension's script and routes.
-import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,9 +9,10 @@ import { isMain, loadProject, notePath } from "../scripts/project.mjs";
 import { context, loadExtensions } from "../scripts/extensions.mjs";
 import { collect } from "./collect.mjs";
 import { readOwner } from "../scripts/code.mjs";
-import { apply, propose, runFix, tidyState } from "./tidy.mjs";
+import { apply, isRunning, propose, runFix, tidyState } from "./tidy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const pluginRoot = join(here, "..");
 const types = { ".html": "text/html; charset=utf-8", ".json": "application/json", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css", ".png": "image/png", ".jpg": "image/jpeg", ".svg": "image/svg+xml", ".md": "text/plain; charset=utf-8", ".yaml": "text/plain; charset=utf-8" };
 
 /** The page's server for a project, with its extensions loaded; listen() starts it on the loopback addresses. */
@@ -32,7 +33,8 @@ export async function pageServer(from)
             if (url.pathname === "/data") {
                 send(response, 200, "application/json", JSON.stringify(await collect(config, say, extensions)));
             } else if (url.pathname === "/whoami") {
-                send(response, 200, "application/json", JSON.stringify({ root: config.root }));
+                // The plugin's folder it runs from, and its process: the start of a session restarts a page of another version.
+                send(response, 200, "application/json", JSON.stringify({ root: config.root, plugin: pluginRoot, pid: process.pid }));
             } else if (url.pathname === "/tidy") {
                 send(response, 200, "application/json", JSON.stringify(tidyState(config)));
             } else if (request.method === "POST" && /^\/tidy\/fix\/(whitespace|dates)$/.test(url.pathname)) {
@@ -52,6 +54,11 @@ export async function pageServer(from)
                 // A key document of the configuration, by its place in the list: never another file.
                 const document = config.documents[Number(url.pathname.split("/")[2])];
                 document && existsSync(document.path) ? send(response, 200, "text/plain; charset=utf-8", readFileSync(document.path)) : send(response, 404, "text/plain", "no such document");
+            } else if (/^\/doc\/[^/\\]+\.md$/i.test(url.pathname)) {
+                // A document of the docs' folder, by its name: never a file elsewhere.
+                const name = decodeURIComponent(url.pathname.slice("/doc/".length));
+                const known = existsSync(config.docs) && !/[/\\]/.test(name) && readdirSync(config.docs).includes(name);
+                known ? send(response, 200, "text/plain; charset=utf-8", readFileSync(join(config.docs, name))) : send(response, 404, "text/plain", "no such document");
             } else if (/^\/note\/\d+$/.test(url.pathname)) {
                 // A task's note, by the task's number: never another file.
                 const path = notePath(config, Number(url.pathname.split("/")[2]));
@@ -141,8 +148,51 @@ if (isMain(import.meta.url)) {
     const { config, server } = await pageServer();
     const portIndex = process.argv.indexOf("--port");
     const port = portIndex > 0 ? Number(process.argv[portIndex + 1]) : config.page.port;
-    await listen(server, port);
+
+    // A page restarting: the old one may still hold the port for a moment.
+    for (let attempt = 1; ; attempt++) {
+        try {
+            await listen(server, port);
+            break;
+        } catch (error) {
+            if (error?.code !== "EADDRINUSE" || attempt === 10) {
+                throw error;
+            }
+
+            await new Promise((done) => setTimeout(done, 500));
+        }
+    }
+
     console.log(`Project page on http://localhost:${port}`);
+    restartOnChange(port);
+}
+
+/** A page that outlives a change of the plugin's code or of the project's configuration (its core files renamed, say) would read the
+ * docs as they were: it starts a new one in its place, once no run of Claude Code is going. */
+function restartOnChange(port)
+{
+    const started = stamp();
+    setInterval(() => {
+        const now = stamp();
+
+        if (now === null || now === started || isRunning()) {
+            return;
+        }
+
+        spawn(process.execPath, [fileURLToPath(import.meta.url), "--port", String(port)], { cwd: process.cwd(), env: process.env, detached: true, stdio: "ignore", windowsHide: true }).unref();
+        process.exit(0);
+    }, 3000).unref();
+}
+
+/** The plugin's code, by its files' last change, and the project's configuration as it reads now; null while it does not read. */
+function stamp()
+{
+    try {
+        const code = ["lib", "scripts", "page"].flatMap((folder) => readdirSync(join(pluginRoot, folder)).filter((name) => /\.m?js$/.test(name)).map((name) => statSync(join(pluginRoot, folder, name)).mtimeMs));
+        return `${Math.max(...code)} ${JSON.stringify(loadProject().config)}`;
+    } catch {
+        return null;
+    }
 }
 
 /** /extension/<id>/page.js is the extension's script for the page; any other path under it is the extension's own route. */

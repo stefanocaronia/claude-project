@@ -55,7 +55,7 @@ On the user's yes, point by point:
 - the configuration's additions with Edit;
 - then the rest.
 
-At the end run `check.mjs` and compare the plugin's outputs with the old tools' ones while they are still there (the backlog's list, the next decision number, the check). Tell the user what changed and what to verify: the panel (`/project-panel`) and the page (`http://localhost:<page.port>`), from a new session. Commit only when they ask; in a private docs repo, with `git -C <its folder>`.
+At the end run `check.mjs --fix`, which gives every doc of the plugin its frontmatter (the core with its archive, notes and releases, and the project-management docs beside it or in `documents:`; not the folders added inside the docs, nor the project's own markdown), and compare the plugin's outputs with the old tools' ones while they are still there (the backlog's list, the next decision number, the check). Tell the user what changed and what to verify: the panel (`/project-panel`) and the page (`http://localhost:<page.port>`), from a new session. Commit only when they ask; in a private docs repo, with `git -C <its folder>`.
 
 ## The configuration
 

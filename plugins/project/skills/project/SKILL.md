@@ -57,7 +57,7 @@ Phases in its table (`| 2. Name | at the end you can… |`), goals as `### Name 
 
 ## The docs' frontmatter
 
-Every markdown doc of the project starts with a frontmatter block: `title`, `description` (one sentence of what it holds), `type`, `created`, `updated`. The commands write it, and the plugin's hook keeps `updated` true after you edit a doc; a new doc you write by hand starts with it, or `check.mjs --fix` adds it. Keep a doc's description true when what it holds changes.
+Every markdown doc of the project starts with a frontmatter block: `title`, `description` (one sentence of what it holds), `type`, `created`, `updated`. The plugin's docs are the core (the plan, the backlog, the decisions, the index, the archive, the tasks' notes, the releases) and the project-management docs the user adds beside them in the docs' folder or names in `documents:` (a GDD, a specification, a glossary): every one of these has it. Not the folders the user adds inside the docs (playtests, branding), nor manuals, nor the markdown of the project itself (its README, its source's docs): those are the user's, as they are. The commands write it, and the plugin's hook keeps `updated` true after you edit a doc; a new doc you write by hand starts with it, and the check notes one without it. `check.mjs --fix`, the page's mechanical cleanup and the panel's «tidy the docs» write what is missing, with the days from git: you never stamp docs by hand. Keep a doc's description true when what it holds changes.
 
 ## GitHub
 

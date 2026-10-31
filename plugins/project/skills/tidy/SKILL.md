@@ -13,7 +13,8 @@ Half deterministic, half judgment: the script finds; you fix what is mechanical 
 
 ## 2. To fix without asking
 
-- Trailing spaces and double blank lines: `check.mjs --fix`.
+First of all, the mechanical part, which the page's «fix names, frontmatter and spacing» button does in one go too:
+- Trailing spaces, double blank lines, and docs without their frontmatter or with a part of it (the check says `frontmatter`): `check.mjs --fix`, which writes the frontmatter with the days from git on every doc of the plugin: the core, with its archive, notes and releases, and the project-management docs added beside it or named in `documents:` (a GDD); never the folders added inside the docs, manuals or the project's own markdown.
 - Core files under their old Italian names (`DECISIONI.md`, `archivio/`, `compiti/`) or in the format's old words (`## In corso`, `· fatto`, `## Traguardi`, `## Da decidere`; the check says `names`): `init.mjs rename --write`, which moves them to the English names with git, writes the format's words in English, leaves the project's own text as it is and makes the docs' links follow; then fix, with the user, the files outside the docs it lists as still naming them.
 - Tasks without a date in the colleagues' todos: `task-dates.mjs --write` (the day the line appeared in git).
 - A decision number used twice: the newer row takes the first free number past the highest (`decisions.mjs next`). Read every reference before changing it, to know which of the two it means; references can be in code too.

@@ -114,34 +114,53 @@ if (isMain(import.meta.url)) {
  * that still name them are listed, for Claude to fix with the user. */
 function renameCommand(root, isWritten)
 {
-    const { config, say } = loadProject(root);
-    const moves = config.legacy ?? [];
-    const formats = legacyFormat(config);
+    const { say } = loadProject(root);
+    const { steps, formats, changed, others } = renameCore(root, isWritten);
 
-    if (moves.length === 0 && formats.length === 0) {
+    if (steps.length === 0 && formats.length === 0) {
         console.log(say("renameNone"));
         return;
     }
 
-    // The archive moves as a folder, with what else it keeps; its backlog file then takes its new name inside it.
-    const steps = moves.flatMap(({ key, from, to }) => (key === "archive"
-        ? [{ from: join(config.docs, legacyFiles.archiveFolder), to: join(config.docs, coreFiles.archiveFolder) }, { from: join(config.docs, coreFiles.archiveFolder, basename(from)), to }]
-        : [{ from, to }]));
-    // The old names as the docs write them, and the new ones.
-    const names = [["archivio/TASKS-archivio.md", "archive/TASKS-archive.md"], ["TASKS-archivio.md", "TASKS-archive.md"], ["DECISIONI.md", "DECISIONS.md"], ["](archivio/", "](archive/"], ["](compiti/", "](tasks/"], ["compiti/T-", "tasks/T-"]];
-
     for (const step of steps) {
-        console.log(say("renameStep", { from: shown(config, step.from), to: shown(config, step.to) }));
+        console.log(say("renameStep", step));
     }
 
     for (const file of formats) {
-        console.log(say("renameFormat", { file: shown(config, file) }));
+        console.log(say("renameFormat", { file }));
     }
 
     if (!isWritten) {
         console.log(say("renameDry"));
         return;
     }
+
+    console.log(say("renameDone", { count: steps.length, files: changed.length > 0 ? changed.join(", ") : "—" }));
+
+    if (others.length > 0) {
+        console.log(say("renameOthers", { list: others.join(", ") }));
+    }
+}
+
+/** The core's English names and format: the moves and the files in the old format, as shown paths; written, the files changed and those
+ * outside the docs still naming the old names. The page's mechanical cleanup runs it too. */
+export function renameCore(root, isWritten)
+{
+    const { config } = loadProject(root);
+    const moves = config.legacy ?? [];
+    const formats = legacyFormat(config);
+    // The archive moves as a folder, with what else it keeps; its backlog file then takes its new name inside it.
+    const steps = moves.flatMap(({ key, from, to }) => (key === "archive"
+        ? [{ from: join(config.docs, legacyFiles.archiveFolder), to: join(config.docs, coreFiles.archiveFolder) }, { from: join(config.docs, coreFiles.archiveFolder, basename(from)), to }]
+        : [{ from, to }]));
+    const planned = { steps: steps.map((step) => ({ from: shown(config, step.from), to: shown(config, step.to) })), formats: formats.map((file) => shown(config, file)), changed: [], others: [] };
+
+    if (!isWritten || (steps.length === 0 && formats.length === 0)) {
+        return planned;
+    }
+
+    // The old names as the docs write them, and the new ones.
+    const names = [["archivio/TASKS-archivio.md", "archive/TASKS-archive.md"], ["TASKS-archivio.md", "TASKS-archive.md"], ["DECISIONI.md", "DECISIONS.md"], ["](archivio/", "](archive/"], ["](compiti/", "](tasks/"], ["compiti/T-", "tasks/T-"]];
 
     // One after the other: the archive's file is in its new folder only once the folder has moved.
     for (const step of steps) {
@@ -177,13 +196,9 @@ function renameCommand(root, isWritten)
         }
     }
 
-    console.log(say("renameDone", { count: steps.length, files: changed.length > 0 ? changed.join(", ") : "—" }));
     const others = [...new Set(git(root, ["grep", "-l", "-I", "-e", "DECISIONI.md", "-e", "TASKS-archivio.md", "-e", "archivio/", "--", "."]).split("\n").filter(Boolean))]
         .filter((file) => !changed.includes(file.replaceAll("\\", "/")));
-
-    if (others.length > 0) {
-        console.log(say("renameOthers", { list: others.join(", ") }));
-    }
+    return { ...planned, changed, others };
 }
 
 /** adopt: what the project has and the configuration that reads it; --write writes it and the missing docs; --steps moves the plan's

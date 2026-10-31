@@ -3,6 +3,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { effortKey } from "../lib/backlog.mjs";
+import { splitFrontmatter } from "../lib/frontmatter.mjs";
 import { numbering, proposalOf } from "../lib/decisions.mjs";
 import { phaseStates, planPhases, planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
@@ -48,7 +49,7 @@ export async function collect(config, say, extensions = [])
         plan,
         decisions: readDecisionsData(config),
         documents: readDocuments(config),
-        keyDocuments: config.documents.map((document, index) => ({ name: document.name, path: shown(config, document.path), href: `/document/${index}`, exists: existsSync(document.path) })),
+        keyDocuments: config.documents.map((document, index) => ({ name: document.name, path: shown(config, document.path), href: `/document/${index}`, exists: existsSync(document.path), description: existsSync(document.path) ? splitFrontmatter(read(document.path)).data.description ?? "" : "" })),
         inbox: readInbox(config),
         people: config.people,
         colleagues: readColleagues(config),
@@ -224,10 +225,11 @@ function readDocuments(config)
         return [];
     }
 
+    // Each with its frontmatter's title and description, and the address the page reads it at.
     return readdirSync(config.docs).filter((name) => name.endsWith(".md")).map((name) => {
         const path = `${config.docs}/${name}`;
-        const text = read(path);
-        return { name, lines: text.split("\n").length, words: text.split(/\s+/).filter(Boolean).length, modified: statSync(path).mtime.toISOString() };
+        const { data, body } = splitFrontmatter(read(path));
+        return { name, title: data.title ?? "", description: data.description ?? "", href: `/doc/${encodeURIComponent(name)}`, lines: body.split("\n").length, words: body.split(/\s+/).filter(Boolean).length, modified: statSync(path).mtime.toISOString() };
     }).sort((first, second) => second.modified.localeCompare(first.modified));
 }
 

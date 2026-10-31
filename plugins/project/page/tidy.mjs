@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fixFrontmatter, fixWhitespace } from "../scripts/check.mjs";
 import { realPath, shown } from "../scripts/project.mjs";
+import { renameCore } from "../scripts/init.mjs";
 import { dateTasks } from "../scripts/task-dates.mjs";
 
 const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), "..").replaceAll("\\", "/");
@@ -17,13 +18,36 @@ let child = null;
 /** What the cleanup card shows: what the mechanical fixes would touch, the AI run and its proposals. */
 export function tidyState(config)
 {
-    return { whitespace: fixWhitespace(config, false), undated: dateTasks(config, false), ...readState(config), running: child !== null };
+    return { whitespace: mechanical(config), undated: dateTasks(config, false), ...readState(config), running: child !== null };
 }
 
-/** A mechanical fix, written: "whitespace" or "dates"; returns what it changed. */
+/** Whether a run of Claude Code is going: the page's server waits for it before it restarts. */
+export function isRunning()
+{
+    return child !== null;
+}
+
+/** A mechanical fix, written: "whitespace" (the core's English names and format, the spacing, every doc's frontmatter) or "dates";
+ * returns what it changed. */
 export function runFix(config, fix)
 {
-    return fix === "whitespace" ? [...fixWhitespace(config, true), ...fixFrontmatter(config)] : fix === "dates" ? dateTasks(config, true) : [];
+    if (fix === "dates") {
+        return dateTasks(config, true);
+    }
+
+    if (fix !== "whitespace") {
+        return [];
+    }
+
+    const renamed = renameCore(config.root, true);
+    return [...new Set([...renamed.steps.map((step) => step.to), ...renamed.changed, ...fixWhitespace(config, true), ...fixFrontmatter(config, true)])];
+}
+
+/** The files the mechanical fix would touch, each once: the core under its old names or format, the spacing, the frontmatter. */
+function mechanical(config)
+{
+    const renamed = renameCore(config.root, false);
+    return [...new Set([...renamed.steps.map((step) => step.from), ...renamed.formats, ...fixWhitespace(config, false), ...fixFrontmatter(config, false)])];
 }
 
 /** Starts the run that writes the proposals, reading only, on the docs or on the backlog; false when a run is going. */
@@ -37,7 +61,7 @@ export function propose(config, scope = "docs")
 
     const brief = `Run the tidy skill of the project plugin: read ${pluginRoot}/skills/tidy/SKILL.md and do only its section 3, the proposals. Change no file.
 Start from the report of \`${check}\`, whose files are relative to the project's root. Read with Read and Grep; Bash is only for that command. Read only the lines the findings point at (Read with offset and limit) and what you need to judge them: the decisions' file can be very large, never read it whole. If while reading you find something else the skill asks to propose, propose it.
-Every proposal changes something: what stays as it is (a revision in part, say) is not a proposal. The whitespace, the blank lines and the tasks' dates the page fixes itself: do not propose them.
+Every proposal changes something: what stays as it is (a revision in part, say) is not a proposal. The whitespace, the blank lines, the docs' frontmatter, the core's English names and format and the tasks' dates the page fixes itself: do not propose them.
 A proposal that cannot be applied now carries in "waits" what it waits for: "user" (a decision of theirs), "colleagues" (Crew's cleanup or a colleague's work) or "a run of its own" (a long piece of work, apart); the others have "waits": null, and "change" says exactly what will change in the file.
 Answer with a JSON array and nothing else, at most 25 proposals, the most useful first, written in the project's language (${config.language}):
 [{"id": "p1", "kind": "superseded | compact | to decide | index | task | weight | other", "file": "${shown(config, config.files.decisions)}", "line": 314, "title": "one line", "why": "the reason, in one or two sentences", "change": "exactly what will change in the file", "waits": null}]`;
@@ -105,7 +129,7 @@ Answer with a JSON object and nothing else, its summary in the project's languag
     const memory = shown(config, config.memory);
     const brief = `Apply these proposals of the cleanup, approved by the user, and only these:
 ${JSON.stringify(chosen, null, 2)}
-Follow ${pluginRoot}/skills/tidy/SKILL.md, above all "The rules that stay". The proposals' files are relative to the project's root. Change only those files, with Edit, and read them with Read and Grep. Bash is only for \`${check}\` and \`${check} --fix\` (whitespace and blank lines). Another session may change a file while you work: if an Edit is refused or the line is gone, read the file again and try once more. If a proposal cannot be applied as written, skip it and say why. At the end run \`${check}\`.
+Follow ${pluginRoot}/skills/tidy/SKILL.md, above all "The rules that stay". The proposals' files are relative to the project's root. Change only those files, with Edit, and read them with Read and Grep. Bash is only for \`${check}\` and \`${check} --fix\` (whitespace, blank lines and the docs' frontmatter). Another session may change a file while you work: if an Edit is refused or the line is gone, read the file again and try once more. If a proposal cannot be applied as written, skip it and say why. At the end run \`${check}\`.
 Answer with a JSON object and nothing else, its summary in the project's language (${config.language}): {"applied": ["p1"], "skipped": [{"id": "p3", "why": "..."}], "summary": "two or three sentences"}`;
 
     // The colleagues' memory may sit past a link (.claude into a private repo): the rule names both paths.

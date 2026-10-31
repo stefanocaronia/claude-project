@@ -3577,11 +3577,10 @@ function healthPanel()
 
 function documentsPanel()
 {
-    const { documents, inbox } = data;
+    const { inbox } = data;
     const key = data.keyDocuments ?? [];
-    const keyPaths = new Set(key.map((document) => document.path));
-    const others = documents.filter((document) => !keyPaths.has(documentPath(document)));
-    readDocuments(key.filter((document) => document.exists).map((document) => ({ href: document.href, stamp: documentStamp(document) })));
+    const all = shelfDocuments();
+    readDocuments(all.filter((document) => document.exists).map((document) => ({ href: document.href, stamp: documentStamp(document) })));
     const gallery = key.length ? `<section class="card span-12">
             <h2>${t("keyTitle")}</h2>
             <p class="hint">${t("keyHint")}</p>
@@ -3591,11 +3590,23 @@ function documentsPanel()
     return `${gallery}<section class="card span-12">
             <h2>${t(key.length ? "otherDocumentsTitle" : "documentsTitle")}</h2>
             <p class="hint">${escape(t("documentsHint", data.docs))}${inbox ? ` ${escape(t("inboxEntries", inbox.name, inbox.count))}` : ""}</p>
-            <div class="doc-shelf">${others.map(documentMini).join("")}</div>
+            <div class="doc-gallery">${all.slice(key.length).map((document, index) => keyDocumentCard(document, key.length + index)).join("")}</div>
         </section>`;
 }
 
-/** A key document: its page in small, an icon for its kind, its name, its first line, when it changed and how long it is. The card opens it. */
+/** The documents the reader opens, by their place: the key ones first, as the panel's links count them, then the docs' others, the most
+ * recent first. */
+function shelfDocuments()
+{
+    const key = data.keyDocuments ?? [];
+    const keyPaths = new Set(key.map((document) => document.path));
+    const others = (data.documents ?? []).filter((document) => !keyPaths.has(documentPath(document)))
+        .map((document) => ({ name: document.name.replace(/\.md$/i, ""), path: documentPath(document), href: document.href, exists: true, description: document.description }));
+    return [...key, ...others];
+}
+
+/** A document: its page in small, an icon for its kind, its name, its description (its frontmatter's, else its first line), when it
+ * changed and how long it is. The card opens it. */
 function keyDocumentCard(document, index)
 {
     const known = data.documents.find((one) => documentPath(one) === document.path);
@@ -3615,20 +3626,10 @@ function keyDocumentCard(document, index)
             <div class="doc-paper ${text === undefined ? "empty" : ""}" aria-hidden="true">${text === undefined ? "" : markdown(text.split(/\r?\n/).slice(0, 48).join("\n"))}</div>
             <div class="doc-info">${icon}<div>
                 <h3><button type="button" class="doc-open" id="open-document-${index}" data-document="${index}" aria-describedby="document-sub-${index}">${escape(document.name)}</button></h3>
-                <p class="doc-sub" id="document-sub-${index}">${escape(text === undefined ? document.path : documentSubtitle(text, document.name))}</p>
+                <p class="doc-sub" id="document-sub-${index}">${escape(document.description || (text === undefined ? document.path : documentSubtitle(text, document.name)))}</p>
             </div></div>
             <p class="doc-meta" data-tip="${attribute(escape(document.path))}">${facts.map(escape).join(" · ")}</p>
         </article>`;
-}
-
-/** Another document of the docs: its icon, its name, how long it is and when it changed. */
-function documentMini(document)
-{
-    const locale = t("locale");
-    const name = document.name.replace(/\.md$/i, "");
-    const facts = [t("docWords", document.words.toLocaleString(locale)), relative(document.modified)];
-
-    return `<div class="doc-mini" data-tip="${attribute(`<b>${escape(`${data.docs}/${document.name}`)}</b>${escape(t("docLines", document.lines.toLocaleString(locale)))}`)}">${documentIcon(name, document.name, true)}<div><b>${escape(name)}</b><span>${escape(facts.join(" · "))}</span></div></div>`;
 }
 
 /** Reads the texts of the documents the gallery shows that the page has not read yet, then draws the page once. */
@@ -3700,16 +3701,16 @@ function openAskedDocument()
 {
     const asked = /^#documents\/(\d+)$/.exec(location.hash);
 
-    if (asked && data?.keyDocuments?.[Number(asked[1])]) {
+    if (asked && data && shelfDocuments()[Number(asked[1])]) {
         history.replaceState(null, "", "#documents");
         openDocument(Number(asked[1]));
     }
 }
 
-/** Opens a key document in the page's reader, its markdown made readable; the plain text stays a link away. */
+/** Opens a document in the page's reader, its markdown made readable; the plain text stays a link away. */
 async function openDocument(index, opener)
 {
-    const document = data.keyDocuments?.[index];
+    const document = shelfDocuments()[index];
     const reader = window.document.getElementById("reader");
 
     if (!document) {
@@ -3736,7 +3737,7 @@ async function openDocument(index, opener)
             throw new Error(`${response.status} ${await response.text()}`);
         }
 
-        body.innerHTML = markdown(await response.text());
+        body.innerHTML = markdown(withoutFrontmatter(await response.text()));
         body.scrollTop = 0;
     } catch (error) {
         body.innerHTML = `<p class="hint">${escape(t("failed", error.message))}</p>`;
@@ -3868,7 +3869,7 @@ function list(lines, start)
     return `<${tag}>${items.map((item) => `<li>${inline(item.text.replace(/^\[([ xX])\]\s/, (_, mark) => (mark === " " ? "☐ " : "☑ ")))}${item.nested}</li>`).join("")}</${tag}>`;
 }
 
-/** A line's inline markdown: code, bold, italics, links; a link to another key document opens it in the reader. */
+/** A line's inline markdown: code, bold, italics, links; a link to another document opens it in the reader. */
 function inline(text)
 {
     const codes = [];
@@ -3877,12 +3878,13 @@ function inline(text)
         return `\u0000${codes.length - 1}\u0000`;
     });
     html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^\w*])\*(?!\s)(.+?)\*(?!\w)/g, "$1<em>$2</em>").replace(/(^|[^\w])_(?!\s)(.+?)_(?!\w)/g, "$1<em>$2</em>");
+    const shelf = shelfDocuments();
     html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, target) => {
         const file = target.split("#")[0].split("/").at(-1);
-        const key = (data.keyDocuments ?? []).findIndex((document) => document.exists && file && document.path.split("/").at(-1) === file);
+        const found = shelf.findIndex((document) => document.exists && file && document.path.split("/").at(-1) === file);
 
-        if (key >= 0) {
-            return `<a href="${data.keyDocuments[key].href}" data-document="${key}">${label}</a>`;
+        if (found >= 0) {
+            return `<a href="${shelf[found].href}" data-document="${found}">${label}</a>`;
         }
 
         return /^https?:\/\//.test(target) ? `<a href="${target}" target="_blank" rel="noopener noreferrer">${label}</a>` : `<span class="reader-link" title="${target}">${label}</span>`;
