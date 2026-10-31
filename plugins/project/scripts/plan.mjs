@@ -4,7 +4,7 @@
 //   node plan.mjs goals [--json]   (by phase, each saying whether its goals are all closed)
 //   node plan.mjs phases [--json]
 import { closeGoal, phaseStates, planPhases } from "../lib/plan.mjs";
-import { isMain, loadProject, ProjectError, read, readBacklog, readGoals, runCli, today, write } from "./project.mjs";
+import { isMain, loadProject, ProjectError, read, readBacklog, readGoals, runCli, today, write, writeDoc } from "./project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 
@@ -68,6 +68,6 @@ function run(args)
     }
 
     const day = command === "close" ? (goal.closed ?? today()) : null;
-    write(config.files.plan, closeGoal(read(config.files.plan), config.words, goal.name, day));
+    writeDoc(config, config.files.plan, closeGoal(read(config.files.plan), config.words, goal.name, day));
     console.log(say(day ? "goalClosed" : "goalOpened", { goal: goal.name, day }));
 }

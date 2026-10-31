@@ -7,6 +7,14 @@ export const stateKeys = ["doing", "todo", "postponed", "done"];
 export const effortKeys = ["low", "medium", "high", "xhigh", "max", "none"];
 export const priorityKeys = ["P1", "P2", "P3"];
 
+// The project's core files and folders, named in English whatever the project's language: the words inside them follow the language.
+// A project's own files and its extensions are named as the user likes.
+export const coreFiles = { plan: "PLAN.md", tasks: "TASKS.md", decisions: "DECISIONS.md", archive: "archive/TASKS-archive.md", index: "README.md", archiveFolder: "archive", notes: "tasks", releases: "releases" };
+
+// The names the Italian preset gave before the core went English, still read where a project has them and not the new ones, until
+// `init.mjs rename` renames them.
+export const legacyFiles = { decisions: "DECISIONI.md", archive: "archivio/TASKS-archivio.md", archiveFolder: "archivio", notes: "compiti" };
+
 export const presets = {
     en: {
         states: { doing: "In progress", todo: "To do", postponed: "Postponed", done: "Done" },
@@ -31,7 +39,7 @@ export const presets = {
         months: ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"],
         repoProject: "project",
         repoDocs: "docs",
-        files: { plan: "PLAN.md", tasks: "TASKS.md", decisions: "DECISIONS.md", archive: "archive/TASKS-archive.md", index: "README.md", archiveFolder: "archive", notes: "tasks" },
+        files: coreFiles,
     },
     it: {
         states: { doing: "In corso", todo: "Da fare", postponed: "Rimandati", done: "Fatti" },
@@ -56,23 +64,64 @@ export const presets = {
         months: ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"],
         repoProject: "progetto",
         repoDocs: "documenti",
-        files: { plan: "PLAN.md", tasks: "TASKS.md", decisions: "DECISIONI.md", archive: "archivio/TASKS-archivio.md", index: "README.md", archiveFolder: "archivio", notes: "compiti" },
+        files: coreFiles,
     },
 };
 
 export const languages = Object.keys(presets);
 
-/** The words of a language with a project's overrides on top, one level deep for the grouped ones. */
+// The words of the core files' format: in English whatever the project's language, as the files' names are; the panel, the page and the
+// messages show them in the project's language (its preset's words, the labels).
+export const formatKeys = ["states", "archived", "efforts", "noGoal", "startedMarker", "doneMarker", "archivedMarker", "goals", "phase", "updated", "open", "why", "decision", "superseded"];
+
+/** The words of a project: its language's (types, priorities, the verbs read in its decisions), the format's in English, a project's
+ * overrides on top, one level deep for the grouped ones; `legacy`, the format as the language's files wrote it before, still read. */
 export function wordsOf(language, overrides = {})
 {
     const base = presets[language] ?? presets.en;
-    const merged = { ...base };
+    const format = Object.fromEntries(formatKeys.map((key) => [key, presets.en[key]]));
+    const merged = { ...base, ...format };
 
     for (const [key, value] of Object.entries(overrides ?? {})) {
-        merged[key] = isPlainObject(value) && isPlainObject(base[key]) ? { ...base[key], ...value } : value;
+        merged[key] = isPlainObject(value) && isPlainObject(merged[key]) ? { ...merged[key], ...value } : value;
     }
 
+    merged.legacy = base === presets.en ? null : Object.fromEntries(formatKeys.map((key) => [key, base[key]]));
     return merged;
+}
+
+/** The labels of a language: its own words for the states, the priorities, the efforts and the marks, for what the panel, the page and
+ * the messages show. */
+export function labelsOf(language)
+{
+    return presets[language] ?? presets.en;
+}
+
+/** A word of the format and, for a project whose files were written before the format went English, its old word: both read, the first
+ * written. */
+export function readable(words, key)
+{
+    const old = words.legacy?.[key];
+    return typeof old === "string" && old !== words[key] ? [words[key], old] : [words[key]];
+}
+
+/** The same, as a regular expression's alternatives. */
+export function readablePattern(words, key)
+{
+    return readable(words, key).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+}
+
+/** The state a backlog heading names, in the format's words or the old ones; null for none. */
+export function stateOfHeading(words, heading)
+{
+    return stateKeys.find((key) => words.states[key] === heading || words.legacy?.states?.[key] === heading) ?? null;
+}
+
+/** An effort as the format writes it: an old word of the language read as the format's. */
+export function effortWord(words, value)
+{
+    const key = Object.entries(words.legacy?.efforts ?? {}).find(([, word]) => word === value)?.[0];
+    return key && !Object.values(words.efforts).includes(value) ? words.efforts[key] : value;
 }
 
 function isPlainObject(value)

@@ -1,11 +1,12 @@
 // The plan's text: the phases' table (`| 2. Name | outcome |`), the goals as `### Name (phase 2)` under the goals heading, and the line
 // that says when it was updated. Pure.
 import { escapeRegex } from "./text.mjs";
+import { readable, readablePattern } from "./words.mjs";
 
 /** The goals of the plan, in order, each with the phase its heading names, or null. */
 export function planGoals(text, words)
 {
-    const part = (text ?? "").split(/^## /m).find((section) => section.startsWith(words.goals)) ?? "";
+    const part = (text ?? "").split(/^## /m).find((section) => readable(words, "goals").some((word) => section.startsWith(word))) ?? "";
     const phase = phaseSuffix(words);
 
     return [...part.matchAll(/^### (.+)$/gm)].map((match) => {
@@ -22,7 +23,7 @@ export function planGoals(text, words)
  * no goal of that name. */
 export function closeGoal(text, words, name, day)
 {
-    const part = new RegExp(`^## ${escapeRegex(words.goals)}`, "m").exec(text ?? "");
+    const part = new RegExp(`^## (?:${readablePattern(words, "goals")})`, "m").exec(text ?? "");
 
     if (!part) {
         return null;
@@ -63,18 +64,18 @@ export function phaseStates(phases, goals)
 /** The day the plan says it was updated, as YYYY-MM-DD, or null. */
 export function planUpdated(text, words)
 {
-    return new RegExp(`${escapeRegex(words.updated)} (\\d{4}-\\d{2}-\\d{2})`).exec(text ?? "")?.[1] ?? null;
+    return new RegExp(`(?:${readablePattern(words, "updated")}) (\\d{4}-\\d{2}-\\d{2})`).exec(text ?? "")?.[1] ?? null;
 }
 
 /** A goal's heading without the day it closed, `· done 2026-10-30` at its end, and that day or null. */
 function closedOf(heading, words)
 {
-    const match = new RegExp(`\\s*· ${escapeRegex(words.doneMarker)} (\\d{4}-\\d{2}-\\d{2})\\s*$`).exec(heading);
+    const match = new RegExp(`\\s*· (?:${readablePattern(words, "doneMarker")}) (\\d{4}-\\d{2}-\\d{2})\\s*$`).exec(heading);
     return match ? { heading: heading.slice(0, match.index).trim(), closed: match[1] } : { heading: heading.trim(), closed: null };
 }
 
 /** The end of a goal's heading that names its phase, «(phase 2)», the number caught. */
 export function phaseSuffix(words)
 {
-    return new RegExp(`\\s*\\(${escapeRegex(words.phase)} (\\d+)\\)\\s*$`, "i");
+    return new RegExp(`\\s*\\((?:${readablePattern(words, "phase")}) (\\d+)\\)\\s*$`, "i");
 }

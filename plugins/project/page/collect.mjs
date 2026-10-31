@@ -12,7 +12,9 @@ import { decisionLinks } from "../lib/links.mjs";
 import { check } from "../scripts/check.mjs";
 import { readCode, readIssues, readOwner } from "../scripts/code.mjs";
 import { context, extensionChecks } from "../scripts/extensions.mjs";
-import { colleagues, git, profileOf, projectName, read, readBacklog, readDecisions, projectRepos, readGoals, readHolds, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
+import { releaseState } from "../lib/release.mjs";
+import { readablePattern } from "../lib/words.mjs";
+import { colleagues, git, profileOf, projectName, read, readBacklog, readReleases, readDecisions, projectRepos, readGoals, readHolds, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 const lastDecisions = 8;
@@ -37,7 +39,7 @@ export async function collect(config, say, extensions = [])
         generated: new Date().toISOString(),
         project: projectName(config),
         language: config.language,
-        words: { states: config.words.states, priorities: config.words.priorities, noGoal: config.words.noGoal },
+        words: { states: config.labels.states, priorities: config.labels.priorities, noGoal: config.words.noGoal },
         prefixes: config.prefixes,
         types: config.types,
         fields: config.fields,
@@ -53,6 +55,7 @@ export async function collect(config, say, extensions = [])
         owner: await ownerOf(config),
         tasks: readTasks(config),
         board: readBoard(config),
+        releases: readReleasesData(config),
         issues: freeIssues(readIssues(config), readBacklog(config).tasks).map(({ number, title, url }) => ({ number, title, url })),
         boardDays,
         holds: readHolds(config),
@@ -69,9 +72,9 @@ function readPlan(config)
     const goals = readGoals(config);
     const tasks = readBacklog(config).tasks.filter((task) => task.done || openStates.includes(task.state));
     const prefix = config.prefixes.task;
-    const titled = (goal) => (goal.phase === null || goal.isUnplanned ? goal.name : `${goal.name} (${config.words.phase} ${goal.phase})`);
+    const titled = (goal) => (goal.phase === null || goal.isUnplanned ? goal.name : `${goal.name} (${config.labels.phase} ${goal.phase})`);
     // A goal the plan no longer holds, an archived task's, counts in the phase its name starts with: «Phase 1 — Core».
-    const phaseIn = (name) => Number(new RegExp(`^${escapeRegex(config.words.phase)} (\\d+) — `, "i").exec(name)?.[1] ?? Number.NaN);
+    const phaseIn = (name) => Number(new RegExp(`^(?:${readablePattern(config.words, "phase")}) (\\d+) — `, "i").exec(name)?.[1] ?? Number.NaN);
     const unplanned = [...new Set(tasks.map((task) => task.goal).filter((goal) => !goals.some((one) => one.name === goal)))].map((name) => ({ name, phase: Number.isNaN(phaseIn(name)) ? null : phaseIn(name), isUnplanned: true }));
     const sections = [...goals, ...unplanned].map((goal) => {
         const own = tasks.filter((task) => task.goal === goal.name);
@@ -157,6 +160,7 @@ function readBoard(config)
     const links = taskLinks(config, tasks);
     const code = readCode(config);
     const issues = readIssues(config);
+    const released = new Map(readReleases(config).flatMap((release) => release.tasks.map((id) => [id, release.version])));
     // Each with its links, as the panel has them: after, see, blockedBy, chain, waitedBy, seenFrom; its note's path, and where the page serves it.
     return tasks
         // An archived task whose goal the plan no longer has is history: the board's rows are the plan's goals.
@@ -170,7 +174,25 @@ function readBoard(config)
             noteHref: links.get(task.id).note ? `/note/${task.id}` : null,
             ...codeView(code.get(task.id)),
             issueInfo: issueOf(issues, task),
+            // The version whose notes list it, when one does.
+            release: released.get(task.id) ?? null,
         }));
+}
+
+/** The releases for the page, the newest first, each with its notes; the work done since the last one, the version it suggests and
+ * what makes one due. */
+function readReleasesData(config)
+{
+    const releases = readReleases(config);
+    const state = releaseState(releases, readBacklog(config).tasks, readGoals(config), config.prefixes.task);
+    return {
+        list: [...releases].reverse().map(({ version, day, summary, tasks, text }) => ({ version, day, summary, count: tasks.length, text })),
+        pending: state.pending.map((task) => ({ id: task.id, text: clean(task.text), type: task.type, done: task.done })),
+        counts: state.counts,
+        suggested: state.suggested,
+        closedGoals: state.closedGoals,
+        urgent: state.urgent,
+    };
 }
 
 /** The day each decision number first appears in the decisions' file, from the history of the repo that holds it. */

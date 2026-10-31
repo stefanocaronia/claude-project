@@ -3,13 +3,14 @@
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { request } from "node:http";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { projectCommandOnPath } from "../scripts/project.mjs";
+import { splitFrontmatter } from "../lib/frontmatter.mjs";
 
 const plugin = join(dirname(fileURLToPath(import.meta.url)), "..");
 const scripts = join(plugin, "scripts");
@@ -203,9 +204,49 @@ test("a decision revised whole is read by its whole number, and a revision that 
     rmSync(root, { recursive: true, force: true });
 });
 
+test("a doc edited by hand gets its frontmatter whole and its last change today from the hook; a file that is no doc is left alone", () => {
+    const root = project({ "docs/design.md": "# Il design\n\nCome è fatto il gioco.\n", "src/notes.md": "# Altro\n" });
+    const hook = (file) => spawnSync(process.execPath, [join(scripts, "docs.mjs"), "hook"], { input: JSON.stringify({ cwd: root, tool_input: { file_path: file } }), encoding: "utf8" });
+    assert.equal(hook("docs/design.md").status, 0);
+    const { data, body } = splitFrontmatter(readFileSync(join(root, "docs/design.md"), "utf8"));
+    assert.deepEqual(data, { title: "Il design", description: "Come è fatto il gioco.", type: "doc", created: data.created, updated: new Date().toLocaleDateString("sv") });
+    assert.equal(body, "# Il design\n\nCome è fatto il gioco.\n");
+    // Its title, kept as written; its last change, today again after another edit.
+    writeFileSync(join(root, "docs/design.md"), readFileSync(join(root, "docs/design.md"), "utf8").replace("updated: ", "updated: 2020-01-01 #").replace("title: Il design", "title: Design"));
+    hook(join(root, "docs/design.md"));
+    assert.match(readFileSync(join(root, "docs/design.md"), "utf8"), /^---\ntitle: Design\n[\s\S]*\nupdated: \d{4}-\d{2}-\d{2}\n---\n/);
+    hook("src/notes.md");
+    assert.equal(readFileSync(join(root, "src/notes.md"), "utf8"), "# Altro\n");
+    assert.equal(hook("nothing.md").status, 0);
+    rmSync(root, { recursive: true, force: true });
+});
+
+test("a project made before the core went English is read as it is, and rename writes its names and format in English, its own text kept", () => {
+    const root = project({
+        "docs/PLAN.md": "# Piano\n\n> Aggiornato il 2026-10-29. Breve.\n\n## Traguardi\n\n### Nucleo (fase 1) · fatto 2026-10-20\n\nIl primo.\n",
+        "docs/DECISIONI.md": "| # | Decisione | Perché |\n|---|---|---|\n| 1 | Superata da D-2: i dadi. | |\n| 2 | Dadi veri. | |\n\n## Da decidere\n\n- una proposta\n",
+        "docs/README.md": "# Documenti\n\n- [Piano](PLAN.md)\n- [Compiti](TASKS.md)\n- [Decisioni](DECISIONI.md)\n",
+        "docs/archivio/TASKS-archivio.md": "# Archivio\n\n- T-9 · P2 · medio · Claude · 2026-10-01 · — · nove · fatto 2026-10-02 · archiviato 2026-10-03\n",
+    });
+    const notes = JSON.parse(cli(root, "check.mjs", "--json").stdout).filter((finding) => finding.kind === "names").map((finding) => finding.file);
+    assert.deepEqual(notes.sort(), ["docs/DECISIONI.md", "docs/DECISIONI.md", "docs/PLAN.md", "docs/TASKS.md", "docs/archivio/TASKS-archivio.md", "docs/archivio/TASKS-archivio.md"]);
+    assert.match(cli(root, "backlog.mjs", "list").stdout, /^- T-1 · P2 · medium · Claude/m);
+
+    assert.equal(cli(root, "init.mjs", "rename", "--write").status, 0);
+    const read = (path) => splitFrontmatter(readFileSync(join(root, path), "utf8")).body;
+    assert.equal(read("docs/PLAN.md"), "# Piano\n\n> Updated on 2026-10-29. Breve.\n\n## Goals\n\n### Nucleo (phase 1) · done 2026-10-20\n\nIl primo.\n");
+    assert.equal(read("docs/DECISIONS.md"), "| # | Decision | Why |\n|---|---|---|\n| 1 | Superseded by D-2: i dadi. | |\n| 2 | Dadi veri. | |\n\n## To decide\n\n- una proposta\n");
+    assert.match(read("docs/TASKS.md"), /^# Backlog\n\nNote above the sections stay\.\n\n## In progress\n\n## To do\n\n- T-1 · P2 · medium · Claude · 2026-10-01 · — · uno\n/);
+    assert.equal(read("docs/archive/TASKS-archive.md"), "# Archivio\n\n- T-9 · P2 · medium · Claude · 2026-10-01 · — · nove · done 2026-10-02 · archived 2026-10-03\n");
+    assert.match(read("docs/README.md"), /\[Decisioni\]\(DECISIONS\.md\)/);
+    assert.ok(!existsSync(join(root, "docs/DECISIONI.md")) && !existsSync(join(root, "docs/archivio")));
+    assert.ok(!JSON.parse(cli(root, "check.mjs", "--json").stdout).some((finding) => finding.kind === "names"));
+    rmSync(root, { recursive: true, force: true });
+});
+
 test("a change to an open task leaves the archive alone, so a reader that holds it does not stop the change", () => {
-    const root = project({ "docs/archivio/TASKS-archivio.md": "# Archivio\n\n- T-9 · P2 · medio · Claude · 2026-10-01 · — · nove · fatto 2026-10-02 · archiviato 2026-10-03\n" });
-    const archive = join(root, "docs/archivio/TASKS-archivio.md");
+    const root = project({ "docs/archive/TASKS-archive.md": "# Archive\n\n- T-9 · P2 · medium · Claude · 2026-10-01 · — · nove · done 2026-10-02 · archived 2026-10-03\n" });
+    const archive = join(root, "docs/archive/TASKS-archive.md");
     const before = statSync(archive).mtimeMs;
     assert.equal(cli(root, "backlog.mjs", "set", "T-1", "--type", "bug").status, 0);
     assert.equal(statSync(archive).mtimeMs, before);
@@ -245,7 +286,7 @@ test("the page changes, adds and archives tasks through the backlog's command li
     assert.equal((await post({ command: "add", text: "una parte", parent: "T-1", type: "", goal: "—" })).ok, true);
     assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-5 · .* · una parte \(in: T-1\) \(by: C\+\+\)$/m);
     const tasks = readFileSync(join(root, "docs/TASKS.md"), "utf8");
-    assert.match(tasks, /## In corso\n\n- T-1 /);
+    assert.match(tasks, /## In progress\n\n- T-1 /);
     assert.match(tasks, /^- T-4 · P1 · [^·]+ · Claude · \d{4}-\d{2}-\d{2} · — · nuovo compito \(by: C\+\+\)$/m);
     assert.doesNotMatch(tasks, /T-2 /);
     const data = await (await fetch(`http://127.0.0.1:${port}/data`)).json();
@@ -255,7 +296,7 @@ test("the page changes, adds and archives tasks through the backlog's command li
     // A task done or archived, taken up again: back in progress, out of the archive, without its day done.
     assert.equal((await post({ command: "start", id: "T-2" })).ok, true);
     assert.equal((await post({ command: "start", id: "T-3" })).ok, true);
-    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-2 · .* · due · iniziato \d{4}-\d{2}-\d{2}\n- T-3 · .* · tre · iniziato \d{4}-\d{2}-\d{2}$/m);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-2 · .* · due · started \d{4}-\d{2}-\d{2}\n- T-3 · .* · tre · started \d{4}-\d{2}-\d{2}$/m);
     noGh === undefined ? delete process.env.PROJECT_NO_GH : (process.env.PROJECT_NO_GH = noGh);
     server.closeAllConnections();
     server.close();
@@ -266,7 +307,7 @@ test("adopt --decisions moves a numbered list into the table with its numbers, a
     const root = project({ "design/flow.md": "# Flow\n\n## Decisioni prese\n\n1. **Uno.** Il primo. Perché: per cominciare.\n2. **Due** | con una barra\n   e una riga che continua.\n\n## Altro\n\nResta.\n" });
     writeFileSync(join(root, "docs/DECISIONI.md"), "# Decisioni\n\n| # | Decisione | Perché |\n|---|---|---|\n| 5 | Cinque. | |\n\n## Da decidere\n\n- aperta\n");
     assert.match(cli(root, "init.mjs", "adopt", "--decisions", "design/flow.md", "Decisioni prese").stdout, /2 decisioni spostate in docs\/DECISIONI\.md/);
-    assert.equal(readFileSync(join(root, "docs/DECISIONI.md"), "utf8"), "# Decisioni\n\n| # | Decisione | Perché |\n|---|---|---|\n| 1 | **Uno.** Il primo. | per cominciare. |\n| 2 | **Due** / con una barra e una riga che continua. |  |\n| 5 | Cinque. | |\n\n## Da decidere\n\n- aperta\n");
+    assert.equal(splitFrontmatter(readFileSync(join(root, "docs/DECISIONI.md"), "utf8")).body, "# Decisioni\n\n| # | Decisione | Perché |\n|---|---|---|\n| 1 | **Uno.** Il primo. | per cominciare. |\n| 2 | **Due** / con una barra e una riga che continua. |  |\n| 5 | Cinque. | |\n\n## Da decidere\n\n- aperta\n");
     assert.equal(readFileSync(join(root, "design/flow.md"), "utf8"), "# Flow\n\n## Decisioni prese\n\nLe decisioni sono in [DECISIONI.md](../docs/DECISIONI.md).\n\n## Altro\n\nResta.\n");
     writeFileSync(join(root, "design/again.md"), "## Decisioni prese\n\n5. doppia\n");
     assert.match(cli(root, "init.mjs", "adopt", "--decisions", "design/again.md", "Decisioni prese").stderr, /D-5 sono già nella tabella/);

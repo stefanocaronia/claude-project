@@ -18,6 +18,8 @@ const commands = {
     init: join(here, "init.mjs"),
     snapshot: join(here, "snapshot.mjs"),
     "task-dates": join(here, "task-dates.mjs"),
+    release: join(here, "release.mjs"),
+    github: join(here, "github.mjs"),
     page: join(here, "..", "page", "ensure.mjs"),
 };
 const [command, ...args] = process.argv.slice(2);

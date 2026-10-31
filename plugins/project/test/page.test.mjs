@@ -48,6 +48,10 @@ test("the page draws a small project's data in every tab, without an error in it
         assert.match(dom, /created by Ann/);
         // A field of the project's own.
         assert.match(dom, /<span>System: 5e<\/span>/);
+        // The versions: the tab with the last one, its notes and the tasks they list.
+        assert.match(dom, /id="tab-releases"[^>]*>Versions<span class="badge">v0\.1\.0<\/span>/);
+        assert.match(dom, /id="release-0\.1\.0"[\s\S]*?The first dice\.[\s\S]*?1 tasks/);
+        assert.match(dom, /T-5 · the first|<li>T-5 · the first/);
         assert.doesNotMatch(dom, /That did not work/);
     } finally {
         server.closeAllConnections();
@@ -104,6 +108,7 @@ function project()
         "",
     ].join("\n"));
     put("docs/tasks/T-1.md", "# T-1 · The release\n\nWhere it got to.\n");
+    put("docs/releases/v0.1.0.md", "# v0.1.0 · 2026-10-21\n\nThe first dice.\n\n## Added\n\n- T-5 · the first\n");
     return root;
 }
 

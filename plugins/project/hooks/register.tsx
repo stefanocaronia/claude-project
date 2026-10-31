@@ -18,7 +18,7 @@ const board = atom({ plugin: "project", key: "board" } as const, { snapshot: nul
 const holdsLast = 24 * 3_600_000;
 const view = atom({ plugin: "project", key: "view" } as const, { sections: {}, expanded: null, whole: {}, starting: {}, frozen: null }, { shape: "view-1" });
 // The sections open at the start, as Joseph's sketch has them: the decisions closed, the tile above says how many wait.
-const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, goals: true, decisions: true };
+const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, goals: true, decisions: true, releases: true };
 // How many rows a section shows before "show all".
 const rows: Record<string, number> = { doing: 5, rest: 10, postponed: 5, issues: 5, goals: 5, open: 3 };
 const proposalLength = 400;
@@ -159,6 +159,7 @@ export const register: Register = (on) => {
         const isDesktop = Svg !== null;
         const now = await $.clock.now();
         const prefix = snapshot.prefixes.task;
+        const releases = snapshot.releases ?? { list: [], pending: 0, next: "" };
         const byName = new Map(snapshot.colleagues.map((colleague) => [colleague.name, colleague]));
         // A part shows under its large task, whatever its state; on its own only when its large task is not open.
         const shownIds = new Set(snapshot.tasks.map((task) => `${snapshot.prefixes.task}-${task.id}`));
@@ -426,6 +427,22 @@ export const register: Register = (on) => {
                 void backlog($, ["set", `${prefix}-${task.id}`, "--text", text.replaceAll(" · ", " - ")]);
             }
         };
+        // In an open task being edited, its goal, who does it and the project's own fields, each changed at once by the backlog's command.
+        const editFields = (task: Task) => {
+            const id = `${prefix}-${task.id}`;
+            const set = (option: string) => (value: string) => void backlog($, ["set", id, `--${option}`, value]);
+            const goals = [...new Set([snapshot.words.noGoal, ...snapshot.plan.goals.filter((goal) => !goal.closed).map((goal) => goal.name), task.goal])];
+            const holders = [...new Set([...snapshot.people, ...snapshot.colleagues.map((colleague) => colleague.name), task.to])];
+            return (
+                <Box key={`edit-fields-${task.id}`} flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={1}>
+                    <Select key={`edit-goal-${task.id}`} label={words("fieldGoal")} value={task.goal} options={goals.map((goal) => ({ value: goal, label: goal }))} onSelect={set("goal")} />
+                    <Select key={`edit-to-${task.id}`} label={words("fieldTo")} value={task.to} options={holders.map((name) => ({ value: name, label: name }))} onSelect={set("to")} />
+                    {Object.entries(snapshot.fields ?? {}).map(([field, own]) => (own.values
+                        ? <Select key={`edit-field-${field}-${task.id}`} label={own.name} value={task.fields?.[field] ?? ""} options={[{ value: "", label: "—" }, ...own.values.map((value) => ({ value, label: value }))]} onSelect={set(field)} />
+                        : <Input key={`edit-field-${field}-${task.id}`} label={own.name} value={task.fields?.[field] ?? ""} submitLabel={words("saveText")} onSubmit={(value) => set(field)(value.trim())} />))}
+                </Box>
+            );
+        };
         const askArchive = (task: Task) => {
             void update($, view, (old) => ({ ...old, archiving: task.id }));
             $.clock.after(archiveAskFor, () => void update($, view, (old) => (old.archiving === task.id ? { ...old, archiving: null } : old)));
@@ -505,7 +522,10 @@ export const register: Register = (on) => {
                     ? (
                         <Box key={`details-${task.id}`} flexDirection="column" gap={1} paddingLeft={isDesktop ? 4 : 2}>
                             {panel.editing === key
-                                ? <Input key={`edit-${task.id}`} value={task.text} rows={2} autoFocus submitLabel={words("saveText")} onSubmit={(value) => saveText(task, value)} />
+                                ? [
+                                    <Input key={`edit-${task.id}`} value={task.text} rows={2} autoFocus submitLabel={words("saveText")} onSubmit={(value) => saveText(task, value)} />,
+                                    editFields(task),
+                                ]
                                 : taskDetails(task, isPart)}
                             <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
                                 <Button key={`done-${task.id}`} plain label={words("markDone")} onPress={() => markDone($, snapshot, task)} />
@@ -649,6 +669,9 @@ export const register: Register = (on) => {
                     ? <Button key="next-decision" label={words("nextDecision")} onPress={() => submit($, words("promptChoice", { line: nextProposal.line, text: nextProposal.whole }))} />
                     : idleButton("next-decision-idle", words("nextDecision"), words("noneOpen"))}
                 <Button key="where-we-stand" label={words("whereWeStand")} onPress={() => submit($, words("promptWhereWeStand"))} />
+                {snapshot.github && (!snapshot.github.tools || !snapshot.github.repo)
+                    ? <Button key="github" label={words(snapshot.github.tools ? "githubButton" : "githubSetup")} onPress={() => submit($, "/project:github")} />
+                    : null}
                 <Button key="tidy-backlog" label={words("tidyBacklog")} onPress={() => submit($, words("promptTidyBacklog"))} />
                 <Button key="tidy-docs" label={words("tidyDocs")} onPress={() => submit($, words("promptTidy"))} />
             </Box>
@@ -744,6 +767,17 @@ export const register: Register = (on) => {
                 {section("decisions", "⚖︎", `${words("toDecide")} · ${proposals.length}`, [
                     ...(proposals.length === 0 ? [<Text key="none-open" dimColor>{words("noneOpen")}</Text>] : limited("open", proposals).map(proposalRow)),
                     more("open", proposals.length, "showAllDecisions"),
+                ])}
+                {/* The versions, the newest first, each opening its notes in the page; what waits for the next. */}
+                {section("releases", "🏷︎", `${words("sectionReleases")} · ${releases.list.length}`, [
+                    <Text key="releases-pending" dimColor>{releases.pending > 0 ? words("releasesPending", { count: releases.pending, next: releases.next }) : words("releasesNothing")}</Text>,
+                    ...releases.list.map((release) => (
+                        <Box key={`release-${release.version}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
+                            <Box flexShrink={0}><Link key={`release-link-${release.version}`} href={`${snapshot.page}/#releases/${release.version}`}>{`v${release.version}`}</Link></Box>
+                            <Box flexShrink={0}><Text dimColor>{`${release.day} · ${words("releaseTasks", { count: release.count })}`}</Text></Box>
+                            {release.summary ? <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden"><Text wrap="truncate-end">{release.summary}</Text></Box> : null}
+                        </Box>
+                    )),
                 ])}
             </Box>
         );

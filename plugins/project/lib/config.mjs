@@ -1,7 +1,7 @@
 // The project's configuration, .claude/project.yaml, read into one object with every default filled in. Pure: the scripts and the panel
 // hand it the file's text and the project's root.
 import { parse } from "./vendor/yaml/index.js";
-import { wordsOf } from "./words.mjs";
+import { labelsOf, wordsOf } from "./words.mjs";
 
 /** Where the configuration lives, relative to the project's root. */
 export const configFile = ".claude/project.yaml";
@@ -41,6 +41,8 @@ export function readConfig(text, root)
         name: given.name === undefined ? undefined : String(given.name),
         language,
         words,
+        // What the panel, the page and the messages show, in the project's language.
+        labels: labelsOf(language),
         docs,
         files: {
             plan: resolve(docs, files.plan),
@@ -51,9 +53,13 @@ export function readConfig(text, root)
             inbox: files.inbox ? resolve(docs, files.inbox) : undefined,
             // The folder of the tasks' notes, one a task: T-12.md.
             notes: resolve(docs, files.notes),
+            // The folder of the releases' notes, one a version: v0.8.0.md.
+            releases: resolve(docs, files.releases),
         },
         repos: given.repos === undefined ? undefined : (Array.isArray(given.repos) ? given.repos : []).map((repo) => ({ name: String(repo.name), path: resolve(root, repo.path ?? ".") })),
         archiveFolder: files.archiveFolder,
+        // The core files the configuration names itself, `files: { … }`: those keep their name.
+        namedFiles: Object.keys(given.files ?? {}),
         people: list(given.people, defaults.people),
         agents: resolve(root, given.agents ?? defaults.agents),
         memory: resolve(root, given.memory ?? defaults.memory),

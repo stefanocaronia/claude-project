@@ -7,10 +7,12 @@ import { phaseStates, planPhases, planUpdated } from "../lib/plan.mjs";
 import { configFile } from "../lib/config.mjs";
 import { plainMarkdown } from "../lib/text.mjs";
 import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
+import { releaseState } from "../lib/release.mjs";
+import { gitHubRepo } from "./github.mjs";
 import { check } from "./check.mjs";
 import { readCode, readIssues, readOwner } from "./code.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
-import { colleagues, findRoot, isMain, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readGoals, runCli, taskLinks, today, todoFiles } from "./project.mjs";
+import { colleagues, findRoot, git, isMain, onPath, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readGoals, readReleases, runCli, taskLinks, today, todoFiles } from "./project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 // The most a portrait may weigh in the panel's drawing, which the desktop drops past about 100 KB: Crew's small ones are under 2 KB.
@@ -37,7 +39,7 @@ export async function snapshot(config, say, withHealth = true)
     return {
         project: projectName(config),
         language: config.language,
-        words: { states: config.words.states, priorities: config.words.priorities, noGoal: config.words.noGoal },
+        words: { states: config.labels.states, priorities: config.labels.priorities, noGoal: config.words.noGoal },
         // The task types by key, each with its name in the project's language.
         types: config.types,
         prefixes: config.prefixes,
@@ -55,6 +57,8 @@ export async function snapshot(config, say, withHealth = true)
         colleagues: team,
         // The person this machine's gh is signed in as, with their GitHub picture inline: on their tasks and on every decision.
         owner: ownerOf(await readOwner(config)),
+        // Whether git and gh are here, and the project's repo on GitHub: the panel offers the github skill while one is missing.
+        github: { tools: onPath("git") && onPath("gh"), repo: gitHubRepo(git(config.root, ["remote", "get-url", "origin"]).trim()) },
         // Each with its links: what it waits for, still open, and the chain to do first; what points to it; its note.
         tasks: tasks.filter((task) => openStates.includes(task.state)).map(({ file, line, archived, done, ...task }) => ({
             ...task,
@@ -66,6 +70,8 @@ export async function snapshot(config, say, withHealth = true)
             ...codeView(code.get(task.id)),
             issueInfo: issueOf(issues, task),
         })),
+        // The last versions, the newest first, and how many tasks wait for the next one.
+        releases: releasesOf(config, tasks, goals),
         // The parts already closed of a large task still open, shown checked under it.
         doneParts: tasks.filter((task) => task.parent && !openStates.includes(task.state) && tasks.some((one) => openStates.includes(one.state) && `${config.prefixes.task}-${one.id}` === task.parent))
             .map(({ id, parent, to, type, text, done, archived }) => ({ id, parent, to, type, text: plainMarkdown(text), done: done ?? archived ?? null })),
@@ -85,7 +91,7 @@ export async function snapshot(config, say, withHealth = true)
             }),
         },
         // The files whose change makes the panel read the project again.
-        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.notes, ...todoFiles(config).map((one) => one.file)],
+        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.notes, config.files.releases, ...todoFiles(config).map((one) => one.file)],
         health: findings && { errors: count(findings, "error"), warnings: count(findings, "warning"), notes: count(findings, "note") },
     };
 }
@@ -117,6 +123,18 @@ function ownerOf(owner)
 
     const portrait = owner.file && statSync(owner.file).size <= portraitLimit * 4 ? `data:image/jpeg;base64,${readFileSync(owner.file).toString("base64")}` : undefined;
     return { name: owner.name, fullName: owner.fullName, ...(portrait ? { portrait } : {}) };
+}
+
+/** The releases for the panel: the last five, the newest first, and the work done since the last one with the version it suggests. */
+function releasesOf(config, tasks, goals)
+{
+    const releases = readReleases(config);
+    const { pending, suggested } = releaseState(releases, tasks, goals, config.prefixes.task);
+    return {
+        list: [...releases].reverse().slice(0, 5).map(({ version, day, summary, tasks: listed }) => ({ version, day, summary, count: listed.length })),
+        pending: pending.length,
+        next: suggested.version,
+    };
 }
 
 /** A colleague's small portrait, as Crew keeps it, inline for the panel; nothing when there is none or it is too heavy. */

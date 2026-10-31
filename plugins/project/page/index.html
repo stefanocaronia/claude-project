@@ -1049,6 +1049,17 @@
         font-weight: 600;
     }
 
+    /* A release's notes, in its section */
+    .release-notes {
+        margin: 0 6px 12px;
+        font-size: 13px;
+    }
+
+    .release-notes h2 {
+        font-size: 13px;
+        margin: 10px 0 4px;
+    }
+
     /* A large task's parts closed, a chip that shows or folds them */
     .parts-chip {
         border: 0;
@@ -2210,6 +2221,7 @@ addEventListener("hashchange", () => {
     }
 
     openAskedDocument();
+    openAskedRelease();
 });
 load();
 loadTidy();
@@ -2241,6 +2253,7 @@ async function load()
     loadExtensions(data.extensions ?? []);
     render();
     openAskedDocument();
+    openAskedRelease();
 }
 
 /** A word of the page in its language, English when the language lacks it; a word that is a function is called with the values. */
@@ -2296,6 +2309,7 @@ function render()
         { id: "tasks", label: t("tabTasks"), badge: `${(data.board ?? []).filter((task) => columnOf(task) !== "done").length}`, panel: tasksPanel },
         { id: "health", label: t("tabHealth"), badge: errors ? t("errorsBadge", errors) : "✓", panel: healthPanel },
         { id: "documents", label: t("tabDocuments"), badge: `${documents.length}`, panel: documentsPanel },
+        { id: "releases", label: t("tabReleases"), badge: data.releases?.list.length ? `v${data.releases.list[0].version}` : "", panel: releasesPanel },
     ];
 
     for (const extension of extensions) {
@@ -2396,12 +2410,54 @@ function overviewPanel()
                     ${tile(t("tileDecisions"), decisions.count, t("tileDecisionsSub", sumSince(decisions.byDay, 7)))}
                     ${tile(t("tileOpen"), decisions.open.length, t("tileOpenSub"))}
                     ${project ? tile(t("tileCommits"), commits, t("tileCommitsSub", project.name, Object.keys(project.days).length)) : ""}
+                    ${data.releases ? tile(t("tileVersion"), data.releases.list[0] ? `v${data.releases.list[0].version}` : "—", t("tileVersionSub", data.releases.pending.length, data.releases.suggested.version)) : ""}
                     ${extensionParts("tiles")}
                 </div>
             </div>
         </section>
 
         ${roadmap()}`;
+}
+
+/** The releases: what waits for the next one and why one is due, then each version, the newest first, with its notes. */
+function releasesPanel()
+{
+    const { list = [], pending = [], counts = {}, suggested = {}, closedGoals = [], urgent = [] } = data.releases ?? {};
+    const name = (id) => `${data.prefixes.task}-${id}`;
+    const due = closedGoals.length ? t("releaseDueGoals", closedGoals.join(", ")) : urgent.length ? t("releaseDueFix", urgent.join(", ")) : t("releaseJudge");
+    const waiting = pending.length
+        ? `<p>${escape(t("releasePending", pending.length, counts))} ${escape(t("releaseSuggested", suggested.version))}</p>
+            <p class="hint">${escape(due)}</p>
+            <ul class="list">${pending.map((task) => `<li><span class="id">${escape(name(task.id))}</span> ${escape(task.text)}</li>`).join("")}</ul>`
+        : `<p class="hint">${escape(t("releaseNothing"))}</p>`;
+    const notes = (release) => markdown(withoutFrontmatter(release.text).replace(/^#[^\n]*\n/, ""));
+
+    return `<section class="card span-12">
+            <h2>${t("releaseNextTitle")}</h2>
+            ${waiting}
+        </section>
+
+        <section class="card span-12">
+            <h2>${t("releasesTitle")}</h2>
+            <p class="hint">${escape(t("releasesHint"))}</p>
+            ${list.map((release, index) => `<details class="section release" id="release-${attribute(release.version)}" ${index === 0 ? "open" : ""}>
+                <summary><div class="title"><b>v${escape(release.version)}</b> <span class="hint">${escape(formatDay(release.day))}</span>${release.summary ? ` · ${escape(release.summary)}` : ""}</div><div></div><div class="count"></div><div class="pct">${escape(t("releaseTasks", release.count))}</div></summary>
+                <div class="release-notes">${notes(release)}</div>
+            </details>`).join("") || `<p class="hint">${escape(t("releasesNone"))}</p>`}
+        </section>`;
+}
+
+/** The release the address asks for, #releases/0.8.0 (the panel's links), opened and brought into view once. */
+function openAskedRelease()
+{
+    const asked = /^#releases\/v?([\d.]+)$/.exec(location.hash);
+    const release = asked ? document.getElementById(`release-${asked[1]}`) : null;
+
+    if (release) {
+        history.replaceState(null, "", "#releases");
+        release.open = true;
+        release.scrollIntoView({ block: "start" });
+    }
 }
 
 /** The plan as a roadmap: the phases of its table in their order, each with its bar, what it lets you do, and its epics as cards in the
@@ -2754,7 +2810,7 @@ function taskCard(task, lane, isUnder = false)
     const worker = held?.colleague ? data.colleagues.find((person) => person.id === held.colleague) : null;
     const foot = worker || held?.colleague
         ? `<span class="work" data-tip="${attribute(escape(t("atWork")))}">⚒︎ ${escape((worker?.name ?? held.colleague).split(" ")[0])}</span>`
-        : column === "done" ? `<span>✓ ${escape(formatDay(task.done ?? task.archived))}</span>` : waitOrAge(task);
+        : column === "done" ? `<span>✓ ${escape(formatDay(task.done ?? task.archived))}${task.release ? ` · v${escape(task.release)}` : ""}</span>` : waitOrAge(task);
     const moves = boardStates.filter((state) => state !== column)
         .map((state) => `<button type="button" id="move-${name}-${state}" data-move="${state}" data-task="${task.id}" aria-label="${attribute(t("moveTo", name, stateName(state)))}">${escape(stateName(state))}</button>`).join("");
 
@@ -2762,7 +2818,7 @@ function taskCard(task, lane, isUnder = false)
             <div class="task-top">${typeIcon(task)}${priorityControl(task, "board")}<span class="id">${escape(name)}</span><span class="grow"></span>${effortMeter(task)}${face(task)}</div>
             ${expandButton(`board-${name}`, escape(task.text))}
             ${taskLinks(task, isUnder)}
-            <div class="task-foot">${foot}</div>
+            <div class="task-foot">${foot}${fieldSpans(task)}</div>
             <div class="moves" role="group" aria-label="${attribute(t("moveGroup", name))}"><span aria-hidden="true">${escape(t("moveLabel"))}</span>${moves}</div>
         </li>`;
 }
@@ -2837,7 +2893,7 @@ function taskRow(task, isUnder = false)
             ${face(task)}
             <span class="marks">${typeIcon(task)}${priorityControl(task, "list")}</span>
             <div>${expandButton(`list-${name}`, `<span class="id">${escape(name)}</span>${escape(task.text)}`)}
-                <div class="row-meta"><span class="row-state"><i class="column-mark ${column}"></i>${escape(stateName(column))}</span>${work}${goal}${when}${fieldSpans(task)}${task.by ? `<span>${escape(t("createdBy", task.by))}</span>` : ""}<button type="button" class="link-button" id="edit-${name}" data-edit-task="${task.id}">${t("editTask")}</button></div>
+                <div class="row-meta"><span class="row-state"><i class="column-mark ${column}"></i>${escape(stateName(column))}</span>${work}${goal}${when}${task.release ? `<span>v${escape(task.release)}</span>` : ""}${fieldSpans(task)}${task.by ? `<span>${escape(t("createdBy", task.by))}</span>` : ""}<button type="button" class="link-button" id="edit-${name}" data-edit-task="${task.id}">${t("editTask")}</button></div>
                 ${taskLinks(task, isUnder)}
             </div>
             ${effortMeter(task) || "<span></span>"}
@@ -3589,7 +3645,7 @@ async function readDocuments(list)
     await Promise.all(missing.map(async ({ href, stamp }) => {
         try {
             const response = await fetch(href);
-            documentTexts.set(`${href}@${stamp}`, response.ok ? await response.text() : "");
+            documentTexts.set(`${href}@${stamp}`, response.ok ? withoutFrontmatter(await response.text()) : "");
             read++;
         } catch {
             // the server is restarting: the next reading of the data tries again
@@ -3710,9 +3766,15 @@ function setupReader()
 }
 
 /** Markdown made readable, enough for the project's docs: headings, paragraphs, lists, quotes and callouts, tables, code, links. */
+/** A document's text without its frontmatter, the `---` block at its top: the file's, not the reader's. */
+function withoutFrontmatter(text)
+{
+    return String(text ?? "").replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/, "").replace(/^(\r?\n)+/, "");
+}
+
 function markdown(text)
 {
-    const lines = text.replace(/\r/g, "").split("\n");
+    const lines = withoutFrontmatter(text).replace(/\r/g, "").split("\n");
     const html = [];
     let index = 0;
 

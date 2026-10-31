@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { splitFrontmatter } from "../lib/frontmatter.mjs";
 
 const scripts = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts");
 let root;
@@ -29,14 +30,14 @@ after(() => rmSync(root, { recursive: true, force: true }));
 
 test("add, start, done, set and archive change the backlog; show and list read it", () => {
     assert.match(run("backlog.mjs", "next"), /^T-2$/m);
-    assert.match(run("backlog.mjs", "add", "il registro", "--goal", "Nucleo", "--to", "Stefano", "--effort", "basso", "--p", "P3"), /T-2 aggiunto: - T-2 · P3 · basso · Stefano · \d{4}-\d{2}-\d{2} · Nucleo · il registro/);
+    assert.match(run("backlog.mjs", "add", "il registro", "--goal", "Nucleo", "--to", "Stefano", "--effort", "basso", "--p", "P3"), /T-2 aggiunto: - T-2 · P3 · low · Stefano · \d{4}-\d{2}-\d{2} · Nucleo · il registro/);
     assert.match(run("backlog.mjs", "start", "T-1"), /T-1: In corso/);
     assert.match(run("backlog.mjs", "done", "t-2"), /T-2: Fatti/);
-    assert.match(run("backlog.mjs", "set", "T-1", "--text", "i dadi e i tiri"), /· i dadi e i tiri · iniziato \d{4}-\d{2}-\d{2}$/m);
+    assert.match(run("backlog.mjs", "set", "T-1", "--text", "i dadi e i tiri"), /· i dadi e i tiri · started \d{4}-\d{2}-\d{2}$/m);
 
-    const tasks = readFileSync(join(root, "docs/TASKS.md"), "utf8");
-    assert.match(tasks, /^# Backlog\n\nI compiti\.\n\n## In corso\n\n- T-1 · P1 · alto · Matteo · 2026-10-01 · Nucleo · i dadi e i tiri · iniziato \d{4}-\d{2}-\d{2}\n/);
-    assert.match(tasks, /## Fatti\n\n- T-2 · .* · il registro \(by: Claude\) · fatto \d{4}-\d{2}-\d{2}\n/);
+    const tasks = splitFrontmatter(readFileSync(join(root, "docs/TASKS.md"), "utf8")).body;
+    assert.match(tasks, /^# Backlog\n\nI compiti\.\n\n## In progress\n\n- T-1 · P1 · high · Matteo · 2026-10-01 · Nucleo · i dadi e i tiri · started \d{4}-\d{2}-\d{2}\n/);
+    assert.match(tasks, /## Done\n\n- T-2 · .* · il registro \(by: Claude\) · done \d{4}-\d{2}-\d{2}\n/);
 
     const listed = JSON.parse(run("backlog.mjs", "list", "--json"));
     assert.deepEqual(listed.map((task) => [task.id, task.state]), [[1, "doing"]]);
@@ -44,7 +45,7 @@ test("add, start, done, set and archive change the backlog; show and list read i
     assert.match(run("backlog.mjs", "find", "REGISTRO"), /T-2 .* \[fatto\]/);
 
     assert.match(run("backlog.mjs", "archive", "--done"), /1 archiviati/);
-    assert.match(readFileSync(join(root, "docs/archivio/TASKS-archivio.md"), "utf8"), /^- T-2 .* · fatto \d{4}-\d{2}-\d{2} · archiviato \d{4}-\d{2}-\d{2}\n$/);
+    assert.match(splitFrontmatter(readFileSync(join(root, "docs/archive/TASKS-archive.md"), "utf8")).body, /^- T-2 .* · done \d{4}-\d{2}-\d{2} · archived \d{4}-\d{2}-\d{2}\n$/);
     assert.match(run("backlog.mjs", "show", "T-2"), /stato: archiviato/);
 });
 
@@ -88,9 +89,14 @@ test("the check finds what is wrong in the docs, by severity and kind", () => {
     assert.ok(!findings.some((finding) => finding.kind === "backlog"));
 });
 
-test("the check's --fix mends the whitespace and nothing else", () => {
-    assert.match(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--fix"], { cwd: root, encoding: "utf8" }).stdout, /Spazi sistemati in: docs\/NOTE\.md/);
-    assert.equal(readFileSync(join(root, "docs/NOTE.md"), "utf8"), "# Note\n\nfine\n");
+test("the check's --fix mends the whitespace and writes the frontmatter a doc lacks, and nothing else", () => {
+    const fixed = spawnSync(process.execPath, [join(scripts, "check.mjs"), "--fix"], { cwd: root, encoding: "utf8" }).stdout;
+    assert.match(fixed, /Spazi sistemati in: docs\/NOTE\.md/);
+    assert.match(fixed, /Frontmatter scritto in: .*docs\/NOTE\.md/);
+    const note = splitFrontmatter(readFileSync(join(root, "docs/NOTE.md"), "utf8"));
+    assert.equal(note.body, "# Note\n\nfine\n");
+    assert.deepEqual([note.data.title, note.data.description, note.data.type], ["Note", "fine", "doc"]);
+    assert.ok(!JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: root, encoding: "utf8" }).stdout).some((finding) => finding.kind === "frontmatter"));
 });
 
 test("without a configuration the scripts say how to make one", () => {
@@ -136,14 +142,14 @@ test("init sets a project up in its language, never overwrites, and a fresh proj
     const first = init("--language", "it", "--private", "private", "--people", "Claude,Ann", "--name", "Prova");
     assert.match(first, /\+ \.claude\/project\.yaml/);
     assert.match(first, /\+ private\/ \(git init\)/);
-    assert.match(first, /\+ private\/project\/DECISIONI\.md/);
+    assert.match(first, /\+ private\/project\/DECISIONS\.md/);
     assert.match(readFileSync(join(fresh, ".gitignore"), "utf8"), /^\/private\/$/m);
     assert.match(readFileSync(join(fresh, ".claude/project.yaml"), "utf8"), /^people: \[Claude, Ann\]$/m);
-    assert.match(readFileSync(join(fresh, "private/project/TASKS.md"), "utf8"), /## In corso\n\n## Da fare\n\n## Rimandati\n\n## Fatti\n$/);
+    assert.match(readFileSync(join(fresh, "private/project/TASKS.md"), "utf8"), /## In progress\n\n## To do\n\n## Postponed\n\n## Done\n$/);
 
     // No colleagues: the people of the configuration hold the tasks.
     const add = execFileSync(process.execPath, [join(scripts, "backlog.mjs"), "add", "il primo", "--goal", "Primo traguardo", "--to", "Ann"], { cwd: fresh, encoding: "utf8", env });
-    assert.match(add, /T-1 aggiunto: - T-1 · P2 · medio · Ann/);
+    assert.match(add, /T-1 aggiunto: - T-1 · P2 · medium · Ann/);
     const findings = JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: fresh, encoding: "utf8", env }).stdout);
     assert.deepEqual(findings.filter((finding) => finding.severity !== "note"), []);
     assert.match(execFileSync(process.execPath, [join(scripts, "decisions.mjs"), "next"], { cwd: fresh, encoding: "utf8", env }), /^D-1$/m);
@@ -183,11 +189,11 @@ test("adopt finds a project's own docs and language, writes the configuration th
     assert.match(readFileSync(join(old, ".claude/project.yaml"), "utf8"), /^docs: notes\/plan$/m);
 
     const moved = init("adopt", "--steps");
-    assert.match(moved, /→ - T-1 · P1 · medio · Claude · 2026-10-01 · Il nucleo · i dadi; con i tiri nascosti/);
+    assert.match(moved, /→ - T-1 · P1 · medium · Claude · 2026-10-01 · Il nucleo · i dadi; con i tiri nascosti/);
     assert.match(moved, /2 passi spostati/);
-    assert.match(readFileSync(join(old, "notes/plan/TASKS.md"), "utf8"), /## Da fare\n\n- T-1 · P1 · medio · Claude · 2026-10-01 · Il nucleo · i dadi; con i tiri nascosti\n/);
-    assert.match(readFileSync(join(old, "notes/plan/archivio/TASKS-archivio.md"), "utf8"), /- T-2 · P2 · medio · Claude · 2026-09-20 · Il nucleo · il registro · fatto 2026-09-20 · archiviato \d{4}/);
-    assert.equal(readFileSync(join(old, "notes/plan/PLAN.md"), "utf8"), "# Piano\n\n## Traguardi\n\n### Il nucleo (fase 1)\n\nTesto del traguardo.\n");
+    assert.match(readFileSync(join(old, "notes/plan/TASKS.md"), "utf8"), /## To do\n\n- T-1 · P1 · medium · Claude · 2026-10-01 · Il nucleo · i dadi; con i tiri nascosti\n/);
+    assert.match(readFileSync(join(old, "notes/plan/archive/TASKS-archive.md"), "utf8"), /- T-2 · P2 · medium · Claude · 2026-09-20 · Il nucleo · il registro · done 2026-09-20 · archived \d{4}/);
+    assert.equal(splitFrontmatter(readFileSync(join(old, "notes/plan/PLAN.md"), "utf8")).body, "# Piano\n\n## Traguardi\n\n### Il nucleo (fase 1)\n\nTesto del traguardo.\n");
     assert.match(fails2(init, "adopt", "--write"), /c.è già/);
     rmSync(old, { recursive: true, force: true });
 });

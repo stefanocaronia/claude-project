@@ -9,8 +9,8 @@ import { parseDecisions } from "../lib/decisions.mjs";
 import { phaseSuffix, planGoals, planPhases } from "../lib/plan.mjs";
 import { escapeRegex, quoted } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
-import { presets, stateKeys } from "../lib/words.mjs";
-import { colleagues, git, loadProject, readmeTitle, ProjectError, read, readBacklog, readDecisions, realPath, shown, today, withBacklogLock, write, writeBacklog } from "./project.mjs";
+import { legacyFiles, presets, readable, stateKeys, wordsOf } from "../lib/words.mjs";
+import { colleagues, git, loadProject, readmeTitle, ProjectError, read, readBacklog, readDecisions, realPath, shown, today, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
 
 const skipped = new Set(["node_modules", ".git", "dist", "build", "tmp", "sandbox", ".codegraph", "worktrees", "coverage"]);
 const textFile = /\.(md|ts|tsx|js|mjs|cjs|yaml|yml|json|py)$/;
@@ -22,8 +22,8 @@ export function survey(root)
     const docs = docsFolder(root);
     const names = docs ? readdirSync(join(root, docs)) : [];
     const language = languageOf(root, docs, names);
-    const words = presets[language];
-    const decisionsName = names.find((name) => Object.values(presets).some((preset) => preset.files.decisions === name)) ?? words.files.decisions;
+    const words = wordsOf(language);
+    const decisionsName = names.find((name) => [words.files.decisions, legacyFiles.decisions].includes(name)) ?? words.files.decisions;
     const tasks = docs ? [read(join(root, docs, words.files.tasks)), read(join(root, docs, words.files.archive))] : [];
     const team = colleagues({ agents: join(root, ".claude", "agents") }).map((colleague) => colleague.name);
     const holders = [...new Set(tasks.flatMap((text, index) => parseBacklog(text, words, "T", index === 1).tasks.map((task) => task.to)))].filter((name) => !team.includes(name) && name !== "Claude");
@@ -117,7 +117,7 @@ function moveStepsLocked(config, say)
 
     if (moved.length > 0) {
         writeBacklog(config, [...tasks, ...moved]);
-        write(config.files.plan, kept.join(newline).replace(new RegExp(`(${newline}){3,}`, "g"), newline + newline));
+        writeDoc(config, config.files.plan, kept.join(newline).replace(new RegExp(`(${newline}){3,}`, "g"), newline + newline));
     }
 
     return moved.map((task) => formatLine(task, config.words, config.prefixes.task));
@@ -163,14 +163,15 @@ export function moveDecisions(root, file, heading)
         throw new ProjectError(say("decisionsClash", { list: clash.join(", ") }));
     }
 
-    const why = new RegExp(`\\s+${escapeRegex(config.words.why)}:\\s+`, "i");
+    // The why of a decision written in prose, in the format's word or the language's.
+    const why = new RegExp(`\\s+(?:${[config.words.why, config.labels.why].map(escapeRegex).join("|")}):\\s+`, "i");
     const cells = rows.map((row) => {
         const parts = row.text.replace(/\s+\|\s+/g, " / ").split(why);
         return { number: row.number, text: parts[0].trim(), why: parts.slice(1).join(" ").trim() };
     });
-    write(config.files.decisions, withRows(read(config.files.decisions), cells.map((row) => `| ${row.number} | ${row.text} | ${row.why} |`), config.words));
+    writeDoc(config, config.files.decisions, withRows(read(config.files.decisions), cells.map((row) => `| ${row.number} | ${row.text} | ${row.why} |`), config.words));
     const kept = [...lines.slice(0, start + 1), "", say("decisionsMoved", { name: config.files.decisions.split("/").at(-1), path: relative(dirname(source), config.files.decisions).replaceAll("\\", "/") }), "", ...(end < 0 ? [] : lines.slice(end))];
-    write(source, kept.join(newline));
+    writeDoc(config, source, kept.join(newline));
     return { count: cells.length, file: shown(config, config.files.decisions) };
 }
 
@@ -180,7 +181,7 @@ function withRows(text, added, words)
 {
     const lines = text.split(/\r?\n/);
     const numberOf = (line) => Number(/^\|\s*(\d+)\s*\|/.exec(line)?.[1] ?? Number.NaN);
-    const openAt = lines.findIndex((line) => line.startsWith(`## ${words.open}`));
+    const openAt = lines.findIndex((line) => readable(words, "open").some((word) => line.startsWith(`## ${word}`)));
     const end = openAt < 0 ? lines.length : openAt;
     const rowsAt = lines.map((line, index) => (index < end && !Number.isNaN(numberOf(line)) ? index : -1)).filter((index) => index >= 0);
     const header = lines.findIndex((line, index) => index < end && /^\|\s*#\s*\|/.test(line));
@@ -261,9 +262,16 @@ function docsFolder(root)
     return best?.folder || (best ? "." : null);
 }
 
-/** The language whose words the docs use the most: the backlog's headings, the plan's goals, the decisions' file and open heading. */
+/** The project's language: the one its configuration names, once written; else the one whose words the docs use the most, the backlog's
+ * headings, the plan's goals, the decisions' file and open heading, as each language's files wrote them before the format went English. */
 function languageOf(root, docs, names)
 {
+    const named = /^language:\s*["']?([a-z]{2})/m.exec(read(join(root, ".claude", "project.yaml")))?.[1];
+
+    if (named && presets[named]) {
+        return named;
+    }
+
     if (!docs) {
         return "en";
     }
@@ -275,7 +283,7 @@ function languageOf(root, docs, names)
         const decisions = text(words.files.decisions);
         const score = Object.values(words.states).filter((state) => tasks.includes(`## ${state}`)).length
             + (plan.includes(`## ${words.goals}`) ? 2 : 0)
-            + (names.includes(words.files.decisions) ? 1 : 0)
+            + (names.includes(language === "it" ? legacyFiles.decisions : words.files.decisions) ? 1 : 0)
             + (decisions.includes(`## ${words.open}`) ? 2 : 0);
         return { language, score };
     });

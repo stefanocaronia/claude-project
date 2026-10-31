@@ -24,6 +24,8 @@ Ask once, in the choice form, with the recommendation first, what the request le
 
 Then run `init.mjs --language it [--private private] [--docs <folder>] [--people "Claude,Ann"] [--name "<project>"]`. It writes the configuration and the docs that are missing, and never overwrites one. With `--private` it makes the folder a git repo and adds it to the project's `.gitignore`. Then fill the plan with the user: the phases and the first goals.
 
+Once it is written, look at GitHub with `github.mjs status`: when git or gh is missing or the project is not on GitHub, offer the `github` skill, which does each step on the user's yes.
+
 ## 3. A migration
 
 Read what the survey found, and what else the project has around its docs:
@@ -66,7 +68,7 @@ docs: private/project        # the docs' folder, from the project's root
 people: [Claude, Ann]
 cites: [private/project, .claude, src, docs]   # where a decision number may be cited; a * in a part matches any name
 markdown: [private/project]  # the folders whose .md the check looks after (default: the docs and their subfolders)
-files: { decisions: DECISIONI.md, inbox: IDEE.md }   # names other than the language's
+files: { inbox: IDEAS.md }   # a core file under another name; the core names are English in every language
 repos: [{ name: app, path: . }, { name: docs, path: private }]   # the commits the page counts
 page: { port: 5790 }         # optional: by default a port of 5800–5999 from the project's folder
 extensions: []               # modules that add the project's own parts to the page and links to the panel

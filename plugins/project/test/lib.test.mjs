@@ -12,11 +12,11 @@ import { wordsOf } from "../lib/words.mjs";
 const it = wordsOf("it");
 const en = wordsOf("en");
 
-test("a task line reads and writes back the same, done and archived marks included", () => {
+test("a task line reads and writes back in the format's English words, an old Italian line read as well", () => {
     const line = "- T-12 · P2 · medio · Matteo · 2026-10-29 · Revisione e pulizia · La plancia, in tre parti · fatto 2026-10-30 · archiviato 2026-10-31";
     const task = parseLine(line, "archived", it);
-    assert.deepEqual({ ...task }, { id: 12, priority: "P2", effort: "medio", to: "Matteo", created: "2026-10-29", goal: "Revisione e pulizia", text: "La plancia, in tre parti", after: [], see: [], parent: null, issue: null, due: null, type: null, by: null, fields: {}, started: null, done: "2026-10-30", archived: "2026-10-31", state: "archived" });
-    assert.equal(formatLine(task, it), line);
+    assert.deepEqual({ ...task }, { id: 12, priority: "P2", effort: "medium", to: "Matteo", created: "2026-10-29", goal: "Revisione e pulizia", text: "La plancia, in tre parti", after: [], see: [], parent: null, issue: null, due: null, type: null, by: null, fields: {}, started: null, done: "2026-10-30", archived: "2026-10-31", state: "archived" });
+    assert.equal(formatLine(task, it), "- T-12 · P2 · medium · Matteo · 2026-10-29 · Revisione e pulizia · La plancia, in tre parti · done 2026-10-30 · archived 2026-10-31");
     assert.equal(parseLine("- [ ] P2 · 2026-10-29 · a todo line", "todo", it), null);
 });
 
@@ -49,9 +49,9 @@ test("a backlog is read by its sections and written back with its header, each s
     assert.deepEqual(unread, [{ line: 13, text: "- not a task" }]);
 
     const written = renderBacklog(tasks, text, it);
-    assert.ok(written.startsWith("# Backlog\n\nWhat it is.\n\n## In corso\n\n- T-7 "));
-    assert.ok(written.includes("## Da fare\n\n- T-2 · P1 · alto · Stefano · 2026-10-01 · — · due\n- T-5 "));
-    assert.ok(written.includes("## Rimandati\n\n## Fatti\n"));
+    assert.ok(written.startsWith("# Backlog\n\nWhat it is.\n\n## In progress\n\n- T-7 "));
+    assert.ok(written.includes("## To do\n\n- T-2 · P1 · high · Stefano · 2026-10-01 · — · due\n- T-5 "));
+    assert.ok(written.includes("## Postponed\n\n## Done\n"));
     assert.deepEqual(parseBacklog(written, it).tasks.map((task) => task.id), [7, 2, 5]);
 });
 
@@ -68,7 +68,7 @@ test("the archive keeps its header and its tasks by number", () => {
         { id: 1, priority: "P2", effort: "medio", to: "Claude", created: "2026-10-01", goal: "—", text: "vivo", done: null, archived: null, state: "todo" },
     ];
     const written = renderArchive(tasks, "# Archivio\n\n- T-1 · old\n", it);
-    assert.equal(written, "# Archivio\n\n- T-4 · P2 · medio · Claude · 2026-10-01 · — · quattro · archiviato 2026-10-03\n- T-9 · P2 · medio · Claude · 2026-10-01 · — · nove · fatto 2026-10-02 · archiviato 2026-10-03\n");
+    assert.equal(written, "# Archivio\n\n- T-4 · P2 · medio · Claude · 2026-10-01 · — · quattro · archived 2026-10-03\n- T-9 · P2 · medio · Claude · 2026-10-01 · — · nove · done 2026-10-02 · archived 2026-10-03\n");
 });
 
 test("moving tasks sets the day of done once, clears it when they open again, and names the ids it does not find", () => {
@@ -98,7 +98,7 @@ test("a task's errors name each wrong value, in the project's language", () => {
     assert.equal(errors.length, 6);
     assert.match(errors[0], /La priorità è P1, P2 o P3, non P4/);
     assert.match(errors[2], /Nessuno non può avere un compito: Claude/);
-    assert.deepEqual(taskErrors({ ...task, priority: "P1", effort: "medio", to: "Claude", goal: "—", text: "ok", state: "todo" }, { words: it, people: ["Claude"], goals: [], say }), []);
+    assert.deepEqual(taskErrors({ ...task, priority: "P1", effort: "medium", to: "Claude", goal: "—", text: "ok", state: "todo" }, { words: it, people: ["Claude"], goals: [], say }), []);
 });
 
 test("the plan gives its goals with their phases, its phases' table and the day it was updated", () => {
@@ -173,14 +173,16 @@ test("the configuration fills the defaults, resolves the paths and takes the lan
     const config = readConfig("language: it\ndocs: private/project\npeople: [Claude, Stefano]\nwords:\n  states:\n    postponed: Più tardi\nextensions: [private/game.mjs]\n", "F:\\work\\engine");
     assert.equal(config.root, "F:/work/engine");
     assert.equal(config.docs, "F:/work/engine/private/project");
-    assert.equal(config.files.decisions, "F:/work/engine/private/project/DECISIONI.md");
-    assert.equal(config.files.archive, "F:/work/engine/private/project/archivio/TASKS-archivio.md");
+    assert.equal(config.files.decisions, "F:/work/engine/private/project/DECISIONS.md");
+    assert.equal(config.files.archive, "F:/work/engine/private/project/archive/TASKS-archive.md");
     assert.equal(config.words.states.postponed, "Più tardi");
-    assert.equal(config.words.states.doing, "In corso");
+    // The format's words are English whatever the language; its labels, what is shown, the language's.
+    assert.equal(config.words.states.doing, "In progress");
+    assert.equal(config.labels.states.doing, "In corso");
     assert.deepEqual(config.people, ["Claude", "Stefano"]);
     assert.deepEqual(config.cites, ["F:/work/engine/private/project", "F:/work/engine/.claude/agent-memory"]);
     assert.deepEqual(config.extensions, ["F:/work/engine/private/game.mjs"]);
-    assert.ok(config.skip.includes("archivio"));
+    assert.ok(config.skip.includes("archive"));
 
     const plain = readConfig("", "/home/me/app");
     assert.equal(plain.language, "en");

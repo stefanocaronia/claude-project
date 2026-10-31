@@ -9,9 +9,12 @@ import { parseBacklog, renderArchive, renderBacklog } from "../lib/backlog.mjs";
 import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
 import { parseDecisions } from "../lib/decisions.mjs";
 import { sayer } from "../lib/messages.mjs";
+import { legacyFiles } from "../lib/words.mjs";
+import { firstParagraph, joinFrontmatter, splitFrontmatter, titleOf } from "../lib/frontmatter.mjs";
 import { planGoals } from "../lib/plan.mjs";
 import { decisionLinks, dependencies, partsOf, seenFrom, todoLinks } from "../lib/links.mjs";
 import { dueOf, isStale } from "../lib/schedule.mjs";
+import { compareVersions, parseRelease } from "../lib/release.mjs";
 import { firstName, parseTodo } from "../lib/todos.mjs";
 
 const lockWait = 10_000;
@@ -85,11 +88,11 @@ export function writeBacklog(config, tasks)
 
     // Only a file that changes is written: a change to an open task leaves the archive alone, even while a reader holds it.
     if (archived !== archive) {
-        writeWhole(config.files.archive, archived, say);
+        writeWhole(config.files.archive, stampDoc(config, config.files.archive, archived), say);
     }
 
     if (rendered !== backlog) {
-        writeWhole(config.files.tasks, rendered, say);
+        writeWhole(config.files.tasks, stampDoc(config, config.files.tasks, rendered), say);
     }
 }
 
@@ -347,7 +350,110 @@ export function write(path, text)
     writeFileSync(path, text);
 }
 
+/** The project's markdown documents: those of the docs' folder and of its folders one level down (the archive, the tasks' notes, the
+ * releases), or those of the folders the configuration names in `markdown:`. The colleagues' memory is Crew's, not here. */
+export function docFiles(config)
+{
+    const folders = config.markdown ?? [config.docs, ...(existsSync(config.docs) ? readdirSync(config.docs, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => `${config.docs}/${entry.name}`) : [])];
+    return folders.filter(existsSync).flatMap((folder) => readdirSync(folder).filter((name) => name.toLowerCase().endsWith(".md")).map((name) => `${folder}/${name}`));
+}
+
+/** Whether a path is one of the project's documents, whatever its slashes and case. */
+export function isDoc(config, path)
+{
+    const wanted = normalized(path);
+    return docFiles(config).some((file) => normalized(file) === wanted);
+}
+
+/** A document's kind, for its frontmatter: the plan, the backlog, its archive, the decisions, the index, a task's note, a release's notes,
+ * or any other doc. */
+export function docType(config, path)
+{
+    const file = normalized(path);
+    const kinds = { plan: config.files.plan, backlog: config.files.tasks, archive: config.files.archive, decisions: config.files.decisions, index: config.files.index };
+    const kind = Object.entries(kinds).find(([, own]) => normalized(own) === file)?.[0];
+    return kind ?? (normalized(dirname(path)) === normalized(config.files.notes) ? "note" : normalized(dirname(path)) === normalized(config.files.releases) ? "release" : "doc");
+}
+
+/** A document's text with its frontmatter whole and true: the title, description and kind it has or else found, the day it was created
+ * (kept; for a file without one, its first day in git), the day it last changed (today when its body changed, or when touched is true,
+ * as after a hand edit; else the one it has, or its last day in git). A project's own keys stay. */
+export function stampDoc(config, path, text, touched = false)
+{
+    const say = sayer(config.language);
+    const previous = existsSync(path) ? read(path) : null;
+    const old = splitFrontmatter(previous ?? "");
+    const { data: given, body } = splitFrontmatter(text);
+    const isChanged = touched || previous === null || old.body.replace(/\r\n/g, "\n").trim() !== body.replace(/\r\n/g, "\n").trim();
+    const type = given.type ?? old.data.type ?? docType(config, path);
+    const name = path.split("/").at(-1);
+    const kept = { ...old.data, ...given };
+    const description = kept.description
+        || (["plan", "backlog", "archive", "decisions", "index"].includes(type) ? say(`docDescription_${type}`)
+        : type === "note" ? say("docDescription_note", { id: name.replace(/\.md$/i, "") })
+        : type === "release" ? firstParagraph(body.replace(/^#.*$/m, "")) || say("docDescription_release", { version: name.replace(/\.md$/i, "") })
+        : firstParagraph(body) || titleOf(body, name));
+    const data = {
+        ...kept,
+        // A core file without a heading of its own takes its kind's name in the project's language.
+        title: kept.title || (/^# /m.test(body) || !["plan", "backlog", "archive", "decisions", "index"].includes(type) ? titleOf(body, name) : say(`docTitle_${type}`)),
+        description,
+        type,
+        created: kept.created || (previous === null ? today() : gitDay(path, "first") ?? today()),
+        updated: isChanged ? today() : kept.updated || gitDay(path, "last") || today(),
+    };
+    return joinFrontmatter(data, body);
+}
+
+/** A document written with its frontmatter stamped; any other file as it is. */
+export function writeDoc(config, path, text)
+{
+    write(path, isDoc(config, path) || docType(config, path) !== "doc" ? stampDoc(config, path, text) : text);
+}
+
+/** The first or the last day git has a file, YYYY-MM-DD, the last today while it has changes not committed; null outside git or for a
+ * file it does not track. */
+function gitDay(path, which)
+{
+    if (which === "last" && git(dirname(path), ["status", "--porcelain", "--", path.split("/").at(-1)]).trim() !== "") {
+        return today();
+    }
+
+    const days = git(dirname(path), ["log", "--follow", "--format=%as", "--", path.split("/").at(-1)]).trim().split("\n").filter(Boolean);
+    return (which === "first" ? days.at(-1) : days[0]) ?? null;
+}
+
+function normalized(path)
+{
+    return String(path).replaceAll("\\", "/").toLowerCase();
+}
+
 /** Where a path really is, past any link on the way; the path itself when it does not exist. */
+/** The releases written in <docs>/releases, the oldest version first: { version, day, summary, tasks, text }. */
+export function readReleases(config)
+{
+    if (!existsSync(config.files.releases)) {
+        return [];
+    }
+
+    return readdirSync(config.files.releases)
+        .filter((name) => /^v\d+\.\d+\.\d+\.md$/.test(name))
+        .map((name) => {
+            const text = read(join(config.files.releases, name));
+            const release = parseRelease(text, config.prefixes.task);
+            return release ? { ...release, text } : null;
+        })
+        .filter(Boolean)
+        .sort((first, second) => compareVersions(first.version, second.version));
+}
+
+/** Whether a program is on the path, without running it: `git`, `gh`; on Windows with its .exe or .cmd. */
+export function onPath(name, path = process.env.PATH ?? process.env.Path ?? "", windows = process.platform === "win32")
+{
+    const names = windows ? [`${name}.exe`, `${name}.cmd`, name] : [name];
+    return path.split(windows ? ";" : delimiter).filter(Boolean).some((folder) => names.some((one) => existsSync(join(folder, one))));
+}
+
 /** Whether `project`, the plugin's own command (npm link in its folder), is on the path: a link to its scripts/cli.mjs, or npm's
  * shim on Windows that names it. */
 export function projectCommandOnPath(path = process.env.PATH ?? process.env.Path ?? "", windows = process.platform === "win32")
@@ -438,14 +544,87 @@ export async function runCli(main)
 function configOf(text, root, file)
 {
     try {
-        return readConfig(text, root);
+        return withLegacyNames(readConfig(text, root));
     } catch (error) {
         const line = error?.linePos?.[0]?.line;
         throw new ProjectError(`${file}${line ? `, line ${line}` : ""}: ${String(error?.message ?? error).split("\n")[0]} Fix it, or run /project:init again.`);
     }
 }
 
-/** A file written whole or not at all: to a temporary file beside it, then renamed; a file another program holds says so. */
+/** A project made before the core went English: each core file or folder it has under its old Italian name, and not under the new one,
+ * read where it is; `legacy` lists them, for the check to say and `init.mjs rename` to rename. */
+function withLegacyNames(config)
+{
+    const legacy = [];
+    const files = { ...config.files };
+    let { archiveFolder, skip } = config;
+
+    for (const key of ["decisions", "archive", "notes"].filter((one) => !config.namedFiles.includes(one))) {
+        const old = `${config.docs}/${legacyFiles[key]}`;
+
+        if (!existsSync(files[key]) && existsSync(old)) {
+            legacy.push({ key, from: old, to: files[key] });
+            files[key] = old;
+
+            if (key === "archive") {
+                archiveFolder = legacyFiles.archiveFolder;
+                skip = [...new Set([...skip, archiveFolder])];
+            }
+        }
+    }
+
+    return { ...config, files, archiveFolder, skip, legacy };
+}
+
+/** The core files still written in the format's old words of the language (`## In corso`, `· fatto`, `## Traguardi`, `## Da decidere`):
+ * read as they are, rewritten in English by `init.mjs rename`. Their paths. */
+export function legacyFormat(config)
+{
+    const old = config.words.legacy;
+
+    if (!old) {
+        return [];
+    }
+
+    const uses = {
+        [config.files.tasks]: Object.values(old.states).map((state) => `## ${state}`).concat(` · ${old.doneMarker} `, ` · ${old.startedMarker} `),
+        [config.files.archive]: [` · ${old.doneMarker} `, ` · ${old.archivedMarker} `],
+        [config.files.plan]: [`## ${old.goals}`, `(${old.phase} `, `${old.updated} `],
+        [config.files.decisions]: [`## ${old.open}`, `| ${old.decision} |`, `${old.superseded} `],
+    };
+    return Object.entries(uses).filter(([file, marks]) => existsSync(file) && marks.some((mark) => read(file).includes(mark))).map(([file]) => file);
+}
+
+/** The plan and the decisions written again in the format's English words, the project's own text left as it is; the backlog is written
+ * again by writeBacklog, which reads both. */
+export function englishFormat(config)
+{
+    const old = config.words.legacy;
+    const words = config.words;
+    const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const plan = read(config.files.plan)
+        .replace(new RegExp(`^## ${escape(old.goals)}[ \t]*$`, "m"), `## ${words.goals}`)
+        .replace(/^### .+$/gm, (heading) => heading
+            .replace(new RegExp(`\\(${escape(old.phase)} (\\d+)\\)`, "i"), `(${words.phase} $1)`)
+            .replace(new RegExp(` · ${escape(old.doneMarker)} (\\d{4}-\\d{2}-\\d{2})\\s*$`), ` · ${words.doneMarker} $1`))
+        .replace(new RegExp(`${escape(old.updated)} (\\d{4}-\\d{2}-\\d{2})`), `${words.updated} $1`);
+    const decisions = read(config.files.decisions)
+        .replace(new RegExp(`^## ${escape(old.open)}[ \t]*$`, "m"), `## ${words.open}`)
+        .replace(new RegExp(`^\\| # \\| ${escape(old.decision)} \\| ${escape(old.why)} \\|`, "m"), `| # | ${words.decision} | ${words.why} |`)
+        .replace(new RegExp(`^(\\| *\\d+ *\\| *)${escape(old.superseded)} `, "gm"), `$1${words.superseded} `);
+    const changed = [];
+
+    for (const [file, text] of [[config.files.plan, plan], [config.files.decisions, decisions]]) {
+        if (existsSync(file) && text !== read(file)) {
+            writeDoc(config, file, text);
+            changed.push(file);
+        }
+    }
+
+    writeBacklog(config, readBacklog(config).tasks);
+    return changed;
+}
+
 /** A file put in place of another; on Windows a reader that holds the old one (the page, an editor) refuses it for a moment: tried
  * again for a second before giving up. */
 function replace(from, to)
@@ -464,6 +643,7 @@ function replace(from, to)
     }
 }
 
+/** A file written whole or not at all: to a temporary file beside it, then renamed; a file another program holds says so. */
 function writeWhole(path, text, say)
 {
     const temporary = `${path}.${process.pid}.tmp`;

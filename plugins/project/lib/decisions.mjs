@@ -1,12 +1,13 @@
 // The decisions' text: a table of rows `| 12 | what is decided | why |`, and the points still open as bullets under the heading of what is
 // to decide. Pure.
 import { escapeRegex } from "./text.mjs";
+import { readable } from "./words.mjs";
 
 /** The decided rows, each with its number, text, why and line, and the open points with their line. */
 export function parseDecisions(text, words)
 {
     const lines = (text ?? "").split(/\r?\n/);
-    const openAt = lines.findIndex((line) => line.startsWith(`## ${words.open}`));
+    const openAt = lines.findIndex((line) => readable(words, "open").some((word) => line.startsWith(`## ${word}`)));
     const decided = [];
     const open = [];
 

@@ -11,6 +11,7 @@ import { formatLine, parseLine, taskErrors } from "../lib/backlog.mjs";
 import { badLinks, dependencies, joinLinks, listOf, nestedParts, partsOf, seenFrom, splitLinks, todoLinks } from "../lib/links.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { wordsOf } from "../lib/words.mjs";
+import { splitFrontmatter } from "../lib/frontmatter.mjs";
 
 const en = wordsOf("en");
 const scripts = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts");
@@ -114,7 +115,10 @@ test("set --after and --see write the links, show reads them both ways with the 
 
 test("a task's note is written once, in the notes folder, and show names it", () => {
     assert.equal(run("note", "T-2"), "docs/tasks/T-2.md");
-    assert.equal(read("docs/tasks/T-2.md"), "# T-2 · the rolls\n");
+    // A note is a document: its frontmatter on top, its body the heading.
+    const note = splitFrontmatter(read("docs/tasks/T-2.md"));
+    assert.equal(note.body, "# T-2 · the rolls\n");
+    assert.deepEqual([note.data.title, note.data.type], ["T-2 · the rolls", "note"]);
     writeFileSync(join(root, "docs/tasks/T-2.md"), "# T-2 · the rolls\n\nWhere it got to.\n");
     assert.equal(run("note", "T-2"), "docs/tasks/T-2.md");
     assert.match(read("docs/tasks/T-2.md"), /Where it got to/);

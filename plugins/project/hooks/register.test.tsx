@@ -471,6 +471,64 @@ test("the owner's GitHub picture on their tasks and beside every decision; witho
     await ui.unmount();
 });
 
+test("an open task being edited changes its goal, who does it and the project's own fields through the backlog's command", async ($, on) => {
+    const withFields = { ...snapshot, fields: { system: { name: "Sistema", values: ["5e", "ironsworn"] }, area: { name: "Area", values: null } } };
+    const { runs } = world(on, [{ ...good, stdout: JSON.stringify(withFields) }]);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
+    await ui.press({ key: "open-80" });
+    await ui.press({ key: "edit-text-80" });
+    runs.length = 0;
+    await ui.select({ key: "edit-to-80", value: "Stefano" });
+    await ui.select({ key: "edit-field-system-80", value: "5e" });
+    await ui.input({ key: "edit-field-area-80", text: " il diario " });
+    expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([
+        ["backlog.mjs", "set", "T-80", "--to", "Stefano"],
+        ["backlog.mjs", "set", "T-80", "--system", "5e"],
+        ["backlog.mjs", "set", "T-80", "--area", "il diario"],
+    ]);
+    expect(await ui.find({ key: "edit-goal-80" })).toBeDefined();
+    await ui.unmount();
+});
+
+test("a project not on GitHub, or without git and gh, has a button that runs the github skill; one on GitHub has none", async ($, on) => {
+    const answers = [{ ...good, stdout: JSON.stringify({ ...snapshot, github: { tools: true, repo: null } }) }];
+    const { commands } = world(on, answers);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    expect((await ui.find({ key: "github" }))?.props.label).toBe("🐙 Mettilo su GitHub");
+    await ui.press({ key: "github" });
+    expect(commands).toContain("/project:github");
+    await ui.unmount();
+});
+
+test("the versions at the bottom, the newest first, each opening its notes in the page, and what waits for the next", async ($, on) => {
+    const released = { ...snapshot, releases: { list: [{ version: "0.8.0", day: "2026-11-02", summary: "Extensions grow.", count: 12 }, { version: "0.7.1", day: "2026-10-31", summary: "", count: 3 }], pending: 2, next: "0.8.1" } };
+    world(on, [{ ...good, stdout: JSON.stringify(released) }]);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    expect((await ui.find({ key: "toggle-releases" }))?.props.label).toBe("▾ 🏷︎ Versioni · 2");
+    expect(await ui.find({ type: "Text", text: "2 compiti fatti dall'ultima versione · prossima v0.8.1" })).toBeDefined();
+    expect((await ui.find({ type: "Link", text: "v0.8.0" }))?.props.href).toBe("http://localhost:5790/#releases/0.8.0");
+    expect(await ui.find({ type: "Text", text: "Extensions grow." })).toBeDefined();
+    await ui.unmount();
+});
+
+test("a project without Crew: no colleague, every task Claude's or a person's, and nothing goes to Crew's commands", async ($, on) => {
+    const solo = { ...snapshot, colleagues: [], tasks: snapshot.tasks.filter((task) => !["Matteo"].includes(task.to)) };
+    const { runs, prompts, commands } = world(on, [{ ...good, stdout: JSON.stringify(solo) }]);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    runs.length = 0;
+    expect(await ui.find({ key: "next-task-idle" })).toBeDefined();
+    await ui.press({ key: "toggle-postponed" });
+    await ui.press({ key: "start-71" });
+    expect(commands.filter((command) => command.startsWith("/crew:"))).toEqual([]);
+    expect(prompts[0]).toBe("Lavora a T-71: Più avanti");
+    expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "start", "T-71"]]);
+    await ui.unmount();
+});
+
 test("a ▶ that cannot be pressed stays in its place, gray, with its reason", async ($, on) => {
     world(on);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);

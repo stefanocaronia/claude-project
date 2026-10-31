@@ -1,5 +1,5 @@
 {
-  "description": "Serves the project's page at the start of a session, and draws the project's panel beside the chat.",
+  "description": "Serves the project's page at the start of a session, keeps the docs' frontmatter true after a hand edit, and draws the project's panel beside the chat.",
   "modules": [
     "./register.tsx"
   ],
@@ -10,6 +10,18 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/page/ensure.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/docs.mjs\" hook",
             "timeout": 10
           }
         ]

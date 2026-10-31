@@ -14,6 +14,7 @@ Half deterministic, half judgment: the script finds; you fix what is mechanical 
 ## 2. To fix without asking
 
 - Trailing spaces and double blank lines: `check.mjs --fix`.
+- Core files under their old Italian names (`DECISIONI.md`, `archivio/`, `compiti/`) or in the format's old words (`## In corso`, `· fatto`, `## Traguardi`, `## Da decidere`; the check says `names`): `init.mjs rename --write`, which moves them to the English names with git, writes the format's words in English, leaves the project's own text as it is and makes the docs' links follow; then fix, with the user, the files outside the docs it lists as still naming them.
 - Tasks without a date in the colleagues' todos: `task-dates.mjs --write` (the day the line appeared in git).
 - A decision number used twice: the newer row takes the first free number past the highest (`decisions.mjs next`). Read every reference before changing it, to know which of the two it means; references can be in code too.
 - A broken link whose target only moved: the new path. A target that is gone: the link goes too; ask only if you cannot tell whether it still stands.

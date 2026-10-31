@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fixWhitespace } from "../scripts/check.mjs";
+import { fixFrontmatter, fixWhitespace } from "../scripts/check.mjs";
 import { realPath, shown } from "../scripts/project.mjs";
 import { dateTasks } from "../scripts/task-dates.mjs";
 
@@ -23,7 +23,7 @@ export function tidyState(config)
 /** A mechanical fix, written: "whitespace" or "dates"; returns what it changed. */
 export function runFix(config, fix)
 {
-    return fix === "whitespace" ? fixWhitespace(config, true) : fix === "dates" ? dateTasks(config, true) : [];
+    return fix === "whitespace" ? [...fixWhitespace(config, true), ...fixFrontmatter(config)] : fix === "dates" ? dateTasks(config, true) : [];
 }
 
 /** Starts the run that writes the proposals, reading only, on the docs or on the backlog; false when a run is going. */
@@ -50,20 +50,24 @@ Answer with a JSON array and nothing else, at most 25 proposals, the most useful
     });
 }
 
-/** The proposals on the backlog and on the points to decide: priorities, types, who should do each, large tasks, texts, tasks already done
- * or made moot; points to decide obsolete, doubled or to rewrite. Reading only. */
+/** The backlog tidied as the chat tidies it: the minimum done at once (a type, a priority and who does it for every open task, the parts'
+ * goals, the texts), then proposals to tick for what is left (tasks already done or made moot, large tasks, duplicates, points to decide
+ * obsolete, doubled or to rewrite). The minimum is the only change this run makes. */
 function proposeBacklog(config)
 {
     const backlog = `node ${pluginRoot}/scripts/backlog.mjs`;
-    const brief = `Run the tidy skill of the project plugin on the backlog: read ${pluginRoot}/skills/tidy/SKILL.md, section 4, and do only its proposals. Change no file.
+    const brief = `Run the tidy skill of the project plugin on the backlog: read ${pluginRoot}/skills/tidy/SKILL.md, sections 3 and 4. The user is not here to answer: the proposals they tick on the page are your questions.
 Read the backlog with \`${backlog} list --json\`, the done ones with \`${backlog} list --state done --json\`, a task whole with \`${backlog} show T-n\`; the plan's goals in ${shown(config, config.files.plan)}; the decisions a task cites, and the later ones, in ${shown(config, config.files.decisions)} with Grep (never read it whole); who can do a task: the people ${config.people.join(", ")} and, with Crew, the colleagues of .claude/agents/, each with their field in their profile; the points still to decide under the "to decide" heading of ${shown(config, config.files.decisions)} (find it with Grep, then Read from its line).
-First the minimum: a type, a priority and who does it for every open task that lacks one or has a wrong one, a part's goal its large task's, a text that breaks the line's rules. Then propose only what is plainly closed, superseded, contradicted by an accepted decision, done, doubled or wrong, as the skill's section 3 says: whether an item still stands, never what to decide; an open point or a vague task stays as it is, with no proposal. Few proposals are better than many. Run each command alone, exactly as written here: no cd, no pipes, no other program. Every proposal changes something, and "change" is the exact \`${backlog} …\` command or commands that apply it; a large task's new parts are added with \`--in T-n\`, the large task's number. A proposal on the points to decide has "kind": "to decide", "file": "${shown(config, config.files.decisions)}", the line of the first point it touches, and in "change" exactly which lines go and which come. A proposal that cannot be applied now carries in "waits" what it waits for: "user" (a decision of theirs) or "a run of its own"; the others have "waits": null.
-Answer with a JSON array and nothing else, at most 25 proposals, the most useful first, written in the project's language (${config.language}):
-[{"id": "p1", "kind": "task", "file": "${shown(config, config.files.tasks)}", "line": null, "title": "one line", "why": "the reason, in one or two sentences", "change": "${backlog} set T-12 --p P1", "waits": null}]`;
+First the minimum, yourself, at once, with \`${backlog} set T-n\` and only its --type, --p, --to, --goal and --text: a type, a priority and who does it for every open task (to do, in progress, postponed, large tasks included) that lacks one or has a wrong one, a part's goal its large task's, a text that breaks the line's rules (one line, clear, no « · »). Change no other file and nothing else. Then propose only what is plainly closed, superseded, contradicted by an accepted decision, done, doubled or wrong, as the skill's section 3 says: whether an item still stands, never what to decide; an open point or a vague task stays as it is, with no proposal. Few proposals are better than many. Run each command alone, exactly as written here: no cd, no pipes, no other program. Every proposal changes something, and "change" is the exact \`${backlog} …\` command or commands that apply it; a large task's new parts are added with \`--in T-n\`, the large task's number. A proposal on the points to decide has "kind": "to decide", "file": "${shown(config, config.files.decisions)}", the line of the first point it touches, and in "change" exactly which lines go and which come. A proposal that cannot be applied now carries in "waits" what it waits for: "user" (a decision of theirs) or "a run of its own"; the others have "waits": null.
+Answer with a JSON object and nothing else, at most 25 proposals, the most useful first, written in the project's language (${config.language}): "minimum" the changes you made, "proposals" the rest to tick:
+{"minimum": [{"task": "T-12", "change": "type bug, priority P2", "why": "a crash, not a feature"}], "proposals": [{"id": "p1", "kind": "task", "file": "${shown(config, config.files.tasks)}", "line": null, "title": "one line", "why": "the reason, in one or two sentences", "change": "${backlog} done T-12", "waits": null}]}`;
 
-    return startRun(config, "propose", brief, ["Read", "Grep", "Glob", `Bash(${backlog} list *)`, `Bash(${backlog} show *)`], (state, result) => {
-        state.proposals = proposalsOf(result);
-        state.applied = null;
+    return startRun(config, "propose", brief, ["Read", "Grep", "Glob", `Bash(${backlog} list *)`, `Bash(${backlog} show *)`, `Bash(${backlog} set *)`], (state, result) => {
+        const answer = objectOf(result);
+        const minimum = Array.isArray(answer.minimum) ? answer.minimum : [];
+        state.proposals = Array.isArray(answer.proposals) ? proposalsOf(JSON.stringify(answer.proposals)) : proposalsOf(result);
+        // The minimum is done: shown as applied, each change with its task.
+        state.applied = minimum.length > 0 ? { at: new Date().toISOString(), applied: minimum.map((_, index) => `m${index + 1}`), skipped: [], summary: minimum.map((change) => `${change.task}: ${change.change}`).join("; ") } : null;
         state.scope = "backlog";
         return `${state.proposals.length}`;
     });

@@ -55,6 +55,23 @@ Phases in its table (`| 2. Name | at the end you can… |`), goals as `### Name 
 
 `check.mjs` reports errors, warnings and notes with file and line: decision numbers twice or missing, decisions cited that do not exist, backlog lines that do not read, links to tasks that do not exist, cycles of waits, a todo id nobody gave, a note of a task that is not there, a colleague's todo citing a task that is not there, old proposals, broken links, heavy files. `--fix` mends only whitespace. After changing the docs, run it; errors are fixed before the work is called done. The cleanup beyond that is the `tidy` skill.
 
+## The docs' frontmatter
+
+Every markdown doc of the project starts with a frontmatter block: `title`, `description` (one sentence of what it holds), `type`, `created`, `updated`. The commands write it, and the plugin's hook keeps `updated` true after you edit a doc; a new doc you write by hand starts with it, or `check.mjs --fix` adds it. Keep a doc's description true when what it holds changes.
+
+## GitHub
+
+The `github` skill sets the project up on GitHub and keeps it there: git and gh installed and signed in, the repo, the private docs' repo, GitHub Pages with their workflow, a custom domain, releases. Use it when the user works with GitHub or the start of the session says git or gh is missing.
+
+## Versions and releases: `release.mjs`
+
+As the trade does it (Semantic Versioning and Keep a Changelog), a version is a release, never a commit. Commits and pushes go on without one; the work done since the last release waits for the next.
+
+- **When**: a release is due when a goal or a phase of the plan closes, when the work done since makes a whole that users notice, or when a fix cannot wait. No number of tasks makes one due, and twelve versions in two days are eleven too many. `status` says the last release, what is done since and whether something makes a release due; propose one then, and write it only on the user's yes.
+- **Which number**, MAJOR.MINOR.PATCH, from the work it holds: a change that breaks what users rely on (a file format, a command, a setting that no longer reads) raises MAJOR, MINOR before 1.0.0; a new feature raises MINOR; fixes and maintenance alone raise PATCH. `status` suggests it from the tasks' types; say what breaks with `--breaking "a; b"`, which only you can judge.
+- **The notes**: `notes [<version>]` drafts them from the tasks done since, by kind (added, fixed, maintenance, other), `write <version> --summary "…"` keeps them in `<docs>/releases/v<version>.md`, each listing its tasks so that the next starts where it ends. The summary is one or two sentences of what the release brings, for its users.
+- **Then**, on the user's word: the project's own version files (package.json, a plugin's manifest…), a commit, the tag `v<version>` on it; pushing and publishing are theirs to ask.
+
 ## The panel and the page
 
 The panel beside the chat (`/project-panel` shows or hides it) has the tasks in progress and the P1 to do, each with ▶ (a blocked one shows «⛓ T-62» and its ▶ asks for the whole chain), the goals with their bars, the decisions to take. The page with the charts is served at `http://localhost:<page.port>` (without it, a port of 5800–5999 that the project's folder gives; the start of a session says it) from the start of a session.

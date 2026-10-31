@@ -10,7 +10,9 @@ import { parseTodo } from "../lib/todos.mjs";
 import { readCode, readIssues } from "./code.mjs";
 import { backlogProblems } from "./backlog.mjs";
 import { extensionChecks, loadExtensions } from "./extensions.mjs";
-import { citingFiles, isMain, loadProject, read, readBacklog, readDecisions, readDependencies, readGoals, readTodos, runCli, shown, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
+import { readable } from "../lib/words.mjs";
+import { splitFrontmatter } from "../lib/frontmatter.mjs";
+import { citingFiles, docFiles, isMain, legacyFormat, stampDoc, loadProject, read, readBacklog, readDecisions, readDependencies, readGoals, readTodos, runCli, shown, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
 
 /** Every finding about the docs, from errors that must be fixed to notes for the cleanup: { severity, kind, file, line, message }. */
 export function check(config, say)
@@ -31,6 +33,8 @@ export function check(config, say)
     checkOpen(config, say, add);
     checkMarkdown(config, say, add);
     checkIndex(config, say, add);
+    checkNames(config, say, add);
+    checkFrontmatter(config, say, add);
     checkWeight(config, say, add);
 
     return findings;
@@ -75,6 +79,11 @@ if (isMain(import.meta.url)) {
         if (process.argv.includes("--fix")) {
             const changed = fixWhitespace(config);
             console.log(changed.length > 0 ? say("fixed", { files: changed.join(", ") }) : say("fixedNone"));
+            const stamped = fixFrontmatter(config);
+
+            if (stamped.length > 0) {
+                console.log(say("fixedFrontmatter", { files: stamped.join(", ") }));
+            }
         }
 
         const findings = [...check(config, say), ...(await extensionChecks(config, say, await loadExtensions(config)))];
@@ -132,7 +141,7 @@ function checkRevisions(config, say, decisions, add)
 {
     const { words } = config;
     const prefix = config.prefixes.decision;
-    const superseded = new Set(decisions.filter((row) => row.text.startsWith(`${words.superseded} ${prefix}-`)).map((row) => row.number));
+    const superseded = new Set(decisions.filter((row) => readable(words, "superseded").some((word) => row.text.startsWith(`${word} ${prefix}-`))).map((row) => row.number));
     const whole = words.wholly.map(escapeRegex).join("|");
     const verbs = new RegExp(`\\b(${words.revises.join("|")})\\s+(?:\\w{1,3}\\s+)?${escapeRegex(prefix)}-(\\d+)(?!\\d)(?=\\s*(?:[.;|]|$|(?:${whole})\\b))`, "gi");
 
@@ -189,7 +198,7 @@ function checkTodos(config, say, add)
                 if (!cited) {
                     add("warning", "tasks", file, index + 1, say("todoCitesUnknown", { id: `${prefix}-${id}` }));
                 } else if (cited.state === "done" || cited.state === "archived") {
-                    add("note", "tasks", file, index + 1, say("todoCitesClosed", { id: `${prefix}-${id}`, state: cited.state === "done" ? config.words.doneMarker : config.words.archivedMarker }));
+                    add("note", "tasks", file, index + 1, say("todoCitesClosed", { id: `${prefix}-${id}`, state: cited.state === "done" ? config.labels.doneMarker : config.labels.archivedMarker }));
                 }
             }
         }
@@ -236,7 +245,7 @@ function checkLinks(config, say, add)
         const open = tasks.filter((part) => part.parent === id && !isClosed(part)).map((part) => `${prefix}-${part.id}`);
 
         if (isClosed(large) && open.length > 0) {
-            add("warning", "links", large.file, large.line, say("partsOpen", { id, state: large.state === "done" ? config.words.doneMarker : config.words.archivedMarker, list: open.join(", ") }));
+            add("warning", "links", large.file, large.line, say("partsOpen", { id, state: large.state === "done" ? config.labels.doneMarker : config.labels.archivedMarker, list: open.join(", ") }));
         } else if (!isClosed(large) && open.length === 0) {
             add("note", "links", large.file, large.line, say("partsAllDone", { id }));
         }
@@ -329,7 +338,7 @@ function checkPlan(config, say, add)
     const modified = today(statSync(path).mtime);
 
     if (updated && daysBetween(updated, modified) > config.limits.planDays) {
-        const line = text.split(/\r?\n/).findIndex((one) => one.includes(`${config.words.updated} ${updated}`)) + 1;
+        const line = text.split(/\r?\n/).findIndex((one) => readable(config.words, "updated").some((word) => one.includes(`${word} ${updated}`))) + 1;
         add("warning", "plan", path, line || null, say("planStale", { updated: config.words.updated, date: updated, modified }));
     }
 }
@@ -421,6 +430,50 @@ function checkIndex(config, say, add)
         if (!text.includes(`(${file})`)) {
             add("note", "index", `${config.docs}/${file}`, null, say("notIndexed", { index: name, archive: config.archiveFolder }));
         }
+    }
+}
+
+/** Every markdown document of the project carries its frontmatter: title, description, kind, the day it was created and the day it
+ * last changed; `--fix` writes what is missing. */
+function checkFrontmatter(config, say, add)
+{
+    for (const file of docFiles(config)) {
+        const { data } = splitFrontmatter(read(file));
+        const missing = ["title", "description", "type", "created", "updated"].filter((key) => !data[key]);
+
+        if (missing.length > 0) {
+            add("note", "frontmatter", file, 1, say(missing.length === 5 ? "frontmatterNone" : "frontmatterMissing", { list: missing.join(", ") }));
+        }
+    }
+}
+
+/** The documents whose frontmatter is missing or partial, written whole, the days from git; their shown paths. */
+export function fixFrontmatter(config)
+{
+    const changed = [];
+
+    for (const file of docFiles(config)) {
+        const text = read(file);
+        const stamped = stampDoc(config, file, text);
+
+        if (stamped !== text && Object.keys(splitFrontmatter(text).data).length < Object.keys(splitFrontmatter(stamped).data).length) {
+            writeFileSync(file, stamped);
+            changed.push(shown(config, file));
+        }
+    }
+
+    return changed;
+}
+
+/** The core files a project still keeps under their old Italian names: read where they are, renamed by `init.mjs rename`. */
+function checkNames(config, say, add)
+{
+    for (const { from, to } of config.legacy ?? []) {
+        add("note", "names", from, null, say("legacyName", { from: shown(config, from), to: shown(config, to) }));
+    }
+
+    for (const file of legacyFormat(config)) {
+        add("note", "names", file, null, say("legacyFormat"));
     }
 }
 

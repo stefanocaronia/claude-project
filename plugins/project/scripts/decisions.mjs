@@ -54,7 +54,7 @@ function run(args)
             }
 
             for (const decision of found) {
-                console.log(`${id(decision.number)} (${say("line")} ${decision.line})\n${decision.text}${decision.why === "" ? "" : `\n${config.words.why}: ${decision.why}`}\n`);
+                console.log(`${id(decision.number)} (${say("line")} ${decision.line})\n${decision.text}${decision.why === "" ? "" : `\n${config.labels.why}: ${decision.why}`}\n`);
             }
         }
     } else if (command === "find" && words.length > 0) {

@@ -17,10 +17,10 @@ import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
 import { codeView, issueOf } from "../lib/code.mjs";
 import { listOf, nestedParts, splitLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
-import { stateKeys } from "../lib/words.mjs";
+import { effortWord, stateKeys } from "../lib/words.mjs";
 import { closeIssue, readCode, readIssue, readIssues } from "./code.mjs";
 import { context, loadExtensions } from "./extensions.mjs";
-import { assignees, isMain, loadProject, notePath, ProjectError, readBacklog, readDecisions, readDependencies, readGoals, runCli, shown, taskLinks, today, withBacklogLock, write, writeBacklog } from "./project.mjs";
+import { assignees, isMain, loadProject, notePath, ProjectError, readBacklog, readDecisions, readDependencies, readGoals, runCli, shown, taskLinks, today, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
 const changes = ["add", "start", "done", "postpone", "todo", "archive", "set", "import"];
@@ -168,7 +168,7 @@ function execute(command, options, words, config, say)
 {
     const { tasks, unread } = readBacklog(config);
     const prefix = config.prefixes.task;
-    const stateName = (task) => (task.state === "archived" ? config.words.archivedMarker : task.state === "done" ? config.words.doneMarker : config.words.states[task.state]);
+    const stateName = (task) => (task.state === "archived" ? config.labels.archivedMarker : task.state === "done" ? config.labels.doneMarker : config.labels.states[task.state]);
     const line = (task) => formatLine(task, config.words, prefix);
     const fail = (message) => {
         throw new ProjectError(message);
@@ -235,7 +235,7 @@ function execute(command, options, words, config, say)
         const task = checked({
             id: nextId(tasks),
             priority: options.p ?? "P2",
-            effort: options.effort ?? config.words.efforts.medium,
+            effort: options.effort ? effortWord(config.words, options.effort) : config.words.efforts.medium,
             to: options.to ?? config.people[0],
             created: today(),
             // A part takes its large task's goal, unless one is given.
@@ -253,7 +253,7 @@ function execute(command, options, words, config, say)
         // A large task is in progress while one of its parts is: a part started starts it too.
         const parents = state === "doing" ? ids.map((id) => tasks.find((task) => task.id === id).parent).filter(Boolean).map(find).filter((task) => ["todo", "postponed"].includes(task.state)).map((task) => task.id) : [];
         const moved = moveTasks(moveTasks(tasks, ids, state, today()).tasks, parents, "doing", today()).tasks;
-        save(moved, [...ids, ...parents].map((id) => say("moved", { id: `${prefix}-${id}`, state: config.words.states[state] })).join("\n"));
+        save(moved, [...ids, ...parents].map((id) => say("moved", { id: `${prefix}-${id}`, state: config.labels.states[state] })).join("\n"));
         // A task done whose GitHub issue is still open: Claude asks whether to close it, and closes it on a yes.
         const issues = state === "done" ? readIssues(config) : [];
 
@@ -279,7 +279,7 @@ function execute(command, options, words, config, say)
         const changed = checked({
             ...task,
             ...(options.p ? { priority: options.p } : {}),
-            ...(options.effort ? { effort: options.effort } : {}),
+            ...(options.effort ? { effort: effortWord(config.words, options.effort) } : {}),
             ...(options.to ? { to: options.to } : {}),
             ...(options.goal ? { goal: options.goal } : {}),
             ...linked(typeof options.text === "string" ? options.text : undefined, task),
@@ -296,7 +296,7 @@ function execute(command, options, words, config, say)
         const path = notePath(config, task.id);
 
         if (!existsSync(path)) {
-            write(path, `# ${prefix}-${task.id} · ${task.text}\n`);
+            writeDoc(config, path, `# ${prefix}-${task.id} · ${task.text}\n`);
         }
 
         console.log(shown(config, path));

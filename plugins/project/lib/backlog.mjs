@@ -2,7 +2,7 @@
 // line under the heading of its state. Pure: the text in, the text out, in the project's words.
 import { badLinks, joinLinks, splitLinks } from "./links.mjs";
 import { escapeRegex } from "./text.mjs";
-import { priorityKeys, stateKeys } from "./words.mjs";
+import { effortWord, priorityKeys, readablePattern, stateKeys, stateOfHeading } from "./words.mjs";
 
 const separator = " · ";
 
@@ -18,9 +18,9 @@ export function parseLine(line, state, words, prefix = "T")
 
     const [, id, priority, effort, to, created, goal, rest] = match;
     const day = "(\\d{4}-\\d{2}-\\d{2})";
-    const marks = new RegExp(`^(.*?)(?: · ${escapeRegex(words.startedMarker)} ${day})?(?: · ${escapeRegex(words.doneMarker)} ${day})?(?: · ${escapeRegex(words.archivedMarker)} ${day})?$`);
+    const marks = new RegExp(`^(.*?)(?: · (?:${readablePattern(words, "startedMarker")}) ${day})?(?: · (?:${readablePattern(words, "doneMarker")}) ${day})?(?: · (?:${readablePattern(words, "archivedMarker")}) ${day})?$`);
     const [, whole, started, done, archived] = marks.exec(rest);
-    return { id: Number(id), priority, effort: effort.trim(), to: to.trim(), created, goal: goal.trim(), ...splitLinks(whole, words.fields ?? []), started: started ?? null, done: done ?? null, archived: archived ?? null, state };
+    return { id: Number(id), priority, effort: effortWord(words, effort.trim()), to: to.trim(), created, goal: goal.trim(), ...splitLinks(whole, words.fields ?? []), started: started ?? null, done: done ?? null, archived: archived ?? null, state };
 }
 
 /** The task as a line again, its links at the end of its text, then the days it started, was done and archived. */
@@ -50,7 +50,7 @@ export function parseBacklog(text, words, prefix = "T", isArchive = false)
         const heading = /^## (.+)$/.exec(line);
 
         if (heading && !isArchive) {
-            state = stateKeys.find((key) => words.states[key] === heading[1].trim()) ?? null;
+            state = stateOfHeading(words, heading[1].trim());
 
             if (state === null) {
                 unread.push({ line: index + 1, text: line });
@@ -187,7 +187,7 @@ export function taskErrors(task, { words, people, goals, types = Object.keys(wor
 /** The effort's key (low … max, none) from the word the line uses; undefined when the word is not the project's. */
 export function effortKey(word, words)
 {
-    return Object.entries(words.efforts).find(([, value]) => value === word)?.[0];
+    return Object.entries(words.efforts).find(([, value]) => value === effortWord(words, word))?.[0];
 }
 
 function headerOf(previous, prefix)

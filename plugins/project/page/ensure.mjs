@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sayer } from "../lib/messages.mjs";
-import { findRoot, git, loadProject, ProjectError, projectCommandOnPath, projectName } from "../scripts/project.mjs";
+import { findRoot, git, loadProject, onPath, ProjectError, projectCommandOnPath, projectName } from "../scripts/project.mjs";
 
 const from = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
@@ -38,7 +38,9 @@ async function ensure()
         : say("portOther", { port, owner });
     // The line is shown to the user at the start of the session, and given to Claude as context; with the plugin's command on the path,
     // Claude is told to call it in place of the scripts' long path.
-    const told = projectCommandOnPath() ? `${context} ${say("cliOnPath")}` : context;
+    // Without git or gh, Claude is told to offer the github skill when the user works with GitHub.
+    const missing = ["git", "gh"].filter((name) => !onPath(name));
+    const told = [context, projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null].filter(Boolean).join(" ");
     console.log(JSON.stringify({ systemMessage: context === say("served", { url }) ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: told } }));
 }
 

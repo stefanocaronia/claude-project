@@ -36,7 +36,7 @@ test("a line keeps its due day, its type and the day it started; start sets the 
     const line = "- T-4 · P1 · alto · Claude · 2026-10-29 · — · il login (due: 2026-11-15) (type: bug) · iniziato 2026-10-30";
     const task = parseLine(line, "doing", it);
     assert.deepEqual([task.text, task.due, task.type, task.started], ["il login", "2026-11-15", "bug", "2026-10-30"]);
-    assert.equal(formatLine(task, it), line);
+    assert.equal(formatLine(task, it), "- T-4 · P1 · high · Claude · 2026-10-29 · — · il login (due: 2026-11-15) (type: bug) · started 2026-10-30");
     assert.deepEqual(splitLinks("x (type: chore) (due: 2026-01-02)"), { text: "x", after: [], see: [], parent: null, issue: null, due: "2026-01-02", type: "chore", by: null, fields: {} });
 
     const todo = { id: 1, state: "todo", started: null, done: null };
@@ -76,14 +76,14 @@ test("set takes a due day and a type by its key or its name, refuses a type the 
     assert.match(shown, /scade il 2026-01-02 \(in ritardo di \d+ g\)/);
     assert.match(shown, /decisioni: D-1/);
     assert.match(shown, /In corso dal 2026-01-01 e nessuno lo tiene/);
-    assert.match(run("list"), /· fermo · iniziato 2026-01-01 {2}⏸ In corso dal 2026-01-01/);
+    assert.match(run("list"), /· fermo · started 2026-01-01 {2}⏸ In corso dal 2026-01-01/);
 
     const findings = JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: root, encoding: "utf8", env: environment() }).stdout).filter((finding) => finding.kind === "time").map((finding) => finding.message);
     assert.ok(findings.some((message) => /T-2 scadeva il 2026-01-02 ed è ancora aperto/.test(message)));
     assert.ok(findings.some((message) => /T-1 è in corso dal 2026-01-01 e nessuno lo tiene/.test(message)));
 
     run("todo", "T-1");
-    assert.doesNotMatch(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /iniziato/);
+    assert.doesNotMatch(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /started|iniziato/);
 });
 
 function run(...args)
