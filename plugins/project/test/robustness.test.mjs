@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { projectCommandOnPath } from "../scripts/project.mjs";
 
 const plugin = join(dirname(fileURLToPath(import.meta.url)), "..");
 const scripts = join(plugin, "scripts");
@@ -53,6 +54,20 @@ test("the project command runs each script by its name, says its commands in the
     assert.match(unknown.stderr, /backlog {3}i compiti/);
     assert.equal(cli(root, "cli.mjs", "backlog", "show", "T-9").status, 1);
     rmSync(root, { recursive: true, force: true });
+});
+
+test("the plugin's command is found on the path by npm's shim or a link to its cli, and another project command is not it", () => {
+    const folder = mkdtempSync(join(tmpdir(), "claude-project-path-"));
+    const ours = join(folder, "ours");
+    const other = join(folder, "other");
+    mkdirSync(ours);
+    mkdirSync(other);
+    writeFileSync(join(ours, "project.cmd"), '@ECHO off\r\n"%_prog%"  "%dp0%\\node_modules\\claude-project\\scripts\\cli.mjs" %*\r\n');
+    writeFileSync(join(other, "project.cmd"), "@ECHO off\r\necho another project\r\n");
+    assert.equal(projectCommandOnPath(`${other};${ours}`, true), true);
+    assert.equal(projectCommandOnPath(other, true), false);
+    assert.equal(projectCommandOnPath("", true), false);
+    rmSync(folder, { recursive: true, force: true });
 });
 
 test("twelve adds at once give twelve tasks with twelve numbers", async () => {

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sayer } from "../lib/messages.mjs";
-import { findRoot, git, loadProject, ProjectError, projectName } from "../scripts/project.mjs";
+import { findRoot, git, loadProject, ProjectError, projectCommandOnPath, projectName } from "../scripts/project.mjs";
 
 const from = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
@@ -36,8 +36,10 @@ async function ensure()
     const context = owner === null || owner.toLowerCase() === config.root.toLowerCase() ? say("served", { url })
         : owner === "" ? say("portBusy", { port })
         : say("portOther", { port, owner });
-    // The line is shown to the user at the start of the session, and given to Claude as context.
-    console.log(JSON.stringify({ systemMessage: context === say("served", { url }) ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: context } }));
+    // The line is shown to the user at the start of the session, and given to Claude as context; with the plugin's command on the path,
+    // Claude is told to call it in place of the scripts' long path.
+    const told = projectCommandOnPath() ? `${context} ${say("cliOnPath")}` : context;
+    console.log(JSON.stringify({ systemMessage: context === say("served", { url }) ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: told } }));
 }
 
 /** One line, once a repo: the plugin is here and /project:init sets it up. The repos already told are kept in the temporary folder. */

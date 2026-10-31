@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseBacklog, renderArchive, renderBacklog } from "../lib/backlog.mjs";
 import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
@@ -348,6 +348,27 @@ export function write(path, text)
 }
 
 /** Where a path really is, past any link on the way; the path itself when it does not exist. */
+/** Whether `project`, the plugin's own command (npm link in its folder), is on the path: a link to its scripts/cli.mjs, or npm's
+ * shim on Windows that names it. */
+export function projectCommandOnPath(path = process.env.PATH ?? process.env.Path ?? "", windows = process.platform === "win32")
+{
+    const names = windows ? ["project.cmd", "project"] : ["project"];
+
+    for (const folder of path.split(windows ? ";" : delimiter).filter(Boolean)) {
+        for (const name of names.map((one) => join(folder, one)).filter((one) => existsSync(one))) {
+            try {
+                if (realPath(name).replaceAll("\\", "/").endsWith("/scripts/cli.mjs") || /claude-project[\\/]+scripts[\\/]+cli\.mjs/.test(readFileSync(name, "utf8").slice(0, 4000))) {
+                    return true;
+                }
+            } catch {
+                // a file that does not read is no shim of ours
+            }
+        }
+    }
+
+    return false;
+}
+
 export function realPath(path)
 {
     try {

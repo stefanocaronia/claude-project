@@ -9,7 +9,7 @@ The project's key documents, when `.claude/project.yaml` lists them under `docum
 
 The project keeps three documents in its docs folder (`docs:` in `.claude/project.yaml`), in its own language: the **plan** (phases and goals), the **backlog** (one task a line) and the **decisions** (a numbered table, and the points still to decide). The commands below are the only way to change the backlog and to get numbers: never count by hand, never edit a task line but for its text.
 
-Run them with Bash, from the project's folder: `node "<this skill's folder>/../../scripts/<script>.mjs" …`. Their messages are in the project's language and say how to fix what they refuse. Where the user has run `npm link` in the plugin's folder, the same are `project backlog …`, `project plan …`, `project check`, and so on: tell them so when they ask how to use the commands outside Claude Code.
+Run them with Bash, from the project's folder: `node "<this skill's folder>/../../scripts/<script>.mjs" …`. Their messages are in the project's language and say how to fix what they refuse. Where the user has run `npm link` in the plugin's folder, the same are `project backlog …`, `project plan …`, `project check`, and so on: the start of the session says so, and then call them that way, shorter; tell the user when they ask how to use the commands outside Claude Code. Never run `npm link` yourself: it installs a command on their machine.
 
 ## The backlog: `backlog.mjs`
 
