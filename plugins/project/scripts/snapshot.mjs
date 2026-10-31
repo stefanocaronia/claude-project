@@ -9,6 +9,7 @@ import { plainMarkdown } from "../lib/text.mjs";
 import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
 import { releaseState } from "../lib/release.mjs";
 import { gitHubRepo } from "./github.mjs";
+import { specsState } from "./specs.mjs";
 import { check } from "./check.mjs";
 import { readCode, readIssues, readOwner } from "./code.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
@@ -72,6 +73,8 @@ export async function snapshot(config, say, withHealth = true)
         })),
         // The last versions, the newest first, and how many tasks wait for the next one.
         releases: releasesOf(config, tasks, goals),
+        // The specifications, where the project keeps them: how far they are covered, and those in progress with their tasks.
+        specs: specsOf(config),
         // The parts already closed of a large task still open, shown checked under it.
         doneParts: tasks.filter((task) => task.parent && !openStates.includes(task.state) && tasks.some((one) => openStates.includes(one.state) && `${config.prefixes.task}-${one.id}` === task.parent))
             .map(({ id, parent, to, type, text, done, archived }) => ({ id, parent, to, type, text: plainMarkdown(text), done: done ?? archived ?? null })),
@@ -91,7 +94,7 @@ export async function snapshot(config, say, withHealth = true)
             }),
         },
         // The files whose change makes the panel read the project again.
-        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.notes, config.files.releases, ...todoFiles(config).map((one) => one.file)],
+        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.specs, config.files.notes, config.files.releases, ...todoFiles(config).map((one) => one.file)],
         health: findings && { errors: count(findings, "error"), warnings: count(findings, "warning"), notes: count(findings, "note") },
     };
 }
@@ -123,6 +126,25 @@ function ownerOf(owner)
 
     const portrait = owner.file && statSync(owner.file).size <= portraitLimit * 4 ? `data:image/jpeg;base64,${readFileSync(owner.file).toString("base64")}` : undefined;
     return { name: owner.name, fullName: owner.fullName, ...(portrait ? { portrait } : {}) };
+}
+
+/** The specifications for the panel: the counts, and those an open task is doing, each with its tasks; null where the project keeps
+ * none. */
+function specsOf(config)
+{
+    if (!existsSync(config.files.specs)) {
+        return null;
+    }
+
+    const state = specsState(config).filter((spec) => spec.state !== "dropped");
+    const count = (kind) => state.filter((spec) => spec.state === kind).length;
+    return {
+        total: state.length,
+        done: count("done"),
+        doing: count("doing"),
+        open: count("open"),
+        inProgress: state.filter((spec) => spec.state === "doing").map((spec) => ({ id: spec.id, number: spec.number, text: plainMarkdown(spec.text), tasks: spec.tasks.filter((task) => !["done", "archived"].includes(task.state)).map((task) => task.id) })),
+    };
 }
 
 /** The releases for the panel: the last ten, the newest first, how many there are in all (the page lists them all), and the work done

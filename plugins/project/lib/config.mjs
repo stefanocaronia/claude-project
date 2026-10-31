@@ -12,7 +12,7 @@ export const defaults = {
     people: ["Claude"],
     agents: ".claude/agents",
     memory: ".claude/agent-memory",
-    prefixes: { task: "T", decision: "D" },
+    prefixes: { task: "T", decision: "D", spec: "S" },
     cites: [],
     skip: ["node_modules", ".git", "dist", "tmp", "sandbox", ".codegraph", "worktrees"],
     limits: { tokens: 25000, proposalDays: 14, planDays: 3, todoOpen: 15, closedStep: 400, staleDays: 3 },
@@ -48,6 +48,8 @@ export function readConfig(text, root)
             plan: resolve(docs, files.plan),
             tasks: resolve(docs, files.tasks),
             decisions: resolve(docs, files.decisions),
+            // The specifications, S-12: only where the project keeps them.
+            specs: resolve(docs, files.specs),
             archive: resolve(docs, files.archive),
             index: resolve(docs, files.index),
             inbox: files.inbox ? resolve(docs, files.inbox) : undefined,

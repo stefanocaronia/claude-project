@@ -514,6 +514,19 @@ test("the versions at the bottom, the newest first, each opening its notes in th
     await ui.unmount();
 });
 
+test("the specifications: how many are covered, those in progress with their tasks, all of them in the page; none without the file", async ($, on) => {
+    const kept = { ...snapshot, specs: { total: 55, done: 2, doing: 1, open: 52, inProgress: [{ id: "S-4", number: 4, text: "Each session starts again from the files.", tasks: ["T-3"] }] } };
+    world(on, [{ ...good, stdout: JSON.stringify(kept) }]);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    expect((await ui.find({ key: "toggle-specs" }))?.props.label).toBe("▾ ▤ Specifiche · 2/55");
+    expect(await ui.find({ type: "Text", text: "2 coperte · 1 in corso · 52 non coperte" })).toBeDefined();
+    expect((await ui.find({ type: "Link", text: "S-4" }))?.props.href).toBe("http://localhost:5790/#specs");
+    expect(await ui.find({ type: "Text", text: "T-3" })).toBeDefined();
+    expect((await ui.find({ type: "Link", text: "Tutte le 55 specifiche nella pagina" }))?.props.href).toBe("http://localhost:5790/#specs");
+    await ui.unmount();
+});
+
 test("a project without Crew: no colleague, every task Claude's or a person's, and nothing goes to Crew's commands", async ($, on) => {
     const solo = { ...snapshot, colleagues: [], tasks: snapshot.tasks.filter((task) => !["Matteo"].includes(task.to)) };
     const { runs, prompts, commands } = world(on, [{ ...good, stdout: JSON.stringify(solo) }]);

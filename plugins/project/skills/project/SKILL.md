@@ -1,19 +1,19 @@
 ---
 name: project
-description: The project's plan, backlog and decisions, kept in markdown by deterministic commands. Use whenever the work adds, starts, finishes, postpones or reassigns a task, needs a task's or a decision's number, looks a decision up or records a new one, reads the plan's goals, or checks the project docs' health; in a project with .claude/project.yaml.
+description: The project's plan, backlog, decisions and specifications, kept in markdown by deterministic commands. Use whenever the work adds, starts, finishes, postpones or reassigns a task, needs a task's, a decision's or a spec's number, looks a decision or a spec up or records a new one, reads the plan's goals, or checks the project docs' health; in a project with .claude/project.yaml.
 ---
 
 # The project's plan, tasks and decisions
 
 The project's key documents, when `.claude/project.yaml` lists them under `documents:` (a game's GDD, a specification, a business plan), are the first to read before deciding or planning anything.
 
-The project keeps three documents in its docs folder (`docs:` in `.claude/project.yaml`), in its own language: the **plan** (phases and goals), the **backlog** (one task a line) and the **decisions** (a numbered table, and the points still to decide). The commands below are the only way to change the backlog and to get numbers: never count by hand, never edit a task line but for its text.
+The project keeps three documents in its docs folder (`docs:` in `.claude/project.yaml`), in its own language: the **plan** (phases and goals), the **backlog** (one task a line) and the **decisions** (a numbered table, and the points still to decide); and, where it wants them, the **specifications** (what it must do, one numbered a line). The commands below are the only way to change the backlog and to get numbers: never count by hand, never edit a task line but for its text.
 
 Run them with Bash, from the project's folder: `node "<this skill's folder>/../../scripts/<script>.mjs" …`. Their messages are in the project's language and say how to fix what they refuse. Where the user has run `npm link` in the plugin's folder, the same are `project backlog …`, `project plan …`, `project check`, and so on: the start of the session says so, and then call them that way, shorter; tell the user when they ask how to use the commands outside Claude Code. Never run `npm link` yourself: it installs a command on their machine.
 
 ## The backlog: `backlog.mjs`
 
-A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, under the heading of its state (in progress, to do, postponed, done), archived ones in the archive. Its text may end with its links: `(after: T-62, #giulia-1)`, the tasks it waits for (a backlog task, or a line of a colleague's todo by its Crew id), and `(see: T-9, D-2)`, tasks and decisions to read with it; `(in: T-23)` makes it a part of a large task.
+A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, under the heading of its state (in progress, to do, postponed, done), archived ones in the archive. Its text may end with its links: `(after: T-62, #giulia-1)`, the tasks it waits for (a backlog task, or a line of a colleague's todo by its Crew id), and `(see: T-9, D-2, S-12)`, tasks and decisions to read with it and the specs it does; `(in: T-23)` makes it a part of a large task.
 
 | Command | Does |
 |---|---|
@@ -46,6 +46,25 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 ## The decisions: `decisions.mjs`
 
 `next` (the free number: past every row and every number cited anywhere, so two sessions never take the same), `show 287 540`, `find <words> [--full]`, `cites 287`. A new decision takes its number from `next`, goes in the table as `| 541 | what is decided | why |`, and in the document it concerns. Only what the user has decided goes in the table; a proposal goes under "to decide" until they decide.
+
+## The specifications: `specs.mjs`
+
+What the project must do, where it keeps them: `<docs>/SPECS.md`, one a line with its number, `- S-12 · the text`, under the headings of their sections (a label in bold groups them within one); the rest of the file (a summary, a paragraph, a line under a spec) is the user's and stays as they wrote it. A project without the file keeps none, and nothing asks for one.
+
+| Command | Does |
+|---|---|
+| `add "text" [--section "<heading>"]` | a new spec, numbered, under its section (made when missing), the file made with the first |
+| `show S-12…` | a spec, its section, how far it is covered, the tasks that do it and their state, the decisions that changed it, the code and the tests that name it |
+| `list [--json]`, `find <words>`, `cites S-12`, `next` | reads; `list` ends with how many are covered |
+| `adopt <file> [--write]` | a specifications' document the project already has becomes SPECS.md: moved with git, each list line numbered, the text as it was, the docs' links and the configuration following; without `--write`, what would change |
+
+They live with the work:
+- **A task that does a spec cites it**: `(see: S-12)`, with `add --see S-12` or `set --see`. Before you add a task, look for the spec it does (`find`); when a piece of work does one no task cites yet, cite it. A spec that is not there is refused.
+- **Coverage**: a spec is covered when a task done cites it, or code or a test names it; in progress when only open tasks do; not covered otherwise. `show T-12` lists the specs a task does with their text: what the work must satisfy, to read before you start it and to check before you call it done.
+- **The code and the tests** that do a spec name it, in a comment or a test's name (`// S-12`); the check refuses an S- number the file does not have, anywhere.
+- **A decision that changes a spec** names it in its text (`… S-12 …`), and the spec's line is written again to say what is now true; a spec dropped keeps its number, its text opening with the superseded marker and the decision: `- S-12 · Superseded by D-40: …`. A number is never reused.
+- **New ones** come from the user or from a decision: add them with `add`, never invent them. A spec the user asks for in passing is a spec when it says what the project must do; a task when it says what to do now.
+- The page has a tab of the specifications, with the coverage and a ＋ for a task that does one; the panel counts them and lists those in progress.
 
 ## The plan
 

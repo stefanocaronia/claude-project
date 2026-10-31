@@ -12,6 +12,7 @@ import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
 import { decisionLinks } from "../lib/links.mjs";
 import { check } from "../scripts/check.mjs";
 import { readCode, readIssues, readOwner } from "../scripts/code.mjs";
+import { specsState } from "../scripts/specs.mjs";
 import { context, extensionChecks } from "../scripts/extensions.mjs";
 import { releaseState } from "../lib/release.mjs";
 import { readablePattern } from "../lib/words.mjs";
@@ -57,6 +58,7 @@ export async function collect(config, say, extensions = [])
         tasks: readTasks(config),
         board: readBoard(config),
         releases: readReleasesData(config),
+        specs: readSpecsData(config),
         issues: freeIssues(readIssues(config), readBacklog(config).tasks).map(({ number, title, url }) => ({ number, title, url })),
         boardDays,
         holds: readHolds(config),
@@ -180,6 +182,19 @@ function readBoard(config)
         }));
 }
 
+/** The specifications for the page, where the project keeps them: each with its coverage, tasks, decisions and code, in the file's
+ * order, and the counts; null without them. */
+function readSpecsData(config)
+{
+    if (!existsSync(config.files.specs)) {
+        return null;
+    }
+
+    const list = specsState(config).map(({ number, id, text, section, group, state, tasks, decisions, files }) => ({ number, id, text, section, group, state, tasks: tasks.map((task) => ({ ...task, text: clean(task.text) })), decisions, files }));
+    const count = (state) => list.filter((spec) => spec.state === state).length;
+    return { list, counts: { total: list.length - count("dropped"), done: count("done"), doing: count("doing"), open: count("open") } };
+}
+
 /** The releases for the page, the newest first, each with its notes; the work done since the last one, the version it suggests and
  * what makes one due. */
 function readReleasesData(config)
@@ -187,7 +202,7 @@ function readReleasesData(config)
     const releases = readReleases(config);
     const state = releaseState(releases, readBacklog(config).tasks, readGoals(config), config.prefixes.task);
     return {
-        list: [...releases].reverse().map(({ version, day, summary, tasks, text, tagOnly }) => ({ version, day, summary, count: tasks.length, text, tagOnly: Boolean(tagOnly) })),
+        list: [...releases].reverse().map(({ version, day, summary, tasks, text, tagOnly, source }) => ({ version, day, summary, count: tasks.length, text, tagOnly: Boolean(tagOnly), source })),
         pending: state.pending.map((task) => ({ id: task.id, text: clean(task.text), type: task.type, done: task.done })),
         counts: state.counts,
         suggested: state.suggested,

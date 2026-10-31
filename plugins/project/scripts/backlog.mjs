@@ -20,7 +20,7 @@ import { escapeRegex, plain } from "../lib/text.mjs";
 import { effortWord, stateKeys } from "../lib/words.mjs";
 import { closeIssue, readCode, readIssue, readIssues } from "./code.mjs";
 import { context, loadExtensions } from "./extensions.mjs";
-import { assignees, isMain, loadProject, notePath, ProjectError, readBacklog, readDecisions, readDependencies, readGoals, runCli, shown, taskLinks, today, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
+import { assignees, isMain, loadProject, notePath, ProjectError, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, today, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
 const changes = ["add", "start", "done", "postpone", "todo", "archive", "set", "import"];
@@ -50,7 +50,7 @@ export function backlogProblems(config, say)
         // An archived task keeps the goal it had, even one the plan no longer holds.
         const archivedGoals = task.state === "archived" ? [...goals, task.goal] : goals;
 
-        for (const error of taskErrors(task, { words: config.words, people, goals: archivedGoals, types: Object.keys(config.types), fields: config.fields, prefix, decisionPrefix: config.prefixes.decision, say })) {
+        for (const error of taskErrors(task, { words: config.words, people, goals: archivedGoals, types: Object.keys(config.types), fields: config.fields, prefix, decisionPrefix: config.prefixes.decision, specPrefix: config.prefixes.spec, say })) {
             problems.push({ ...at, message: `${id}: ${error}` });
         }
 
@@ -193,7 +193,7 @@ function execute(command, options, words, config, say)
         const errors = [
             ...(closed ? [say("goalIsClosed", { value: closed.name, day: closed.closed })] : []),
             ...(taken ? [say("issueTaken", { issue: task.issue, id: `${prefix}-${taken.id}` })] : []),
-            ...taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), types: Object.keys(config.types), fields: config.fields, prefix, decisionPrefix: config.prefixes.decision, say }),
+            ...taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), types: Object.keys(config.types), fields: config.fields, prefix, decisionPrefix: config.prefixes.decision, specPrefix: config.prefixes.spec, say }),
             ...linkErrors(task, all, config, say),
         ];
         return errors.length > 0 ? fail(errors.join("\n")) : task;
@@ -388,7 +388,9 @@ function linkErrors(task, all, config, say)
     const id = `${prefix}-${task.id}`;
     const tasks = new Set(all.map((one) => `${prefix}-${one.id}`));
     const decisions = new Set(readDecisions(config).decided.map((row) => `${config.prefixes.decision}-${row.number}`));
-    const missing = [...task.after, ...task.see, ...(task.parent ? [task.parent] : [])].filter((one) => (one.startsWith(`${prefix}-`) && !tasks.has(one)) || (one.startsWith(`${config.prefixes.decision}-`) && !decisions.has(one)));
+    const specs = new Set(readSpecs(config).specs.map((spec) => `${config.prefixes.spec}-${spec.number}`));
+    const missing = [...task.after, ...task.see, ...(task.parent ? [task.parent] : [])].filter((one) => (one.startsWith(`${prefix}-`) && !tasks.has(one))
+        || (one.startsWith(`${config.prefixes.decision}-`) && !decisions.has(one)) || (one.startsWith(`${config.prefixes.spec}-`) && !specs.has(one)));
     const cycles = readDependencies(config, all).cycles().filter((cycle) => cycle.includes(id));
     // Parts one level deep: this task a part of a part, or a part of a large task whose parts would then hold parts.
     const nested = nestedParts(all, prefix).filter((one) => one.id === id || one.parent === id);
@@ -408,10 +410,13 @@ function linksOf(tasks, config, say, stateName)
     const links = taskLinks(config, tasks);
     const byId = new Map(tasks.map((task) => [`${prefix}-${task.id}`, task]));
     const named = (one) => (byId.has(one) ? `${one} (${stateName(byId.get(one))})` : graph.known(one) ? `${one} (${say(graph.isOpen(one) ? "todoOpen" : "todoClosed")})` : `${one} (?)`);
+    // The specs a task does, each with its text: what the work must satisfy.
+    const specTexts = new Map(readSpecs(config).specs.map((spec) => [`${config.prefixes.spec}-${spec.number}`, spec.text]));
 
     return (task) => {
-        const { after, chain, waitedBy, see, seenFrom, note, parent, parts, partsDone, nextPart, decisions, dueInfo, stale } = links.get(task.id);
+        const { after, chain, waitedBy, see, seenFrom, note, parent, parts, partsDone, nextPart, decisions, dueInfo, stale, specs } = links.get(task.id);
         return [
+            ...specs.map((spec) => say("specOf", { id: spec, text: specTexts.get(spec) ?? "?" })),
             task.type ? say("typeLabel", { name: config.types[task.type] ?? task.type }) : null,
             ...Object.entries(task.fields ?? {}).map(([key, value]) => `${config.fields[key]?.name ?? key}: ${value}`),
             task.due ? `${say("dueLabel", { day: task.due })}${dueInfo && (dueInfo.isLate || dueInfo.isNear) ? ` (${dueText(dueInfo, say)})` : ""}` : null,

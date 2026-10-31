@@ -1055,6 +1055,14 @@
         font-size: 13px;
     }
 
+    /* A version with no notes: its tag's or its commit's message, as written. */
+    .release-message {
+        margin: 6px 0 0;
+        white-space: pre-wrap;
+        font: inherit;
+        color: var(--ink);
+    }
+
     .release-notes h2 {
         font-size: 13px;
         margin: 10px 0 4px;
@@ -1626,6 +1634,85 @@
         grid-template-columns: 84px minmax(0, 1fr);
     }
 
+    /* A specification: its number, its text and what does it, its coverage, a ＋ for a task */
+    .row.spec {
+        grid-template-columns: 52px minmax(0, 1fr) auto 32px;
+        align-items: baseline;
+    }
+
+    .spec-id {
+        font-weight: 600;
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .spec-state {
+        font-size: 12px;
+        padding: 1px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+        color: var(--ink-2);
+        background: var(--surface-2);
+    }
+
+    .spec-state.done {
+        color: var(--good);
+    }
+
+    .spec-state.doing {
+        color: var(--accent);
+    }
+
+    .spec-state.dropped {
+        text-decoration: line-through;
+        color: var(--muted);
+    }
+
+    .spec-bar {
+        display: flex;
+        height: 8px;
+        margin: 10px 0 14px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: var(--grid);
+    }
+
+    .spec-bar > i {
+        display: block;
+        height: 100%;
+    }
+
+    .spec-bar > .spec-done {
+        background: var(--good);
+    }
+
+    .spec-bar > .spec-doing {
+        background: var(--accent);
+    }
+
+    .spec-bar > .spec-open {
+        background: var(--never);
+    }
+
+    .spec-section {
+        margin: 18px 0 4px;
+        font-size: 14px;
+    }
+
+    .spec-group {
+        list-style: none;
+        padding: 10px 4px 2px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        border-top: 1px solid var(--grid);
+    }
+
+    .row.spec .action.small {
+        padding: 0 8px;
+        min-height: 26px;
+    }
+
     /* Who decided, beside the decision's number */
     .row.decision .tag {
         display: inline-flex;
@@ -2166,6 +2253,10 @@ let tidyData = null;
 let days = [];
 let decisionQuery = "";
 let decisionLimit = decisionsShown;
+// The specifications' tab: which coverage it shows and the words it looks for; the specs a new task cites, when a spec's ＋ opened it.
+let specFilter = "all";
+let specQuery = "";
+let newTaskSpecs = "";
 let dragging = null;
 let renderWaits = false;
 let focusAfter = null;
@@ -2306,6 +2397,8 @@ function render()
         { id: "board", label: t("tabBoard"), badge: doing ? `${doing}` : "", panel: boardPanel },
         { id: "rhythm", label: t("tabRhythm"), badge: "", panel: rhythmPanel },
         { id: "decisions", label: t("tabDecisions"), badge: `${decisions.open.length}`, panel: decisionsPanel },
+        // The specifications, where the project keeps them: how many are covered of all.
+        ...(data.specs ? [{ id: "specs", label: t("tabSpecs"), badge: `${data.specs.counts.done}/${data.specs.counts.total}`, panel: specsPanel }] : []),
         { id: "tasks", label: t("tabTasks"), badge: `${(data.board ?? []).filter((task) => columnOf(task) !== "done").length}`, panel: tasksPanel },
         { id: "health", label: t("tabHealth"), badge: errors ? t("errorsBadge", errors) : "✓", panel: healthPanel },
         { id: "documents", label: t("tabDocuments"), badge: `${documents.length}`, panel: documentsPanel },
@@ -2442,7 +2535,7 @@ function releasesPanel()
             <p class="hint">${escape(t("releasesHint"))}</p>
             ${list.map((release, index) => `<details class="section release" id="release-${attribute(release.version)}" ${index === 0 ? "open" : ""}>
                 <summary><div class="title"><b>v${escape(release.version)}</b> <span class="hint">${escape(release.day ? formatDay(release.day) : "")}</span>${release.summary ? ` · ${escape(release.summary)}` : ""}</div><div></div><div class="count"></div><div class="pct">${escape(release.tagOnly ? t("releaseTagOnlyShort") : t("releaseTasks", release.count))}</div></summary>
-                <div class="release-notes">${release.tagOnly ? `<p class="hint">${escape(t("releaseTagOnly"))}</p>` : notes(release)}</div>
+                <div class="release-notes">${release.tagOnly ? `<p class="hint">${escape(t("releaseTagOnly", release.source))}</p>${release.text ? `<pre class="release-message">${escape(release.text)}</pre>` : ""}` : notes(release)}</div>
             </details>`).join("") || `<p class="hint">${escape(t("releasesNone"))}</p>`}
         </section>`;
 }
@@ -2611,6 +2704,93 @@ function decisionsPanel()
             </div>
             <div id="decision-list">${decisionListBody()}</div>
         </section>`;
+}
+
+/** The specifications: how far they are covered, in a bar; a filter by coverage and a search; each spec under its section and group,
+ * with the tasks that do it and their state, the decisions that changed it, the code that names it, and a ＋ for a task that does it. */
+function specsPanel()
+{
+    const { counts } = data.specs;
+    const share = (count) => (counts.total ? (count / counts.total) * 100 : 0);
+    const segment = (kind, count) => (count ? `<i class="spec-${kind}" style="width:${share(count)}%" data-tip="${attribute(escape(`${t(`specState_${kind}`)}: ${count}`))}"></i>` : "");
+    const chip = (kind, count) => `<button type="button" id="spec-filter-${kind}" data-spec-filter="${kind}" aria-pressed="${specFilter === kind}">${escape(kind === "all" ? t("filterEvery") : t(`specState_${kind}`))} <span class="count">${count}</span></button>`;
+
+    return `<section class="card span-12">
+            <h2>${t("specsTitle")}</h2>
+            <p class="hint">${escape(t("specsHint", counts))}</p>
+            <div class="spec-bar" role="img" aria-label="${attribute(t("specsHint", counts))}">${segment("done", counts.done)}${segment("doing", counts.doing)}${segment("open", counts.open)}</div>
+            <div class="chips" role="group" aria-label="${attribute(t("specsFilter"))}">${chip("all", counts.total)}${chip("open", counts.open)}${chip("doing", counts.doing)}${chip("done", counts.done)}</div>
+            <div class="search">
+                <label for="spec-search" class="visually-hidden">${t("searchLabel")}</label>
+                <input type="search" id="spec-search" value="${attribute(specQuery)}" placeholder="${attribute(t("specsSearch"))}" autocomplete="off" spellcheck="false">
+            </div>
+            <div id="spec-list">${specListBody()}</div>
+        </section>`;
+}
+
+/** A spec's text by its id, for the tip on a task's link; "" for one the project does not keep. */
+function specText(id)
+{
+    return data.specs?.list.find((spec) => spec.id === id)?.text ?? "";
+}
+
+/** The specs the filter and the search keep, under their sections and groups, in the file's order. */
+function specListBody()
+{
+    const terms = searchTerms(specQuery);
+    const kept = data.specs.list.filter((spec) => (specFilter === "all" ? spec.state !== "dropped" : spec.state === specFilter)
+        && terms.every((term) => folded(`${spec.id} ${spec.text} ${spec.section} ${spec.group}`).includes(term)));
+    let html = "";
+    let section = null;
+    let group = null;
+
+    for (const spec of kept) {
+        if (spec.section !== section) {
+            html += `${section === null ? "" : "</ul>"}<h3 class="spec-section">${escape(spec.section || t("specsNoSection"))}</h3><ul class="rows">`;
+            section = spec.section;
+            group = null;
+        }
+
+        if (spec.group && spec.group !== group) {
+            html += `<li class="spec-group">${escape(spec.group)}</li>`;
+            group = spec.group;
+        }
+
+        html += specRow(spec);
+    }
+
+    return kept.length ? `${html}</ul>` : `<p class="hint">${escape(t("specsNone"))}</p>`;
+}
+
+function specRow(spec)
+{
+    const state = (task) => stateName(task.state);
+    const tasks = spec.tasks.map((task) => `<button type="button" class="link-button" data-go-task="${attribute(task.id)}" data-tip="${attribute(escape(task.text))}">${escape(task.id)} · ${escape(state(task))}</button>`);
+    const code = spec.files.slice(0, 3).map((file) => `<code>${escape(file.file)}:${file.line}</code>`);
+    const more = spec.files.length > 3 ? `<span class="hint" data-tip="${attribute(spec.files.slice(3).map((file) => `${escape(file.file)}:${file.line}`).join("<br>"))}">+${spec.files.length - 3}</span>` : "";
+    const links = [
+        tasks.length ? `<span><b>${escape(t("specTasks"))}</b> ${tasks.join(" ")}</span>` : "",
+        spec.decisions.length ? `<span><b>${escape(t("linkDecisions"))}</b> ${escape(spec.decisions.join(", "))}</span>` : "",
+        code.length ? `<span><b>${escape(t("specCode"))}</b> ${code.join(" ")}${more}</span>` : "",
+    ].filter(Boolean);
+
+    return `<li class="row spec" id="spec-${spec.number}">
+            <span class="spec-id">${escape(spec.id)}</span>
+            <div><div class="spec-text">${inline(spec.text)}</div>${links.length ? `<div class="task-links">${links.join("")}</div>` : ""}</div>
+            <span class="spec-state ${spec.state}">${escape(t(`specState_${spec.state}`))}</span>
+            ${spec.state === "dropped" ? "<span></span>" : `<button type="button" class="action small" data-new-spec-task="${attribute(spec.id)}" aria-label="${attribute(t("specNewTask", spec.id))}" data-tip="${attribute(escape(t("specNewTask", spec.id)))}">＋</button>`}
+        </li>`;
+}
+
+/** The specs' list drawn again for a filter or a search, the focus where it was. */
+function refreshSpecs(focusId)
+{
+    document.getElementById("spec-list").innerHTML = specListBody();
+    document.querySelectorAll("[data-spec-filter]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.specFilter === specFilter)));
+
+    if (focusId) {
+        document.getElementById(focusId)?.focus();
+    }
 }
 
 /** The proposals waiting, as the panel orders them: by priority, those without one last, then the oldest, then by their place. */
@@ -2889,7 +3069,7 @@ function taskRow(task, isUnder = false)
     const when = column === "done" ? `<span>✓ ${escape(formatDay(task.done ?? task.archived))}</span>` : waitOrAge(task);
     const work = worker || held?.colleague ? `<span class="work">⚒︎ ${escape((worker?.name ?? held.colleague).split(" ")[0])}</span>` : "";
 
-    return `<li class="row ${column} ${isUnder ? "part" : ""}">
+    return `<li class="row ${column} ${isUnder ? "part" : ""}" id="list-task-${task.id}">
             ${face(task)}
             <span class="marks">${typeIcon(task)}${priorityControl(task, "list")}</span>
             <div>${expandButton(`list-${name}`, `<span class="id">${escape(name)}</span>${escape(task.text)}`)}
@@ -2979,6 +3159,8 @@ function taskLinks(task, isUnder = false)
         line(t("linkParts"), task.parts),
         line(t("linkWaitsFor"), task.after),
         line(t("linkWaitedBy"), task.waitedBy),
+        // The specs it does, each a link to its row in the specifications' tab.
+        task.specs?.length ? `<span><b>${escape(t("linkSpecs"))}</b> ${task.specs.map((spec) => `<button type="button" class="link-button" data-go-spec="${attribute(spec)}" data-tip="${attribute(escape(specText(spec)))}">${escape(spec)}</button>`).join(" ")}</span>` : "",
         line(t("linkSee"), task.see),
         line(t("linkSeenFrom"), task.seenFrom),
         task.noteHref ? `<a href="${attribute(task.noteHref)}" target="_blank" rel="noopener">${escape(t("openNote"))}</a>` : "",
@@ -3053,6 +3235,7 @@ function taskForm(task)
                         ? `<select id="form-field-${key}-${id}">${["", ...own.values].map((value) => option(value, value || "—", task?.fields?.[key] ?? "")).join("")}</select>`
                         : `<input type="text" id="form-field-${key}-${id}" value="${attribute(task?.fields?.[key] ?? "")}">`)).join("")}
                     ${(task?.parts ?? []).length ? "" : field("parent", t("linkPartOf"), `<select id="form-parent-${id}">${[...new Set([...parents, ...(task?.parent ? [task.parent] : [])])].map((name) => option(name, name ? parentLabel(name) : "—", task?.parent ?? "")).join("")}</select>`)}
+                    ${data.specs ? field("specs", t("linkSpecs"), `<input type="text" id="form-specs-${id}" list="spec-ids" value="${attribute(task ? (task.specs ?? []).join(", ") : newTaskSpecs)}" placeholder="${attribute(`${data.prefixes.spec}-12, ${data.prefixes.spec}-14`)}"><datalist id="spec-ids">${data.specs.list.filter((spec) => spec.state !== "dropped").map((spec) => `<option value="${attribute(spec.id)}">${escape(spec.text.slice(0, 80))}</option>`).join("")}</datalist>`) : ""}
                 </div>
                 <div class="actions">
                     <button type="button" class="action primary" data-save-task="${id}">${t("saveTask")}</button>
@@ -3087,6 +3270,14 @@ async function saveTask(id)
     }
 
     const changed = task ? Object.fromEntries(Object.entries(fields).filter(([key, current]) => (key === "fields" ? Object.keys(current).length > 0 : current !== String((key === "priority" ? task.priority : task[key]) ?? "")))) : fields;
+    // The specs it does go in its see, beside the tasks and decisions it points to; written only when they changed.
+    const specs = (value("specs").match(new RegExp(`\\b${data.prefixes.spec}-\\d+\\b`, "gi")) ?? []).map((one) => one.toUpperCase());
+
+    if (data.specs && specs.join(", ") !== (task?.specs ?? []).join(", ")) {
+        changed.see = [...(task?.see ?? []), ...new Set(specs)].join(", ");
+    }
+
+    newTaskSpecs = "";
     editing = null;
 
     if (task && Object.keys(changed).length === 0) {
@@ -3141,6 +3332,7 @@ function setupBoard()
             saveTask(target.dataset.saveTask);
         } else if (target.hasAttribute("data-cancel-task")) {
             editing = null;
+            newTaskSpecs = "";
             document.getElementById("task-list").innerHTML = taskListBody();
             lastData = "";
             load();
@@ -3168,6 +3360,25 @@ function setupBoard()
             decisionLimit += 100;
             document.getElementById("decision-list").innerHTML = decisionListBody();
             document.getElementById(first ? `decision-${first.number}` : "decision-search")?.focus();
+        } else if (target.dataset.specFilter) {
+            specFilter = target.dataset.specFilter;
+            refreshSpecs(target.id);
+        } else if (target.dataset.newSpecTask) {
+            // A task for a spec: the list's form, opened in the tasks' tab, citing it.
+            newTaskSpecs = target.dataset.newSpecTask;
+            editing = "new";
+            selectTab(document.getElementById("tab-tasks"));
+            document.getElementById("task-list").innerHTML = taskListBody();
+            document.getElementById("form-text-new")?.focus();
+        } else if (target.dataset.goSpec) {
+            selectTab(document.getElementById("tab-specs"));
+            document.getElementById(`spec-${target.dataset.goSpec.split("-").at(-1)}`)?.scrollIntoView({ block: "center" });
+        } else if (target.dataset.goTask) {
+            // A task a spec names, in the list of all the tasks, brought into view.
+            Object.assign(taskFilter, { state: "all", priority: "all", type: "all", who: "all", goal: "all" });
+            selectTab(document.getElementById("tab-tasks"));
+            refreshTaskList();
+            document.getElementById(`list-task-${target.dataset.goTask.split("-").at(-1)}`)?.scrollIntoView({ block: "center" });
         }
     });
     app.addEventListener("change", (event) => {
@@ -3184,6 +3395,9 @@ function setupBoard()
             const found = foundLine(matchingDecisions().length);
             document.getElementById("decision-found").textContent = found;
             announce(found, 600);
+        } else if (event.target.id === "spec-search") {
+            specQuery = event.target.value;
+            refreshSpecs();
         }
     });
     // A goal's lane, opened or closed by hand, stays so; toggle does not bubble, so it is caught on its way down.

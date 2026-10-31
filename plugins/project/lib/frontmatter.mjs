@@ -7,12 +7,14 @@ const ordered = ["title", "description", "type", "created", "updated"];
 const day = /^\d{4}-\d{2}-\d{2}$/;
 
 /** A text's frontmatter and the rest: { data, body }; data empty and body the whole text when it has none, or one that does not read. */
-export function splitFrontmatter(text)
+export function splitFrontmatter(given)
 {
-    const match = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(text ?? "");
+    // A byte order mark some editors write first is no part of the text.
+    const text = String(given ?? "").replace(/^﻿/, "");
+    const match = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(text);
 
     if (!match) {
-        return { data: {}, body: text ?? "" };
+        return { data: {}, body: text };
     }
 
     try {

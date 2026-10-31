@@ -9,7 +9,8 @@ export const priorityKeys = ["P1", "P2", "P3"];
 
 // The project's core files and folders, named in English whatever the project's language: the words inside them follow the language.
 // A project's own files and its extensions are named as the user likes.
-export const coreFiles = { plan: "PLAN.md", tasks: "TASKS.md", decisions: "DECISIONS.md", archive: "archive/TASKS-archive.md", index: "README.md", archiveFolder: "archive", notes: "tasks", releases: "releases" };
+// The specifications' file is there only in the projects that keep one.
+export const coreFiles = { plan: "PLAN.md", tasks: "TASKS.md", decisions: "DECISIONS.md", specs: "SPECS.md", archive: "archive/TASKS-archive.md", index: "README.md", archiveFolder: "archive", notes: "tasks", releases: "releases" };
 
 // The names the Italian preset gave before the core went English, still read where a project has them and not the new ones, until
 // `init.mjs rename` renames them.

@@ -14,6 +14,7 @@ const commands = {
     backlog: join(here, "backlog.mjs"),
     plan: join(here, "plan.mjs"),
     decisions: join(here, "decisions.mjs"),
+    specs: join(here, "specs.mjs"),
     check: join(here, "check.mjs"),
     init: join(here, "init.mjs"),
     snapshot: join(here, "snapshot.mjs"),

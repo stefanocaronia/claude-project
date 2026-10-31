@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { compareVersions, nextVersion, parseRelease, renderRelease, unreleased } from "../lib/release.mjs";
+import { compareVersions, messageSummary, nextVersion, parseRelease, renderRelease, unreleased } from "../lib/release.mjs";
 import { splitFrontmatter } from "../lib/frontmatter.mjs";
 
 const scripts = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts");
@@ -61,7 +61,15 @@ test("a release groups the work since the last one: status says what is done and
     assert.ok(!JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: root, encoding: "utf8", env: env() }).stdout).some((finding) => /releases/.test(finding.file ?? "")));
 });
 
-test("the repo's tags are the versions, the notes go with theirs; with neither, the package's version; a tag holds the work done by its day", { skip: spawnSync("git", ["--version"]).status === 0 ? false : "no git here" }, () => {
+test("a version without notes takes its summary from a message: the name and version it opens with gone, its sentences while they fit", () => {
+    assert.equal(messageSummary("rpg-engine 0.9.0: a game system's text in the campaign's language (D-542), and an effect that ended named in the journal.\n\nMore.", "0.9.0"), "A game system's text in the campaign's language (D-542), and an effect that ended named in the journal.");
+    assert.equal(messageSummary("v0.9.0", "0.9.0"), "");
+    assert.equal(messageSummary("Release 0.9.0", "0.9.0"), "");
+    const long = messageSummary(`engine 1.0.0: the first. ${"A long sentence that goes on and on. ".repeat(10)}`, "1.0.0");
+    assert.ok(long.length <= 200 && long.startsWith("The first. A long sentence"));
+});
+
+test("the repo's tags are the versions, the notes go with theirs; with neither, the package's version; a tag holds the work done by its day", { skip: spawnSync("git", ["--version"]).status === 0 ? false : "no git here" }, async () => {
     const tagged = mkdtempSync(join(tmpdir(), "claude-project-tags-"));
     const write = (path, text) => {
         mkdirSync(dirname(join(tagged, path)), { recursive: true });
@@ -78,6 +86,11 @@ test("the repo's tags are the versions, the notes go with theirs; with neither, 
     git("-c", "user.name=T", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "one");
     git("tag", "v0.9.1");
     git("tag", "weather-v0.2.3");
+    git("tag", "-a", "v0.9.0", "-m", "v0.9.0");
+    // A tag without notes: its summary from its own message when it says more than the version, else from its commit's.
+    const { readReleases, loadProject } = await import("../scripts/project.mjs");
+    const releases = readReleases(loadProject(tagged).config);
+    assert.deepEqual(releases.map(({ version, summary, source }) => [version, summary, source]), [["0.9.0", "One", "commit"], ["0.9.1", "One", "commit"]]);
     // The tag holds T-1, done before its day; T-2 is still to release, from v0.9.1 and not from the package.
     assert.match(release("status").stdout, /Last release: v0\.9\.1[\s\S]*Done since: 1 tasks[\s\S]*Suggested: v0\.10\.0/);
     assert.match(release("write", "0.10.0", "--summary", "The map comes.").stdout, /v0\.10\.0/);

@@ -8,13 +8,14 @@ import { fileURLToPath } from "node:url";
 import { parseBacklog, renderArchive, renderBacklog } from "../lib/backlog.mjs";
 import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
 import { parseDecisions } from "../lib/decisions.mjs";
+import { citedSpecs, parseSpecs } from "../lib/specs.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { legacyFiles } from "../lib/words.mjs";
 import { firstParagraph, joinFrontmatter, splitFrontmatter, titleOf } from "../lib/frontmatter.mjs";
 import { planGoals } from "../lib/plan.mjs";
 import { decisionLinks, dependencies, partsOf, seenFrom, todoLinks } from "../lib/links.mjs";
 import { dueOf, isStale } from "../lib/schedule.mjs";
-import { compareVersions, parseRelease } from "../lib/release.mjs";
+import { compareVersions, messageSummary, parseRelease } from "../lib/release.mjs";
 import { firstName, parseTodo } from "../lib/todos.mjs";
 
 const lockWait = 10_000;
@@ -146,6 +147,24 @@ export function readDecisions(config)
     return parseDecisions(read(config.files.decisions), config.words);
 }
 
+/** The specifications, when the project keeps them: { specs, unread }; none without the file. */
+export function readSpecs(config)
+{
+    return existsSync(config.files.specs) ? parseSpecs(read(config.files.specs), config.words, config.prefixes.spec) : { specs: [], unread: [] };
+}
+
+/** Where the files name each spec: { number, file, line, isCode } for every S-n in the files the configuration's cites name, the
+ * specifications' own file aside; `isCode` for the code and the tests, outside the docs and the colleagues' memory, which cover it. */
+export function specCitations(config)
+{
+    const own = normalized(config.files.specs);
+    const inside = (file, folder) => normalized(file).startsWith(`${normalized(folder)}/`);
+    return citingFiles(config).filter((file) => normalized(file) !== own).flatMap((file) => {
+        const isCode = !inside(file, config.docs) && !inside(file, config.memory) && !inside(realPath(file), realPath(config.docs));
+        return read(file).split(/\r?\n/).flatMap((line, index) => citedSpecs(line, config.prefixes.spec).map((number) => ({ number, file: shown(config, file), line: index + 1, isCode })));
+    });
+}
+
 /** The colleagues of Crew: each agent of the agents folder, by id and first name. */
 export function colleagues(config)
 {
@@ -233,6 +252,7 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
     const decisions = decisionLinks(tasks, readDecisions(config).decided, config.prefixes).byTask;
     const holds = readHolds(config);
     const now = today();
+    const isSpec = (one) => one.startsWith(`${config.prefixes.spec}-`);
 
     return new Map(tasks.map((task) => {
         const id = `${prefix}-${task.id}`;
@@ -248,7 +268,9 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
             partsDone: own.filter(isClosed).length,
             nextPart: next ? `${prefix}-${next.id}` : null,
             after: task.after,
-            see: task.see,
+            // The specs it does apart from the rest it points to.
+            see: task.see.filter((one) => !isSpec(one)),
+            specs: task.see.filter(isSpec),
             blockedBy: graph.blockers(id),
             chain: graph.chain(id),
             waitedBy: tasks.filter((other) => other.after.includes(id)).map((other) => `${prefix}-${other.id}`),
@@ -371,12 +393,12 @@ export function isDoc(config, path)
     return docFiles(config).some((file) => normalized(file) === wanted);
 }
 
-/** A document's kind, for its frontmatter: the plan, the backlog, its archive, the decisions, the index, a task's note, a release's notes,
- * or any other doc. */
+/** A document's kind, for its frontmatter: the plan, the backlog, its archive, the decisions, the specifications, the index, a task's
+ * note, a release's notes, or any other doc. */
 export function docType(config, path)
 {
     const file = normalized(path);
-    const kinds = { plan: config.files.plan, backlog: config.files.tasks, archive: config.files.archive, decisions: config.files.decisions, index: config.files.index };
+    const kinds = { plan: config.files.plan, backlog: config.files.tasks, archive: config.files.archive, decisions: config.files.decisions, specs: config.files.specs, index: config.files.index };
     const kind = Object.entries(kinds).find(([, own]) => normalized(own) === file)?.[0];
     return kind ?? (normalized(dirname(path)) === normalized(config.files.notes) ? "note" : normalized(dirname(path)) === normalized(config.files.releases) ? "release" : "doc");
 }
@@ -394,15 +416,16 @@ export function stampDoc(config, path, text, touched = false)
     const type = given.type ?? old.data.type ?? docType(config, path);
     const name = path.split("/").at(-1);
     const kept = { ...old.data, ...given };
+    const core = ["plan", "backlog", "archive", "decisions", "specs", "index"];
     const description = kept.description
-        || (["plan", "backlog", "archive", "decisions", "index"].includes(type) ? say(`docDescription_${type}`)
+        || (core.includes(type) ? say(`docDescription_${type}`)
         : type === "note" ? say("docDescription_note", { id: name.replace(/\.md$/i, "") })
         : type === "release" ? firstParagraph(body.replace(/^#.*$/m, "")) || say("docDescription_release", { version: name.replace(/\.md$/i, "") })
         : firstParagraph(body) || titleOf(body, name));
     const data = {
         ...kept,
         // A core file without a heading of its own takes its kind's name in the project's language.
-        title: kept.title || (/^# /m.test(body) || !["plan", "backlog", "archive", "decisions", "index"].includes(type) ? titleOf(body, name) : say(`docTitle_${type}`)),
+        title: kept.title || (/^# /m.test(body) || !core.includes(type) ? titleOf(body, name) : say(`docTitle_${type}`)),
         description,
         type,
         created: kept.created || (previous === null ? today() : gitDay(path, "first") ?? today()),
@@ -435,10 +458,11 @@ function normalized(path)
 }
 
 /** Where a path really is, past any link on the way; the path itself when it does not exist. */
-/** The project's releases, the oldest version first: { version, day, summary, tasks, text, tagged, tagOnly }. The repo's tags make them
- * (v1.2.3 or 1.2.3), each on its tag's day; the notes in <docs>/releases go with their version's tag. Notes not tagged yet (written,
- * the tag still to make) are releases too, `tagged` false; a tag without notes has `tagOnly`. With neither, the version of the project's
- * package.json, without a day: a project that released before the plugin starts from where it is. */
+/** The project's releases, the oldest version first: { version, day, summary, tasks, text, tagged, tagOnly, source }. The repo's tags
+ * make them (v1.2.3 or 1.2.3), each on its tag's day; the notes in <docs>/releases go with their version's tag. Notes not tagged yet
+ * (written, the tag still to make) are releases too, `tagged` false; a tag without notes has `tagOnly`, its summary and text from the
+ * tag's own message when it says more than the version, else from the commit it marks (`source` "tag" or "commit"). With neither, the
+ * version of the project's package.json, without a day: a project that released before the plugin starts from where it is. */
 export function readReleases(config)
 {
     const notes = new Map((!existsSync(config.files.releases) ? [] : readdirSync(config.files.releases))
@@ -449,16 +473,24 @@ export function readReleases(config)
             return release ? [release.version, { ...release, text }] : null;
         })
         .filter(Boolean));
-    const tags = new Map(git(config.root, ["for-each-ref", "--format=%(refname:short) %(creatordate:short)", "refs/tags"]).split("\n")
-        .map((line) => /^v?(\d+\.\d+\.\d+) (\d{4}-\d{2}-\d{2})$/.exec(line.trim())).filter(Boolean)
-        .map(([, version, day]) => [version, day]));
+    // Each tag with its day, its own message (an annotated tag's) and its commit's, fields and tags apart by the ASCII separators.
+    const tags = new Map(git(config.root, ["for-each-ref", "--format=%(refname:short)%1f%(creatordate:short)%1f%(objecttype)%1f%(contents)%1f%(*contents)%1e", "refs/tags"])
+        .split("\x1e").map((record) => record.replace(/^\s+/, "").split("\x1f"))
+        .filter(([name, day]) => /^v?\d+\.\d+\.\d+$/.test(name ?? "") && /^\d{4}-\d{2}-\d{2}$/.test(day ?? ""))
+        .map(([name, day, type, own = "", marked = ""]) => {
+            const version = name.replace(/^v/, "");
+            const message = (type === "tag" ? own : "").replace(/-----BEGIN PGP SIGNATURE-----[\s\S]*$/, "").trim();
+            const [text, source] = messageSummary(message, version) ? [message, "tag"] : [(type === "tag" ? marked : own).trim(), "commit"];
+            return [version, { day, text, source }];
+        }));
     const releases = [...new Set([...tags.keys(), ...notes.keys()])].map((version) => {
         const written = notes.get(version);
-        const day = tags.get(version);
-        return written ? { ...written, day: day ?? written.day, tagged: day !== undefined, tagOnly: false } : { version, day, summary: "", tasks: [], text: "", tagged: true, tagOnly: true };
+        const tag = tags.get(version);
+        return written ? { ...written, day: tag?.day ?? written.day, tagged: tag !== undefined, tagOnly: false, source: "notes" }
+            : { version, day: tag.day, summary: messageSummary(tag.text, version), tasks: [], text: tag.text, tagged: true, tagOnly: true, source: tag.source };
     });
     const packaged = releases.length === 0 ? packageVersion(config) : null;
-    return [...releases, ...(packaged ? [{ version: packaged, day: "", summary: "", tasks: [], text: "", tagged: false, tagOnly: true }] : [])]
+    return [...releases, ...(packaged ? [{ version: packaged, day: "", summary: "", tasks: [], text: "", tagged: false, tagOnly: true, source: "package" }] : [])]
         .sort((first, second) => compareVersions(first.version, second.version));
 }
 

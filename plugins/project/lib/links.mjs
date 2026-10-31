@@ -98,12 +98,13 @@ export function listOf(given)
     return [...new Set(String(given ?? "").split(/[,\s]+/).filter((item) => item !== "" && item !== "-"))];
 }
 
-/** The names a suffix gives that are no task or todo id (in after), no task or decision (in see), no task (in in), no issue number (in
- * issue), no day (in due), no word (in type). */
+/** The names a suffix gives that are no task or todo id (in after), no task, decision or spec (in see), no task (in in), no issue number
+ * (in issue), no day (in due), no word (in type). */
 export function badLinks(kind, items, prefixes)
 {
     const task = `${escapeRegex(prefixes.task)}-\\d+`;
-    const patterns = { after: `^(${task}|#[\\w-]+-\\d+)$`, see: `^(${task}|${escapeRegex(prefixes.decision)}-\\d+)$`, in: `^${task}$`, issue: "^#\\d+$", due: "^\\d{4}-\\d{2}-\\d{2}$", type: "^[a-z][\\w-]*$", by: "^[^,()·]+$" };
+    const spec = prefixes.spec ? `|${escapeRegex(prefixes.spec)}-\\d+` : "";
+    const patterns = { after: `^(${task}|#[\\w-]+-\\d+)$`, see: `^(${task}|${escapeRegex(prefixes.decision)}-\\d+${spec})$`, in: `^${task}$`, issue: "^#\\d+$", due: "^\\d{4}-\\d{2}-\\d{2}$", type: "^[a-z][\\w-]*$", by: "^[^,()·]+$" };
     return items.filter((item) => !new RegExp(patterns[kind]).test(item));
 }
 

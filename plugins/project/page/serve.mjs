@@ -101,14 +101,16 @@ export async function listen(server, port)
  * (start, done, postpone, todo) or its priority set. Anything else is refused. */
 /** A change of the backlog the page asks, run through its command line: a task's state, its fields, a new task, a task archived, a
  * task made of a GitHub issue. A task the page adds is the creator's, the person the page's owner is. */
-function changeBacklog(config, { command, id, priority, issue, title, text, goal, type, to, due, effort, parent, fields: own }, creator)
+function changeBacklog(config, { command, id, priority, issue, title, text, goal, type, to, due, effort, parent, see, fields: own }, creator)
 {
     const task = /^[\w-]+-\d+$/.test(String(id)) ? String(id) : null;
     // A field's value as one line of text, without the line's separator; "" clears a field that may be empty.
     const clean = (value) => String(value).replace(/\s+/g, " ").replaceAll(" · ", " - ").trim().slice(0, 300);
     // The project's own fields, only those its configuration names.
     const extra = Object.fromEntries(Object.entries(own && typeof own === "object" ? own : {}).filter(([key, value]) => key in config.fields && typeof value === "string"));
-    const fields = Object.entries({ text, goal, p: priority, type, to, due, effort, in: parent, ...extra }).filter(([, value]) => typeof value === "string").flatMap(([name, value]) => [`--${name}`, clean(value)]);
+    // What it points to, the specs it does among them: names only, tasks, decisions and specs, checked by the backlog's command.
+    const links = typeof see === "string" ? see.split(/[,\s]+/).filter((one) => /^[\w]+-\d+$/.test(one)).join(", ") : undefined;
+    const fields = Object.entries({ text, goal, p: priority, type, to, due, effort, in: parent, see: links, ...extra }).filter(([, value]) => typeof value === "string").flatMap(([name, value]) => [`--${name}`, clean(value)]);
     const args = ["start", "done", "postpone", "todo", "archive"].includes(command) && task ? [command, task]
         : command === "set" && task && fields.length > 0 ? ["set", task, ...fields]
         : command === "add" && typeof text === "string" && clean(text) ? ["add", clean(text), ...fields.filter((_, index, all) => all[index - (index % 2)] !== "--text"), ...(creator ? ["--by", creator] : [])]

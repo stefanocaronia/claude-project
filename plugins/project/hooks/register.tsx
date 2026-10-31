@@ -18,7 +18,7 @@ const board = atom({ plugin: "project", key: "board" } as const, { snapshot: nul
 const holdsLast = 24 * 3_600_000;
 const view = atom({ plugin: "project", key: "view" } as const, { sections: {}, expanded: null, whole: {}, starting: {}, frozen: null }, { shape: "view-1" });
 // The sections open at the start, as Joseph's sketch has them: the decisions closed, the tile above says how many wait.
-const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, goals: true, decisions: true, releases: true };
+const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, goals: true, decisions: true, specs: true, releases: true };
 // How many rows a section shows before "show all".
 const rows: Record<string, number> = { doing: 5, rest: 10, postponed: 5, issues: 5, goals: 5, open: 3 };
 const proposalLength = 400;
@@ -409,6 +409,8 @@ export const register: Register = (on) => {
                 field(`see-${task.id}`, words("labelSee"), refs(`see-${task.id}`, (task.see ?? []).filter((one) => !(task.decisions ?? []).includes(one)))),
                 field(`seen-${task.id}`, words("labelSeenFrom"), refs(`seen-${task.id}`, task.seenFrom ?? [])),
                 field(`decisions-${task.id}`, words("labelDecisions"), refs(`decisions-${task.id}`, task.decisions ?? [])),
+                // The specs it does, each a link to the specifications' tab of the page.
+                field(`specs-${task.id}`, words("labelSpecs"), (task.specs ?? []).map((spec) => <Link key={`spec-${task.id}-${spec}`} href={`${snapshot.page}/#specs`}>{spec}</Link>)),
                 field(`code-${task.id}`, words("labelCode"), [
                     latest ? chip(`commits-${task.id}`, words("commitsCount", { count: task.commitCount, day: latest.day }), undefined, latest.url, latest.subject) : null,
                     ...(task.pulls ?? []).map((pull) => chip(`pull-${task.id}-${pull.number}`, `#${pull.number} ${pullState(pull)}`, pull.merged ? workColor : undefined, pull.url, pull.title)),
@@ -768,6 +770,19 @@ export const register: Register = (on) => {
                     ...(proposals.length === 0 ? [<Text key="none-open" dimColor>{words("noneOpen")}</Text>] : limited("open", proposals).map(proposalRow)),
                     more("open", proposals.length, "showAllDecisions"),
                 ])}
+                {/* The specifications, where the project keeps them: how far they are covered, those open tasks are doing, each a link to
+                    its row in the page, and all of them there. */}
+                {snapshot.specs ? section("specs", "▤", `${words("sectionSpecs")} · ${snapshot.specs.done}/${snapshot.specs.total}`, [
+                    <Text key="specs-counts" dimColor>{words("specsCounts", snapshot.specs)}</Text>,
+                    ...snapshot.specs.inProgress.slice(0, 5).map((spec) => (
+                        <Box key={`spec-${spec.id}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
+                            <Box flexShrink={0}><Link key={`spec-link-${spec.id}`} href={`${snapshot.page}/#specs`}>{spec.id}</Link></Box>
+                            <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden"><Text wrap="truncate-end">{spec.text}</Text></Box>
+                            <Box flexShrink={0}><Text dimColor>{spec.tasks.join(", ")}</Text></Box>
+                        </Box>
+                    )),
+                    <Link key="specs-all" href={`${snapshot.page}/#specs`}>{words("specsAll", { count: snapshot.specs.total })}</Link>,
+                ]) : null}
                 {/* The versions, the repo's tags, the newest first, each opening its notes in the page; what waits for the next; the whole
                     history in the page when there are more. */}
                 {section("releases", "🏷︎", `${words("sectionReleases")} · ${releases.total ?? releases.list.length}`, [

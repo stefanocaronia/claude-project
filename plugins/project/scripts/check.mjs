@@ -12,7 +12,7 @@ import { backlogProblems } from "./backlog.mjs";
 import { extensionChecks, loadExtensions } from "./extensions.mjs";
 import { readable } from "../lib/words.mjs";
 import { betterDescription, joinFrontmatter, splitFrontmatter } from "../lib/frontmatter.mjs";
-import { citingFiles, docFiles, isMain, legacyFormat, stampDoc, loadProject, read, readBacklog, readDecisions, readDependencies, readGoals, readTodos, runCli, shown, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
+import { citingFiles, docFiles, isMain, legacyFormat, stampDoc, loadProject, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, readTodos, runCli, shown, specCitations, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
 
 /** Every finding about the docs, from errors that must be fixed to notes for the cleanup: { severity, kind, file, line, message }. */
 export function check(config, say)
@@ -23,6 +23,7 @@ export function check(config, say)
 
     checkNumbering(config, say, decisions, add);
     checkReferences(config, say, decisions, add);
+    checkSpecs(config, say, add);
     checkRevisions(config, say, decisions, add);
     checkTodos(config, say, add);
     checkBacklog(config, say, add);
@@ -131,6 +132,37 @@ function checkReferences(config, say, decisions, add)
                 }
             }
         }
+    }
+}
+
+/** The specifications, where the project keeps them: a number used twice, a line that opens as a spec and does not read, a spec cited
+ * anywhere (a task's see, a decision, the code, a doc) that the file does not have. */
+function checkSpecs(config, say, add)
+{
+    if (!existsSync(config.files.specs)) {
+        return;
+    }
+
+    const prefix = config.prefixes.spec;
+    const { specs, unread } = readSpecs(config);
+    const seen = new Map();
+
+    for (const spec of specs) {
+        if (seen.has(spec.number)) {
+            add("error", "numbering", config.files.specs, spec.line, say("dupSpec", { id: `${prefix}-${spec.number}`, other: seen.get(spec.number) }));
+        } else {
+            seen.set(spec.number, spec.line);
+        }
+    }
+
+    for (const line of unread) {
+        add("error", "specs", config.files.specs, line.line, say("unreadSpec", { prefix }));
+    }
+
+    const name = config.files.specs.split("/").at(-1);
+
+    for (const cited of specCitations(config).filter((one) => !seen.has(one.number))) {
+        add("error", "references", `${config.root}/${cited.file}`, cited.line, say("unknownSpec", { id: `${prefix}-${cited.number}`, file: name }));
     }
 }
 

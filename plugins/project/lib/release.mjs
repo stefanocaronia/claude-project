@@ -26,6 +26,33 @@ export function parseRelease(text, prefix = "T")
     return head ? { version: head[1], day: head[2], summary, tasks } : null;
 }
 
+/** A version's summary from its tag's or its commit's message, for a version with no notes: the message's first paragraph without the
+ * name and version it opens with («engine 0.9.1: …»), its sentences while they fit in about 200 characters; "" when it says nothing more
+ * than the version. */
+export function messageSummary(message, version)
+{
+    const number = String(version).replaceAll(".", "\\.");
+    const first = String(message ?? "").trim().split(/\r?\n\s*\r?\n/)[0].replace(/\s+/g, " ").trim();
+    const text = first.replace(new RegExp(`^[^:]{0,60}\\bv?${number}\\b[^:]{0,20}:\\s*`), "").replace(new RegExp(`^(release\\s+)?v?${number}\\.?$`, "i"), "");
+
+    if (!text) {
+        return "";
+    }
+
+    let summary = "";
+
+    for (const sentence of text.split(/(?<=[.!?])\s+(?=[A-ZÀ-ÖØ-Þ«"'(])/)) {
+        if (summary && summary.length + 1 + sentence.length > 200) {
+            break;
+        }
+
+        summary = summary ? `${summary} ${sentence}` : sentence;
+    }
+
+    summary = summary.length > 200 ? `${summary.slice(0, 197).replace(/\s+\S*$/, "")}…` : summary;
+    return summary.charAt(0).toUpperCase() + summary.slice(1);
+}
+
 /** Where a project stands with its releases: the last, the work done since, the next version it suggests, and what makes one due —
  * a goal closed since the last release, or an urgent fix (a P1 bug). */
 export function releaseState(releases, tasks, goals, prefix = "T")

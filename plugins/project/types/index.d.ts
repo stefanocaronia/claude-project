@@ -45,6 +45,8 @@ export type Task = {
     started?: string | null;
     stale?: boolean;
     decisions?: string[];
+    /** The specs it does, S-12, out of its see. */
+    specs?: string[];
     /** Its GitHub issue, `(issue: #34)`, as GitHub has it; null without one, or without gh. */
     issue?: string | null;
     issueInfo?: { number: number; title: string; state: string; url: string | null; closed: string | null } | null;
@@ -79,6 +81,8 @@ export type Snapshot = {
     github?: { tools: boolean; repo: string | null };
     /** The last versions, the newest first, and how many tasks wait for the next one, with the number it suggests. */
     releases?: { list: { version: string; day: string; summary: string; count: number | null }[]; total?: number; pending: number; next: string };
+    /** The specifications, where the project keeps them: the counts by coverage, and those open tasks are doing, with those tasks. */
+    specs?: { total: number; done: number; doing: number; open: number; inProgress: { id: string; number: number; text: string; tasks: string[] }[] } | null;
     /** The project's own fields on a task, by key: their name, and the values allowed when the configuration lists them. */
     fields?: Record<string, { name: string; values: string[] | null }>;
     today: string;

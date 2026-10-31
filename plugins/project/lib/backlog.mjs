@@ -113,7 +113,7 @@ export function nextId(tasks)
 }
 
 /** What makes a task wrong before it is written, as messages; empty when it is right. */
-export function taskErrors(task, { words, people, goals, types = Object.keys(words.types ?? {}), fields = {}, prefix = "T", decisionPrefix = "D", say })
+export function taskErrors(task, { words, people, goals, types = Object.keys(words.types ?? {}), fields = {}, prefix = "T", decisionPrefix = "D", specPrefix = "S", say })
 {
     const errors = [];
     const efforts = Object.values(words.efforts);
@@ -147,10 +147,10 @@ export function taskErrors(task, { words, people, goals, types = Object.keys(wor
     const messages = { after: "badAfter", see: "badSee", in: "badIn", issue: "badIssue", due: "badDue", type: "badType", by: "badBy" };
 
     for (const kind of Object.keys(lists)) {
-        const bad = badLinks(kind, lists[kind], { task: prefix, decision: decisionPrefix });
+        const bad = badLinks(kind, lists[kind], { task: prefix, decision: decisionPrefix, spec: specPrefix });
 
         if (bad.length > 0) {
-            errors.push(say(messages[kind], { list: bad.join(", "), task: `${prefix}-12`, decision: `${decisionPrefix}-2` }));
+            errors.push(say(messages[kind], { list: bad.join(", "), task: `${prefix}-12`, decision: `${decisionPrefix}-2`, spec: `${specPrefix}-4` }));
         }
     }
 

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sayer } from "../lib/messages.mjs";
-import { findRoot, git, loadProject, onPath, ProjectError, projectCommandOnPath, projectName } from "../scripts/project.mjs";
+import { findRoot, git, loadProject, onPath, ProjectError, projectCommandOnPath, projectName, readSpecs, shown } from "../scripts/project.mjs";
 
 const from = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
@@ -53,7 +53,10 @@ async function ensure()
     // Claude is told to call it in place of the scripts' long path.
     // Without git or gh, Claude is told to offer the github skill when the user works with GitHub.
     const missing = ["git", "gh"].filter((name) => !onPath(name));
-    const told = [context, projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null].filter(Boolean).join(" ");
+    // With specifications, Claude is told they are there and how the work ties to them.
+    const specs = existsSync(config.files.specs) ? readSpecs(config).specs.filter((spec) => !spec.superseded) : null;
+    const specsLine = specs ? say("specsAtStart", { file: shown(config, config.files.specs), count: specs.length }) : null;
+    const told = [context, projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null, specsLine].filter(Boolean).join(" ");
     console.log(JSON.stringify({ systemMessage: context === say("served", { url }) ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: told } }));
 }
 
