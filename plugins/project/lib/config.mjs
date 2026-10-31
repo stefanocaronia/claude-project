@@ -30,7 +30,9 @@ export function readConfig(text, root)
     }
 
     const language = given.language ?? defaults.language;
-    const words = wordsOf(language, given.words);
+    const fields = fieldsOf(given.fields);
+    // The words carry the project's field keys too, so that a backlog line reads and writes them wherever the words go.
+    const words = { ...wordsOf(language, given.words), fields: Object.keys(fields) };
     const files = { ...words.files, ...(given.files ?? {}) };
     const docs = resolve(root, given.docs ?? defaults.docs);
     const config = {
@@ -64,6 +66,9 @@ export function readConfig(text, root)
         extensions: list(given.extensions, defaults.extensions).map((path) => resolve(root, path)),
         // The task types, by key: the language's five (bug, feature, chore, research, test: a test or a playtest) and those the project adds, `types: { design: Design }`.
         types: { ...words.types, ...(isMap(given.types) ? Object.fromEntries(Object.entries(given.types).map(([key, name]) => [key, String(name)])) : {}) },
+        // The project's own fields on a task, by key: `fields: { system: { name: Sistema, values: [5e, ironsworn] } }`, or `system: Sistema`
+        // for any value; written at the end of a line, `(system: 5e)`.
+        fields,
         // The project's key documents (a game's GDD, a business plan, a specification), the first to read: { name, path }.
         documents: (Array.isArray(given.documents) ? given.documents : []).map((document) => ({ name: String(document.name ?? document.path), path: resolve(root, String(document.path)) })),
     };
@@ -123,6 +128,30 @@ function clean(path)
     }
 
     return head + parts.join("/");
+}
+
+/** The fields a project adds to its tasks, from the configuration: { key: { name, values } }, values null when any goes. A key is a
+ * lowercase word that no suffix or option of the backlog already uses. */
+function fieldsOf(given)
+{
+    const taken = ["after", "see", "in", "issue", "due", "type", "by", "p", "effort", "to", "goal", "text", "state", "json", "done", "atomic", "format", "all"];
+
+    if (given === undefined || given === null) {
+        return {};
+    }
+
+    if (!isMap(given)) {
+        throw new Error(`fields must be a map of the tasks' own fields (fields: { system: { name: System, values: [5e, ironsworn] } }), not ${Array.isArray(given) ? "a list" : typeof given}.`);
+    }
+
+    return Object.fromEntries(Object.entries(given).map(([key, field]) => {
+        if (!/^[a-z][a-z0-9-]*$/.test(key) || taken.includes(key)) {
+            throw new Error(`fields: «${key}» cannot be a field's key: a lowercase word that is none of ${taken.join(", ")}.`);
+        }
+
+        const values = isMap(field) && Array.isArray(field.values) ? field.values.map(String) : null;
+        return [key, { name: String(isMap(field) ? (field.name ?? key) : (field ?? key)), values }];
+    }));
 }
 
 function isMap(value)

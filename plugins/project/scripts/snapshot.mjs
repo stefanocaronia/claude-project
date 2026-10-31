@@ -9,7 +9,7 @@ import { plainMarkdown } from "../lib/text.mjs";
 import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
 import { check } from "./check.mjs";
 import { readCode, readIssues, readOwner } from "./code.mjs";
-import { extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
+import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
 import { colleagues, findRoot, isMain, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readGoals, runCli, taskLinks, today, todoFiles } from "./project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
@@ -27,9 +27,9 @@ export async function snapshot(config, say, withHealth = true)
     const counted = tasks.filter((task) => task.done || openStates.includes(task.state));
     const { open } = readDecisions(config);
     const now = today();
-    const findings = withHealth ? check(config, say) : null;
-    const page = `http://localhost:${config.page.port}`;
     const extensions = await loadExtensions(config);
+    const findings = withHealth ? [...check(config, say), ...(await extensionChecks(config, say, extensions))] : null;
+    const page = `http://localhost:${config.page.port}`;
     const links = taskLinks(config, tasks);
     const code = readCode(config);
     const issues = readIssues(config);
@@ -46,6 +46,8 @@ export async function snapshot(config, say, withHealth = true)
         links: await panelLinks(config, say, extensions, page),
         problems: extensionErrors(extensions),
         people: config.people,
+        // The project's own fields on a task, by key, with their names.
+        fields: config.fields,
         // The key documents, each opened through the project's page.
         // The open GitHub issues no task does yet, to take into the backlog.
         issues: freeIssues(issues, tasks).map(({ number, title, url }) => ({ number, title, url })),

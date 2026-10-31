@@ -1,7 +1,8 @@
 // What a task waits for and what it points to, written as Crew writes them at the end of a line: `(after: T-62, #giulia-1)` names
 // the tasks this one waits for, a backlog task or a colleague's todo line by its id; `(see: T-12, D-2)` names tasks and decisions to
 // read with it; `(in: T-23)` names the large task this one is a part of; `(issue: #34)`, the GitHub issue it does; `(due: 2026-11-15)`,
-// the day it is due; `(type: bug)`, its label; `(by: Stefano)`, who created it. A todo line that is a colleague's part of a backlog task carries the task's number where
+// the day it is due; `(type: bug)`, its label; `(by: Stefano)`, who created it; and the fields the project adds, `(system: 5e)`, each
+// one value written as given. A todo line that is a colleague's part of a backlog task carries the task's number where
 // Crew puts its id. Pure.
 import { escapeRegex } from "./text.mjs";
 
@@ -10,26 +11,35 @@ const lists = ["after", "see"];
 const singles = { in: "parent", issue: "issue", due: "due", type: "type", by: "by" };
 const kinds = [...lists, ...Object.keys(singles)];
 
-/** A text without its suffixes at the end, in any order, and what they name: { text, after, see, parent, issue, due, type }, lists
- * empty and the others null when it has none. */
-export function splitLinks(text)
+/** A text without its suffixes at the end, in any order, and what they name: { text, after, see, parent, issue, due, type, by, fields },
+ * lists empty and the others null when it has none; `fields` holds the project's own fields it carries, by key. */
+export function splitLinks(text, fields = [])
 {
     let rest = String(text);
-    const found = Object.fromEntries(kinds.map((kind) => [kind, []]));
+    const known = [...kinds, ...fields];
+    const found = Object.fromEntries(known.map((kind) => [kind, []]));
 
-    for (let match = suffixOf(rest); match; match = suffixOf(rest)) {
-        found[match.kind] = [...new Set([...listOf(match.items), ...found[match.kind]])];
+    for (let match = suffixOf(rest, known); match; match = suffixOf(rest, known)) {
+        found[match.kind] = fields.includes(match.kind) ? [match.items.trim()] : [...new Set([...listOf(match.items), ...found[match.kind]])];
         rest = rest.slice(0, match.index);
     }
 
-    return { text: rest.trim(), after: found.after, see: found.see, ...Object.fromEntries(Object.entries(singles).map(([kind, field]) => [field, found[kind][0] ?? null])) };
+    return {
+        text: rest.trim(),
+        after: found.after,
+        see: found.see,
+        ...Object.fromEntries(Object.entries(singles).map(([kind, field]) => [field, found[kind][0] ?? null])),
+        fields: Object.fromEntries(fields.filter((key) => found[key][0]).map((key) => [key, found[key][0]])),
+    };
 }
 
-/** The text with its suffixes at the end again, in their order, each only when it names something. */
-export function joinLinks(text, links = {})
+/** The text with its suffixes at the end again, in their order, each only when it names something; the project's fields last, in the
+ * order the configuration gives them. */
+export function joinLinks(text, links = {}, fields = [])
 {
     const suffix = (kind, items) => (items.length > 0 ? ` (${kind}: ${items.join(", ")})` : "");
-    return `${text}${lists.map((kind) => suffix(kind, links[kind] ?? [])).join("")}${Object.entries(singles).map(([kind, field]) => suffix(kind, links[field] ? [links[field]] : [])).join("")}`;
+    const own = fields.map((key) => suffix(key, links.fields?.[key] ? [links.fields[key]] : [])).join("");
+    return `${text}${lists.map((kind) => suffix(kind, links[kind] ?? [])).join("")}${Object.entries(singles).map(([kind, field]) => suffix(kind, links[field] ? [links[field]] : [])).join("")}${own}`;
 }
 
 /** The decisions and the tasks that name each other, both ways: a task's `(see: D-2)` and a decision whose text or why names a task.
@@ -201,8 +211,8 @@ function cyclesOf(waits)
     return [...cycles.values()];
 }
 
-function suffixOf(text)
+function suffixOf(text, known = kinds)
 {
-    const match = new RegExp(`\\s*\\((${kinds.join("|")}):\\s*([^()]*)\\)\\s*$`, "i").exec(text);
+    const match = new RegExp(`\\s*\\((${known.map(escapeRegex).join("|")}):\\s*([^()]*)\\)\\s*$`, "i").exec(text);
     return match ? { kind: match[1].toLowerCase(), items: match[2], index: match.index } : null;
 }

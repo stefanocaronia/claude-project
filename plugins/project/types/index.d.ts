@@ -10,6 +10,8 @@ export type Task = {
     created: string;
     /** Who created it, `(by: Stefano)`: Claude, a person or a colleague; null when the backlog does not say. */
     by?: string | null;
+    /** The project's own fields it carries, `(system: 5e)`, by key. */
+    fields?: Record<string, string>;
     goal: string;
     text: string;
     state: "doing" | "todo" | "postponed";
@@ -73,6 +75,8 @@ export type Snapshot = {
     types?: Record<string, string>;
     /** The closed parts of the large tasks still open. */
     doneParts?: DonePart[];
+    /** The project's own fields on a task, by key: their name, and the values allowed when the configuration lists them. */
+    fields?: Record<string, { name: string; values: string[] | null }>;
     today: string;
     page: string;
     /** The extensions' links: a page to open, or a path of the project's page to POST to. */

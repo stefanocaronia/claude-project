@@ -4,22 +4,29 @@
 //   node backlog.mjs start|done|postpone|todo T-12 [T-13…]
 //   node backlog.mjs archive T-12… | archive --done
 //   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34] [--due 2026-11-15] [--type bug] [--by Stefano]
+//     [--<field> <value>]   (a field of the project's configuration, `fields:`; "" clears it; add takes them too)
 //   node backlog.mjs add --issue 34 ["text"]   (a task from a GitHub issue, its title the text when none is given)
 //   node backlog.mjs issue-close T-12   (closes its GitHub issue with a comment: only on the user's yes)
 //   node backlog.mjs note T-12   (its note, written when missing: the path)
 //   node backlog.mjs show T-12… | list [--atomic] [--state doing] [--to <name>] [--p P1] [--goal "…"] [--json] | find <words>… | goals
-import { existsSync } from "node:fs";
+//   node backlog.mjs export [--format json|csv|<an extension's>] [--state todo] [--all]   (the open tasks, or all of them, on stdout)
+//   node backlog.mjs import <file> [--format json|csv|<an extension's>] [--by <name>]   (new tasks, numbered here; all or none)
+import { existsSync, readFileSync } from "node:fs";
+import { parseCsv, toCsv } from "../lib/csv.mjs";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
 import { codeView, issueOf } from "../lib/code.mjs";
 import { listOf, nestedParts, splitLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { stateKeys } from "../lib/words.mjs";
 import { closeIssue, readCode, readIssue, readIssues } from "./code.mjs";
+import { context, loadExtensions } from "./extensions.mjs";
 import { assignees, isMain, loadProject, notePath, ProjectError, readBacklog, readDecisions, readDependencies, readGoals, runCli, shown, taskLinks, today, withBacklogLock, write, writeBacklog } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
-const changes = ["add", "start", "done", "postpone", "todo", "archive", "set"];
-const flags = ["json", "done", "atomic"];
+const changes = ["add", "start", "done", "postpone", "todo", "archive", "set", "import"];
+const flags = ["json", "done", "atomic", "all"];
+// The columns of the backlog as CSV, the project's own fields after them.
+const csvColumns = ["id", "state", "priority", "effort", "to", "created", "goal", "type", "due", "parent", "after", "see", "by", "text", "started", "done", "archived"];
 
 /** What the backlog's checks need: the problems of the tasks as they are, for check.mjs. */
 export function backlogProblems(config, say)
@@ -43,7 +50,7 @@ export function backlogProblems(config, say)
         // An archived task keeps the goal it had, even one the plan no longer holds.
         const archivedGoals = task.state === "archived" ? [...goals, task.goal] : goals;
 
-        for (const error of taskErrors(task, { words: config.words, people, goals: archivedGoals, types: Object.keys(config.types), prefix, decisionPrefix: config.prefixes.decision, say })) {
+        for (const error of taskErrors(task, { words: config.words, people, goals: archivedGoals, types: Object.keys(config.types), fields: config.fields, prefix, decisionPrefix: config.prefixes.decision, say })) {
             problems.push({ ...at, message: `${id}: ${error}` });
         }
 
@@ -69,13 +76,92 @@ if (isMain(import.meta.url)) {
     runCli(() => run(process.argv.slice(2)));
 }
 
-function run(args)
+async function run(args)
 {
     const [command, ...rest] = args;
     const { options, words } = optionsOf(rest);
     const { config, say } = loadProject();
+
+    // Export and import read the extensions' formats first; an import's tasks are read before the lock, and added under it.
+    if (command === "export") {
+        return exportTasks(config, say, options);
+    }
+
+    if (command === "import") {
+        options.incoming = await importedTasks(config, say, words[0], options);
+    }
+
     // A change reads the backlog again once it holds the lock, so it never writes over a change made meanwhile.
     return changes.includes(command) ? withBacklogLock(config, () => execute(command, options, words, config, say)) : execute(command, options, words, config, say);
+}
+
+/** The formats the backlog is written in and read from: json and csv, and those of the extensions, by name. */
+async function formatsOf(config, kind)
+{
+    const own = { json: true, csv: true };
+
+    for (const extension of await loadExtensions(config)) {
+        for (const [name, convert] of Object.entries(extension[kind] ?? {})) {
+            own[name] = { convert, extension };
+        }
+    }
+
+    return own;
+}
+
+/** The open tasks, or those of a state, or all of them, in a format, on stdout: each with its number, its suffixes read apart. */
+async function exportTasks(config, say, options)
+{
+    const prefix = config.prefixes.task;
+    const formats = await formatsOf(config, "exporters");
+    const format = typeof options.format === "string" ? options.format : "json";
+    const open = ["doing", "todo", "postponed"];
+    const tasks = readBacklog(config).tasks
+        .filter((task) => (typeof options.state === "string" ? task.state === options.state : options.all === true || open.includes(task.state)))
+        .map(({ file, line, ...task }) => ({ ...task, id: `${prefix}-${task.id}` }));
+
+    if (!(format in formats)) {
+        throw new ProjectError(say("unknownFormat", { format, list: Object.keys(formats).join(", ") }));
+    }
+
+    const fields = Object.keys(config.fields);
+    const text = format === "json" ? JSON.stringify(tasks, null, 2)
+        : format === "csv" ? toCsv(tasks.map((task) => ({ ...task, ...task.fields })), [...csvColumns, ...fields]).trimEnd()
+        : String(await formats[format].convert(tasks, context(config, say)));
+    console.log(text);
+}
+
+/** The tasks of a file to import, as plain objects: { text, priority, effort, to, goal, type, due, parent, state, by, fields }. */
+async function importedTasks(config, say, file, options)
+{
+    if (!file || !existsSync(file)) {
+        throw new ProjectError(say("importNoFile", { file: file ?? "" }));
+    }
+
+    const formats = await formatsOf(config, "importers");
+    const format = typeof options.format === "string" ? options.format : file.toLowerCase().endsWith(".csv") ? "csv" : "json";
+
+    if (!(format in formats)) {
+        throw new ProjectError(say("unknownFormat", { format, list: Object.keys(formats).join(", ") }));
+    }
+
+    const text = readFileSync(file, "utf8");
+    let items;
+
+    try {
+        items = format === "json" ? JSON.parse(text) : format === "csv" ? parseCsv(text) : await formats[format].convert(text, context(config, say));
+    } catch (error) {
+        throw new ProjectError(say("importUnread", { file, error: String(error?.message ?? error).split("\n")[0] }));
+    }
+
+    const list = Array.isArray(items) ? items : Array.isArray(items?.tasks) ? items.tasks : null;
+
+    if (!list || list.length === 0) {
+        throw new ProjectError(say("importEmpty", { file }));
+    }
+
+    // A CSV row carries the project's fields as columns of their own.
+    return list.map((item) => ({ ...item, fields: { ...Object.fromEntries(Object.keys(config.fields).filter((key) => item[key]).map((key) => [key, String(item[key])])), ...(item.fields ?? {}) } }));
 }
 
 function execute(command, options, words, config, say)
@@ -107,7 +193,7 @@ function execute(command, options, words, config, say)
         const errors = [
             ...(closed ? [say("goalIsClosed", { value: closed.name, day: closed.closed })] : []),
             ...(taken ? [say("issueTaken", { issue: task.issue, id: `${prefix}-${taken.id}` })] : []),
-            ...taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), types: Object.keys(config.types), prefix, decisionPrefix: config.prefixes.decision, say }),
+            ...taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), types: Object.keys(config.types), fields: config.fields, prefix, decisionPrefix: config.prefixes.decision, say }),
             ...linkErrors(task, all, config, say),
         ];
         return errors.length > 0 ? fail(errors.join("\n")) : task;
@@ -115,7 +201,7 @@ function execute(command, options, words, config, say)
     // The suffixes of a text, `(after: …)`, `(see: …)`, `(in: …)`, `(issue: …)`, `(due: …)` and `(type: …)` at its end, with the options
     // on top: an option given replaces, "" clears.
     const linked = (given, old = {}) => {
-        const split = splitLinks(given ?? old.text);
+        const split = splitLinks(given ?? old.text, config.words.fields);
         const isGiven = (kind) => options[kind] !== undefined && options[kind] !== true;
         const pick = (kind) => (isGiven(kind) ? listOf(options[kind]) : given !== undefined && split[kind].length > 0 ? split[kind] : old[kind] ?? []);
         const single = (option, field, shape = (value) => value) => (isGiven(option) ? (listOf(options[option]).map(shape)[0] ?? null) : given !== undefined && split[field] ? split[field] : (old[field] ?? null));
@@ -130,6 +216,8 @@ function execute(command, options, words, config, say)
             type: single("type", "type", (value) => Object.entries(config.types).find(([, name]) => name.toLowerCase() === value.toLowerCase())?.[0] ?? value.toLowerCase()),
             // Who created it: a name as the project writes it, whatever its case.
             by: typeof options.by === "string" ? (assignees(config).find((name) => name.toLowerCase() === options.by.toLowerCase()) ?? options.by) : given !== undefined && split.by ? split.by : (old.by ?? null),
+            // The project's own fields: --system 5e, "" clears.
+            fields: Object.fromEntries(Object.keys(config.fields).map((key) => [key, isGiven(key) ? String(options[key]).trim() : given !== undefined && split.fields[key] ? split.fields[key] : (old.fields?.[key] ?? "")]).filter(([, value]) => value !== "")),
         };
     };
     const issueNumber = () => Number(String(options.issue).replace(/^#/, ""));
@@ -246,6 +334,42 @@ function execute(command, options, words, config, say)
         const wanted = words.map(plain);
         const shownTasks = tasks.filter((task) => wanted.every((word) => plain(`${task.text} ${task.goal} ${task.to}`).includes(word)));
         print(shownTasks, options.json, (task) => `${line(task)} [${stateName(task)}]`, say("count", { count: shownTasks.length }));
+    } else if (command === "import") {
+        // Each a new task, numbered after the others; a wrong one stops them all, so that nothing is half imported.
+        const added = [];
+        const typeKey = (value) => (value ? Object.entries(config.types).find(([key, name]) => key === String(value).toLowerCase() || name.toLowerCase() === String(value).toLowerCase())?.[0] ?? String(value).toLowerCase() : null);
+        const creator = typeof options.by === "string" ? options.by : config.people.includes("Claude") || assignees(config).includes("Claude") ? "Claude" : null;
+
+        for (const item of options.incoming) {
+            const split = splitLinks(String(item.text ?? "").replace(/\s+/g, " ").replaceAll(" · ", " - ").trim(), config.words.fields);
+            const state = stateKeys.includes(item.state) ? item.state : "todo";
+            const day = /^\d{4}-\d{2}-\d{2}$/;
+            const listed = (value, fallback) => (Array.isArray(value) ? value : value ? listOf(value) : fallback);
+            const task = {
+                id: nextId([...tasks, ...added]),
+                priority: item.priority || "P2",
+                effort: item.effort || config.words.efforts.medium,
+                to: item.to || config.people[0],
+                created: day.test(item.created ?? "") ? item.created : today(),
+                goal: item.goal || config.words.noGoal,
+                text: split.text,
+                after: listed(item.after, split.after),
+                see: listed(item.see, split.see),
+                parent: item.parent || split.parent,
+                issue: split.issue,
+                due: item.due || split.due,
+                type: typeKey(item.type) ?? split.type,
+                by: item.by || creator,
+                fields: { ...split.fields, ...item.fields },
+                started: null,
+                done: state === "done" ? (day.test(item.done ?? "") ? item.done : today()) : null,
+                archived: null,
+                state,
+            };
+            added.push(checked(task));
+        }
+
+        save([...tasks, ...added], say("imported", { count: added.length, ids: added.map((task) => `${prefix}-${task.id}`).join(", ") }));
     } else if (command === "goals") {
         for (const goal of [...new Set(tasks.map((task) => task.goal))]) {
             const own = tasks.filter((task) => task.goal === goal);
@@ -289,6 +413,7 @@ function linksOf(tasks, config, say, stateName)
         const { after, chain, waitedBy, see, seenFrom, note, parent, parts, partsDone, nextPart, decisions, dueInfo, stale } = links.get(task.id);
         return [
             task.type ? say("typeLabel", { name: config.types[task.type] ?? task.type }) : null,
+            ...Object.entries(task.fields ?? {}).map(([key, value]) => `${config.fields[key]?.name ?? key}: ${value}`),
             task.due ? `${say("dueLabel", { day: task.due })}${dueInfo && (dueInfo.isLate || dueInfo.isNear) ? ` (${dueText(dueInfo, say)})` : ""}` : null,
             task.started && task.state === "doing" ? say(stale ? "staleTip" : "startedLabel", { day: task.started }) : null,
             decisions.length > 0 ? say("decisionsOf", { list: decisions.join(", ") }) : null,

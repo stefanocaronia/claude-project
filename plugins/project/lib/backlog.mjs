@@ -20,14 +20,14 @@ export function parseLine(line, state, words, prefix = "T")
     const day = "(\\d{4}-\\d{2}-\\d{2})";
     const marks = new RegExp(`^(.*?)(?: · ${escapeRegex(words.startedMarker)} ${day})?(?: · ${escapeRegex(words.doneMarker)} ${day})?(?: · ${escapeRegex(words.archivedMarker)} ${day})?$`);
     const [, whole, started, done, archived] = marks.exec(rest);
-    return { id: Number(id), priority, effort: effort.trim(), to: to.trim(), created, goal: goal.trim(), ...splitLinks(whole), started: started ?? null, done: done ?? null, archived: archived ?? null, state };
+    return { id: Number(id), priority, effort: effort.trim(), to: to.trim(), created, goal: goal.trim(), ...splitLinks(whole, words.fields ?? []), started: started ?? null, done: done ?? null, archived: archived ?? null, state };
 }
 
 /** The task as a line again, its links at the end of its text, then the days it started, was done and archived. */
 export function formatLine(task, words, prefix = "T")
 {
     const mark = (marker, day) => (day ? `${separator}${marker} ${day}` : "");
-    const text = joinLinks(task.text, task);
+    const text = joinLinks(task.text, task, words.fields ?? []);
     return `- ${prefix}-${task.id}${separator}${[task.priority, task.effort, task.to, task.created, task.goal, text].join(separator)}${mark(words.startedMarker, task.started)}${mark(words.doneMarker, task.done)}${mark(words.archivedMarker, task.archived)}`;
 }
 
@@ -113,7 +113,7 @@ export function nextId(tasks)
 }
 
 /** What makes a task wrong before it is written, as messages; empty when it is right. */
-export function taskErrors(task, { words, people, goals, types = Object.keys(words.types ?? {}), prefix = "T", decisionPrefix = "D", say })
+export function taskErrors(task, { words, people, goals, types = Object.keys(words.types ?? {}), fields = {}, prefix = "T", decisionPrefix = "D", say })
 {
     const errors = [];
     const efforts = Object.values(words.efforts);
@@ -168,6 +168,17 @@ export function taskErrors(task, { words, people, goals, types = Object.keys(wor
 
     if (task.type && !types.includes(task.type)) {
         errors.push(say("unknownType", { value: task.type, list: types.join(", ") }));
+    }
+
+    // The project's own fields: one value of a line, among those the configuration allows when it lists them.
+    for (const [key, value] of Object.entries(task.fields ?? {})) {
+        const allowed = fields[key]?.values;
+
+        if (/[()·\n]/.test(value)) {
+            errors.push(say("badField", { name: fields[key]?.name ?? key, value }));
+        } else if (allowed && !allowed.includes(value)) {
+            errors.push(say("unknownFieldValue", { name: fields[key]?.name ?? key, value, list: allowed.join(", ") }));
+        }
     }
 
     return errors;

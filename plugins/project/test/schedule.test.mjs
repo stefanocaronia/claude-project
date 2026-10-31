@@ -37,7 +37,7 @@ test("a line keeps its due day, its type and the day it started; start sets the 
     const task = parseLine(line, "doing", it);
     assert.deepEqual([task.text, task.due, task.type, task.started], ["il login", "2026-11-15", "bug", "2026-10-30"]);
     assert.equal(formatLine(task, it), line);
-    assert.deepEqual(splitLinks("x (type: chore) (due: 2026-01-02)"), { text: "x", after: [], see: [], parent: null, issue: null, due: "2026-01-02", type: "chore", by: null });
+    assert.deepEqual(splitLinks("x (type: chore) (due: 2026-01-02)"), { text: "x", after: [], see: [], parent: null, issue: null, due: "2026-01-02", type: "chore", by: null, fields: {} });
 
     const todo = { id: 1, state: "todo", started: null, done: null };
     const [started] = moveTasks([todo], [1], "doing", "2026-10-30").tasks;

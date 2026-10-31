@@ -11,7 +11,7 @@ import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
 import { decisionLinks } from "../lib/links.mjs";
 import { check } from "../scripts/check.mjs";
 import { readCode, readIssues, readOwner } from "../scripts/code.mjs";
-import { context } from "../scripts/extensions.mjs";
+import { context, extensionChecks } from "../scripts/extensions.mjs";
 import { colleagues, git, profileOf, projectName, read, readBacklog, readDecisions, projectRepos, readGoals, readHolds, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
@@ -40,6 +40,7 @@ export async function collect(config, say, extensions = [])
         words: { states: config.words.states, priorities: config.words.priorities, noGoal: config.words.noGoal },
         prefixes: config.prefixes,
         types: config.types,
+        fields: config.fields,
         docs: shown(config, config.docs),
         files: Object.fromEntries(Object.entries(config.files).filter(([, path]) => path).map(([key, path]) => [key, path.split("/").at(-1)])),
         plan,
@@ -55,7 +56,7 @@ export async function collect(config, say, extensions = [])
         issues: freeIssues(readIssues(config), readBacklog(config).tasks).map(({ number, title, url }) => ({ number, title, url })),
         boardDays,
         holds: readHolds(config),
-        health: check(config, say),
+        health: [...check(config, say), ...(await extensionChecks(config, say, extensions))],
         activity: activity(config),
         extensions: extensions.map((extension) => ({ id: extension.id, script: extension.script ? `/extension/${extension.id}/page.js` : null })),
         extra,

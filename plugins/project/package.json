@@ -1,0 +1,12 @@
+{
+  "name": "claude-project",
+  "private": true,
+  "description": "The project plugin's commands as one command, project, outside Claude Code too. Install from this folder with npm link.",
+  "license": "MIT",
+  "bin": {
+    "project": "scripts/cli.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

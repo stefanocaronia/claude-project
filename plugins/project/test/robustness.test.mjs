@@ -40,6 +40,21 @@ function cli(root, script, ...args)
     return spawnSync(process.execPath, [join(scripts, script), ...args], { cwd: root, encoding: "utf8", env });
 }
 
+test("the project command runs each script by its name, says its commands in the project's language, and refuses one it lacks", () => {
+    const root = project();
+    const listed = cli(root, "cli.mjs", "backlog", "list");
+    assert.equal(listed.status, 0);
+    assert.match(listed.stdout, /^- T-1 · P2 · .* · uno$/m);
+    assert.equal(listed.stderr, "");
+    assert.match(cli(root, "cli.mjs", "decisions", "next").stdout, /^D-2/);
+    assert.match(cli(root, "cli.mjs").stdout, /^project <comando> \[argomenti\]/);
+    const unknown = cli(root, "cli.mjs", "boh");
+    assert.equal(unknown.status, 1);
+    assert.match(unknown.stderr, /backlog {3}i compiti/);
+    assert.equal(cli(root, "cli.mjs", "backlog", "show", "T-9").status, 1);
+    rmSync(root, { recursive: true, force: true });
+});
+
 test("twelve adds at once give twelve tasks with twelve numbers", async () => {
     const root = project();
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...env } = process.env;

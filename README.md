@@ -39,6 +39,8 @@ The files speak the project's language: English and Italian come built in, any w
 
 Then open a new chat and type `/project:init`, or ask "set up the plan and tasks for this project".
 
+**The same commands outside Claude Code**: `npm link` in the plugin's folder (`plugins/project`, or where Claude Code installed it) puts a `project` command on the path, with no dependency and nothing downloaded: `project backlog list`, `project plan phases`, `project decisions next`, `project check --fix`, `project page`, from the project's folder; `project` alone lists them.
+
 **A project that already keeps a plan, tasks or decisions**, with tools of its own, migrates through the same command. `init.mjs adopt` finds the docs, their language, a private repo of their own, the colleagues and where decisions are cited, and prints the configuration that reads them and what reads and what does not, writing nothing. `adopt --write` writes it, and `adopt --steps` moves the plan's checkbox steps into the backlog. Claude proposes the rest point by point: the old tools the plugin replaces, the hooks that started them, the instructions that cite them.
 
 ## Configuration
@@ -52,13 +54,16 @@ docs: project                # the docs' folder, from the project's root
 people: [Claude, Ann]        # who holds tasks besides Crew's colleagues
 cites: [project, .claude, src, docs]   # where a decision number may be cited
 page: { port: 5790 }         # optional: by default a port of 5800–5999 from the project's folder
-extensions: []               # modules that add the project's own parts to the page
+extensions: []               # modules that add the project's own parts to the page, checks and formats
+fields: { system: { name: System, values: [5e, ironsworn] }, area: Area }   # optional: the tasks' own fields, (system: 5e)
 words: {}                    # any heading or marker, overridden: { states: { postponed: Later } }
 ```
 
 **Private docs.** A public project can keep its plan in a git repo of its own, nested and ignored: `/project:init` offers it (`--private private` puts the docs in `private/project/`, makes `private/` a repo and adds it to `.gitignore`). A submodule or a folder outside the repo is just a path in `docs:`.
 
-**Extensions** are modules of the project: `export const id`, `collect(context)` for their data, `route(request, context)` for their own paths under `/extension/<id>/`, and `script`, a file for the page that calls `projectPage.register({ tabs, tiles, rhythm, mounted })`.
+**Extensions** are modules of the project: `export const id`, `collect(context)` for their data, `route(request, context)` for their own paths under `/extension/<id>/`, `script`, a file for the page that calls `projectPage.register({ tabs, tiles, rhythm, mounted })`, and `panel(context)` for links in the panel. `check(context)` adds the project's own checks to the docs' health, `[{ severity, file, line, message }]`, shown under the extension's id; `exporters` and `importers`, `{ name: (tasks, context) => text }` and `{ name: (text, context) => tasks }`, add formats to `backlog.mjs export` and `import`, which read and write JSON and CSV by themselves.
+
+**Fields** are the project's own on a task, declared in `fields:` and written at the end of its line, `(system: 5e)`: `backlog.mjs set T-12 --system 5e` (or `add … --system 5e`), "" clears; a field that lists its values takes only those. `show`, `list --json`, the page's list and form, and the panel show them.
 
 ## Files
 

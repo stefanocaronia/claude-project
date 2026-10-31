@@ -2837,11 +2837,17 @@ function taskRow(task, isUnder = false)
             ${face(task)}
             <span class="marks">${typeIcon(task)}${priorityControl(task, "list")}</span>
             <div>${expandButton(`list-${name}`, `<span class="id">${escape(name)}</span>${escape(task.text)}`)}
-                <div class="row-meta"><span class="row-state"><i class="column-mark ${column}"></i>${escape(stateName(column))}</span>${work}${goal}${when}${task.by ? `<span>${escape(t("createdBy", task.by))}</span>` : ""}<button type="button" class="link-button" id="edit-${name}" data-edit-task="${task.id}">${t("editTask")}</button></div>
+                <div class="row-meta"><span class="row-state"><i class="column-mark ${column}"></i>${escape(stateName(column))}</span>${work}${goal}${when}${fieldSpans(task)}${task.by ? `<span>${escape(t("createdBy", task.by))}</span>` : ""}<button type="button" class="link-button" id="edit-${name}" data-edit-task="${task.id}">${t("editTask")}</button></div>
                 ${taskLinks(task, isUnder)}
             </div>
             ${effortMeter(task) || "<span></span>"}
         </li>`;
+}
+
+/** The project's own fields of a task, each as its name and value. */
+function fieldSpans(task)
+{
+    return Object.entries(task.fields ?? {}).map(([key, value]) => `<span>${escape(data.fields?.[key]?.name ?? key)}: ${escape(value)}</span>`).join("");
 }
 
 /** A large task's parts shown: as the user left them, else while one is in progress. */
@@ -2987,6 +2993,9 @@ function taskForm(task)
                     ${field("type", t("filterType"), `<select id="form-type-${id}">${types.map((key) => option(key, key ? data.types[key] : "—", task?.type ?? "")).join("")}</select>`)}
                     ${field("to", t("filterWho"), `<select id="form-to-${id}">${people.map((person) => option(person, person, task?.to ?? people[0])).join("")}</select>`)}
                     ${field("due", t("linkDue"), `<input type="date" id="form-due-${id}" value="${attribute(task?.due ?? "")}">`)}
+                    ${Object.entries(data.fields ?? {}).map(([key, own]) => field(key, own.name, own.values
+                        ? `<select id="form-field-${key}-${id}">${["", ...own.values].map((value) => option(value, value || "—", task?.fields?.[key] ?? "")).join("")}</select>`
+                        : `<input type="text" id="form-field-${key}-${id}" value="${attribute(task?.fields?.[key] ?? "")}">`)).join("")}
                     ${(task?.parts ?? []).length ? "" : field("parent", t("linkPartOf"), `<select id="form-parent-${id}">${[...new Set([...parents, ...(task?.parent ? [task.parent] : [])])].map((name) => option(name, name ? parentLabel(name) : "—", task?.parent ?? "")).join("")}</select>`)}
                 </div>
                 <div class="actions">
@@ -3010,14 +3019,18 @@ async function saveTask(id)
         return;
     }
 
+    const task = id === "new" ? null : data.board.find((one) => String(one.id) === String(id));
     const fields = { text, goal: value("goal"), priority: value("priority"), type: value("type"), to: value("to"), due: value("due"), parent: value("parent") };
+    // The project's own fields, by key: those that changed for a task there, those given for a new one; "" clears one.
+    const own = Object.keys(data.fields ?? {}).map((key) => [key, value(`field-${key}`).trim()]);
+    fields.fields = Object.fromEntries(own.filter(([key, given]) => given !== (task?.fields?.[key] ?? "")));
 
     // A part without a goal of its own takes its large task's.
     if (fields.parent && fields.goal === data.words.noGoal) {
         fields.goal = data.board.find((one) => taskName(one) === fields.parent)?.goal ?? fields.goal;
     }
-    const task = id === "new" ? null : data.board.find((one) => String(one.id) === String(id));
-    const changed = task ? Object.fromEntries(Object.entries(fields).filter(([key, current]) => current !== String((key === "priority" ? task.priority : task[key]) ?? ""))) : fields;
+
+    const changed = task ? Object.fromEntries(Object.entries(fields).filter(([key, current]) => (key === "fields" ? Object.keys(current).length > 0 : current !== String((key === "priority" ? task.priority : task[key]) ?? "")))) : fields;
     editing = null;
 
     if (task && Object.keys(changed).length === 0) {

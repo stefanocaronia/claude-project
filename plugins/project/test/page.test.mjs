@@ -46,6 +46,8 @@ test("the page draws a small project's data in every tab, without an error in it
         assert.match(dom, /id="new-task"/);
         assert.match(dom, /data-edit-task="1"/);
         assert.match(dom, /created by Ann/);
+        // A field of the project's own.
+        assert.match(dom, /<span>System: 5e<\/span>/);
         assert.doesNotMatch(dom, /That did not work/);
     } finally {
         server.closeAllConnections();
@@ -75,7 +77,7 @@ function project()
         mkdirSync(dirname(join(root, path)), { recursive: true });
         writeFileSync(join(root, path), text);
     };
-    put(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude, Ann]\n");
+    put(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude, Ann]\nfields: { system: System }\n");
     put(".claude/agents/matteo-conti.md", "---\nname: matteo-conti\ndescription: \"Matteo Conti, code review. Reviews.\"\ncolor: red\n---\n");
     put(".claude/agent-memory/matteo-conti/todo.md", "- [ ] P2 · 2026-10-29 · read the dice\n");
     put("docs/README.md", "# Docs\n\n- [Plan](PLAN.md)\n- [Tasks](TASKS.md)\n- [Decisions](DECISIONS.md)\n");
@@ -90,7 +92,7 @@ function project()
         "",
         "## To do",
         "",
-        "- T-1 · P1 · high · Claude · 2026-10-01 · Core · The release",
+        "- T-1 · P1 · high · Claude · 2026-10-01 · Core · The release (system: 5e)",
         "- T-3 · P2 · medium · Matteo · 2026-10-03 · Core · the log (after: T-2) (see: D-1) (in: T-1)",
         "- T-4 · P3 · low · Ann · 2026-10-04 · — · a loose one (due: 2026-01-01) (type: bug) (by: Ann)",
         "",

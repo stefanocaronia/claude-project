@@ -9,7 +9,7 @@ The project's key documents, when `.claude/project.yaml` lists them under `docum
 
 The project keeps three documents in its docs folder (`docs:` in `.claude/project.yaml`), in its own language: the **plan** (phases and goals), the **backlog** (one task a line) and the **decisions** (a numbered table, and the points still to decide). The commands below are the only way to change the backlog and to get numbers: never count by hand, never edit a task line but for its text.
 
-Run them with Bash, from the project's folder: `node "<this skill's folder>/../../scripts/<script>.mjs" …`. Their messages are in the project's language and say how to fix what they refuse.
+Run them with Bash, from the project's folder: `node "<this skill's folder>/../../scripts/<script>.mjs" …`. Their messages are in the project's language and say how to fix what they refuse. Where the user has run `npm link` in the plugin's folder, the same are `project backlog …`, `project plan …`, `project check`, and so on: tell them so when they ask how to use the commands outside Claude Code.
 
 ## The backlog: `backlog.mjs`
 
@@ -38,6 +38,8 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 - **The code**: a commit or a pull request that does a task cites its number in its message or title (`… (T-12)`): `show`, the panel and the page list them on the task, and the check notes a task still open that a merged pull request cites.
 - **GitHub issues** (with `gh` and a repo on GitHub): `add --issue 34` makes a task of an issue, its title the text unless one is given, ending with `(issue: #34)`; one task an issue. When a task with an open issue is done, the command says so: ask the user once whether to close it on GitHub, and only on a yes run `issue-close T-12`, which closes it with a comment naming the task and its commits.
 - **Reopened**: when the user says something new about a task already done or archived (it does not work, something is missing, a change to it), it is that task again, not a new one: `start T-12` brings it back in progress, out of the archive too, and what is new goes into its text or its note. A new task only when the work is a different one.
+- **The project's own fields**, when its configuration declares them (`fields:`): `(system: 5e)` at the end of a line, set with `--system 5e` on `add` or `set`; a field that lists its values takes only those.
+- **Export and import**: `export [--format json|csv|<an extension's>] [--all | --state …]` writes the tasks on stdout; `import <file> [--format …] [--by <name>]` adds a file's tasks as new ones, numbered here, all or none; `--by` names who brought them.
 - **The note**: when a task needs more than its line (the long context, what was tried, where the work got to), write it in its note with `note T-12`; before taking a task up again, read its note.
 - When a colleague is given a task whose number is in the brief, the panel moves it to in progress itself. **Done** is yours to say, after reading their report: work finished is not always a task closed.
 

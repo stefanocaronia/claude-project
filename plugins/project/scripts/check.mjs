@@ -9,6 +9,7 @@ import { codeView, issueOf } from "../lib/code.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { readCode, readIssues } from "./code.mjs";
 import { backlogProblems } from "./backlog.mjs";
+import { extensionChecks, loadExtensions } from "./extensions.mjs";
 import { citingFiles, isMain, loadProject, read, readBacklog, readDecisions, readDependencies, readGoals, readTodos, runCli, shown, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
 
 /** Every finding about the docs, from errors that must be fixed to notes for the cleanup: { severity, kind, file, line, message }. */
@@ -68,7 +69,7 @@ export function markdownFiles(config)
 }
 
 if (isMain(import.meta.url)) {
-    runCli(() => {
+    runCli(async () => {
         const { config, say } = loadProject();
 
         if (process.argv.includes("--fix")) {
@@ -76,7 +77,7 @@ if (isMain(import.meta.url)) {
             console.log(changed.length > 0 ? say("fixed", { files: changed.join(", ") }) : say("fixedNone"));
         }
 
-        const findings = check(config, say);
+        const findings = [...check(config, say), ...(await extensionChecks(config, say, await loadExtensions(config)))];
 
         if (process.argv.includes("--json")) {
             console.log(JSON.stringify(findings, null, 2));
@@ -446,7 +447,9 @@ function printReport(findings, say)
         console.log(`\n${say(`severity_${severity}`).toUpperCase()} (${group.length})`);
 
         for (const finding of group) {
-            console.log(`  [${say(`kind_${finding.kind}`)}] ${finding.file}${finding.line ? `:${finding.line}` : ""}  ${finding.message}`);
+            // An extension's findings go under its id.
+            const kind = say(`kind_${finding.kind}`);
+            console.log(`  [${kind === `kind_${finding.kind}` ? finding.kind : kind}] ${finding.file ?? ""}${finding.line ? `:${finding.line}` : ""}  ${finding.message}`);
         }
     }
 
