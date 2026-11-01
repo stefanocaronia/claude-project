@@ -54,7 +54,6 @@ export function taskDetails($: EngineInterface, p: Panel)
             linkedText(`text-${task.id}`, task.text),
             <Box key={`what-${task.id}`} flexDirection="row" flexWrap="wrap" gap={1}>{what}</Box>,
             ties("part-of", words("labelPartOf"), task.parent && !isPart ? [task.parent] : []),
-            ties("parts", words("labelParts", { done: task.partsDone, total: (task.parts ?? []).length }), task.parts ?? []),
             ties("waits", words("labelWaits"), task.after ?? []),
             field(`chain-${task.id}`, words("labelChain"), (task.chain ?? []).length > 0 ? [chip(`chain-chip-${task.id}`, `⛓ ${[...task.chain, idOf(task)].join(" → ")}`, warningColor)] : []),
             ties("waited", words("labelWaitedBy"), task.waitedBy ?? []),

@@ -150,12 +150,12 @@ test("a task opens in place; Done and Postpone and the priority go through the b
         // Opened: chips for its goal and the day it was born, a chip on the desktop, in brackets on the terminal; who holds it, its
         // priority and effort are only in the row.
         expect(await ui.find({ type: "Text", text: /^\[?Matteo Conti\]?$/ })).toBeUndefined();
-        expect(await ui.find({ type: "Text", text: /^\[?⚑ Revisione\]?$/ })).toBeDefined();
-        expect(await ui.find({ type: "Text", text: /^\[?nato il 2026-10-28\]?$/ })).toBeDefined();
+        expect(await chipOf(ui, surface, "⚑ Revisione")).toBeDefined();
+        expect(await chipOf(ui, surface, "nato il 2026-10-28")).toBeDefined();
         expect(await ui.find({ type: "Text", text: /impegno/ })).toBeUndefined();
-        // On the desktop a chip has rounded ends, each a drawing, and a button is its mark, its words under the pointer; the terminal
-        // keeps the words.
-        expect((await ui.findAll({ type: "Svg" })).filter((one) => /^<svg[^>]*width="8" height="22"/.test(String((one.props as { source?: string }).source))).length > 0).toBe(surface !== "terminal");
+        // On the desktop a chip is a drawing, its text small, its corners round, and a button is its mark, its words under the pointer;
+        // the terminal keeps the words.
+        expect(String((await chipOf(ui, "desktop", "⚑ Revisione") as { props?: { source?: string } } | undefined)?.props?.source ?? "")).toEqual(surface === "terminal" ? "" : expect.stringMatching(/rx="4".*font-size="12"/));
         expect((await ui.find({ key: "done-61" }))?.props.label).toBe(surface === "terminal" ? "✓ Fatto" : "✓");
         expect(await ui.find({ type: "Text", text: "Fatto" })).toEqual(surface === "terminal" ? undefined : expect.anything());
         await ui.press({ key: "done-61" });
@@ -308,17 +308,17 @@ test("a blocked task shows what it waits for in place of its age, its ▶ asks f
         expect(await ui.find({ type: "Text", text: "Aspetta T-62, #giulia-1, ancora aperti: si può avviare quando sono fatti" })).toEqual(surface === "desktop" ? expect.anything() : undefined);
         await ui.press({ key: "open-72" });
         expect(await ui.find({ type: "Text", text: "aspetta" })).toBeDefined();
-        expect(await ui.find({ type: "Text", text: /^\[?#giulia-1\]?$/ })).toBeDefined();
-        expect(await ui.find({ type: "Text", text: /^\[?⛓ #giulia-1 → T-62 → T-72\]?$/ })).toBeDefined();
+        expect(await chipOf(ui, surface, "#giulia-1")).toBeDefined();
+        expect(await chipOf(ui, surface, "⛓ #giulia-1 → T-62 → T-72")).toBeDefined();
         await ui.press({ key: "open-72" });
         await ui.press({ key: "open-143" });
         expect(await ui.find({ type: "Text", text: "vedi" })).toBeDefined();
-        expect(await ui.find({ type: "Text", text: /^\[?D-541\]?$/ })).toBeDefined();
+        expect(await chipOf(ui, surface, "D-541")).toBeDefined();
         expect(await ui.find({ type: "Text", text: "citato da" })).toBeDefined();
-        expect((await ui.find({ type: "Link", text: "📄 Nota ↗" }))?.props.href).toBe("http://localhost:5790/note/143");
+        expect((await linkOf(ui, "📄 Nota ↗"))?.props.href).toBe("http://localhost:5790/note/143");
         // The code that cites it: the commits, the latest a link; the pull request, merged, and that the task can close.
-        expect((await ui.find({ type: "Link", text: "⎇ 3 commit, l'ultimo il 2026-10-30" }))?.props.href).toBe("https://github.com/a/b/commit/759cf6f");
-        expect((await ui.find({ type: "Link", text: "#12 unita il 2026-10-30" }))?.props.href).toBe("https://github.com/a/b/pull/12");
+        expect((await linkOf(ui, "⎇ 3 commit, l'ultimo il 2026-10-30"))?.props.href).toBe("https://github.com/a/b/commit/759cf6f");
+        expect((await linkOf(ui, "#12 unita il 2026-10-30"))?.props.href).toBe("https://github.com/a/b/pull/12");
         expect(await ui.find({ type: "Text", text: "✓ pull request #12 unita: si può chiudere" })).toBeDefined();
         await ui.press({ key: "open-143" });
         await ui.unmount();
@@ -408,8 +408,9 @@ test("a large task shows its parts closed in place of its age, its ▶ starts th
     // Drawn under its large task, a part does not name it again.
     expect(await ui.find({ type: "Text", text: "parte di" })).toBeUndefined();
     await ui.press({ key: "open-80" });
-    expect(await ui.find({ type: "Text", text: "parti · 1/2" })).toBeDefined();
-    expect(await ui.find({ type: "Text", text: "[T-82]" })).toBeDefined();
+    // Its parts are under it already: no row of them in its details.
+    expect(await ui.find({ type: "Text", text: "parti · 1/2" })).toBeUndefined();
+    expect(await ui.find({ type: "Text", text: "[T-82]" })).toBeUndefined();
     runs.length = 0;
     await ui.press({ key: "start-80" });
     expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "start", "T-81"]]);
@@ -425,7 +426,7 @@ test("the open GitHub issues no task does yet show apart and go into the backlog
     runs.length = 0;
     await ui.press({ key: "issue-take-40" });
     await ui.press({ key: "open-70" });
-    expect((await ui.find({ type: "Link", text: "◉ #33 aperta" }))?.props.href).toBe("https://github.com/a/b/issues/33");
+    expect((await linkOf(ui, "◉ #33 aperta"))?.props.href).toBe("https://github.com/a/b/issues/33");
     await ui.press({ key: "done-70" });
     // → Backlog is the user's yes to the issue, another's too; its title one line of text after a lone --.
     expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "add", "--issue=40", "--approved", "--", "Il login fallisce"], ["backlog.mjs", "done", "T-70"]]);
@@ -749,3 +750,15 @@ test("a task whose priority turns stays under the pointer while the list keeps i
     expect(await rows()).toEqual(before);
     await ui.unmount();
 });
+
+/** A chip by its text: a drawing that says it on the desktop, in brackets on the terminal. */
+async function chipOf(ui: { find: (query: object) => Promise<unknown>; findAll: (query: object) => Promise<{ props: Record<string, unknown> }[]> }, surface: string, text: string)
+{
+    return surface === "terminal" ? ui.find({ type: "Text", text: `[${text}]` }) : (await ui.findAll({ type: "Svg" })).find((one) => one.props.alt === text);
+}
+
+/** A link by its text, whatever room a chip's drawing keeps after it. */
+async function linkOf(ui: { find: (query: object) => Promise<{ props: { href?: string } } | undefined> }, text: string)
+{
+    return ui.find({ type: "Link", text });
+}

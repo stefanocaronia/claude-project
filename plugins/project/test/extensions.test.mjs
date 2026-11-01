@@ -67,6 +67,34 @@ test("the backlog goes out as JSON, CSV or an extension's format, and comes in f
     assert.match(run("backlog.mjs", "import", "bom.json").stdout, /imported: T-8\b/);
 });
 
+test("an import from another tool: a preview first, the closed left out or archived, an epic a large task, the note, no double", () => {
+    put("board.json", JSON.stringify([
+        { key: "PRJ-1", text: "the epic", url: "https://example.test/PRJ-1", description: "All of it." },
+        { key: "PRJ-2", text: "a story", parent: "PRJ-1", after: "PRJ-3" },
+        { key: "PRJ-3", text: "a done one", state: "Closed", done: "2026-09-01" },
+    ]));
+    const preview = run("backlog.mjs", "import", "board.json", "--preview").stdout;
+    assert.match(preview, /T-9 · .* · the epic \(by: Claude\) \[To do\] {2}\+ note/);
+    assert.match(preview, /1 closed left out/);
+    assert.match(preview, /2 tasks to import; nothing written/);
+    assert.doesNotMatch(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /the epic/);
+    // The story's wait for one closed and left out is over: it waits for nothing.
+    assert.match(preview, /T-10 · .* · a story \(in: T-9\) \(by: Claude\) \[/);
+    assert.match(run("backlog.mjs", "import", "board.json", "--done").stdout, /3 tasks imported: T-9, T-10, T-11/);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-10 · .* · a story \(after: T-11\) \(in: T-9\)/m);
+    assert.match(readFileSync(join(root, "docs/tasks/T-9.md"), "utf8"), /All of it\.\n\nOrigin: PRJ-1 · https:\/\/example\.test\/PRJ-1\n/);
+    const again = run("backlog.mjs", "import", "board.json", "--done").stdout;
+    assert.match(again, /3 already imported, left out: PRJ-1 \(T-9\), PRJ-2 \(T-10\), PRJ-3 \(T-11\)/);
+    assert.match(again, /Nothing new to import/);
+});
+
+test("a task deleted is gone, its note too, unless another cites it", () => {
+    assert.match(run("backlog.mjs", "delete", "T-9").stderr, /T-9 is cited by T-10/);
+    assert.match(run("backlog.mjs", "delete", "T-10", "T-9").stdout, /2 deleted: T-10, T-9/);
+    assert.doesNotMatch(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /the epic|a story/);
+    assert.throws(() => readFileSync(join(root, "docs/tasks/T-9.md")));
+});
+
 function run(script, ...args)
 {
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...env } = process.env;

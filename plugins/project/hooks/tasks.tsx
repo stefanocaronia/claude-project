@@ -7,7 +7,7 @@ import type { Task } from "../types";
 
 import { typeColor } from "../lib/schedule.mjs";
 import { taskDetails } from "./details.tsx";
-import { addMark, effortMeters, effortSvg, errorColor, idleColor, markOf, prioritySvg, stateLayer, taskColor, typeSvg, warningColor, workColor, workMark } from "./draw.ts";
+import { addMark, effortMeters, effortSvg, errorColor, idleColor, markOf, prioritySvg, quietColor, stateLayer, taskColor, typeSvg, warningColor, workColor, workMark } from "./draw.ts";
 import { noChoice, oneLine } from "./kit.tsx";
 import type { Panel } from "./kit.tsx";
 import { backlog } from "./project.ts";
@@ -22,7 +22,7 @@ let newText = "";
 
 export function taskLists($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, limited, isStarting, age, dueWords, rowText, opener, card, section, more, tip, ground, iconButton, face, priorityIcon, isWorking } = p;
+    const { Box, Text, Button, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, limited, isStarting, age, dueWords, rowText, opener, card, section, more, tip, pill, iconButton, face, priorityIcon, isWorking } = p;
     const details = taskDetails($, p);
     const indent = isDesktop ? 4 : 2;
     // A part shows under its large task, whatever its state; on its own only when its large task is not open.
@@ -141,12 +141,14 @@ export function taskLists($: EngineInterface, p: Panel)
     const partsChip = (task: Task) => {
         const isDoing = task.state === "doing";
         const text = `${isUnfolded(task) ? "▾" : "▸"} ${task.partsDone}/${task.parts.length}`;
-        const label = (
-            <Button key={`parts-${task.id}`} plain onPress={() => void change((old) => ({ ...old, folds: { ...old.folds, [String(task.id)]: !isUnfolded(task) } }))}>
-                <Text color={isDoing ? workColor : undefined} dimColor={!isDoing}>{isDesktop ? text : `[${text}]`}</Text>
-            </Button>
-        );
-        const button = isDesktop ? ground(`parts-box-${task.id}`, isDoing ? `${workColor}26` : stateLayer, label) : label;
+        const fold = () => change((old) => ({ ...old, folds: { ...old.folds, [String(task.id)]: !isUnfolded(task) } }));
+        const button = isDesktop
+            ? pill(`parts-box-${task.id}`, text, isDoing ? `${workColor}26` : stateLayer, isDoing ? workColor : quietColor, { onPress: fold, key: `parts-${task.id}` })
+            : (
+                <Button key={`parts-${task.id}`} plain onPress={() => void fold()}>
+                    <Text color={isDoing ? workColor : undefined} dimColor={!isDoing}>{`[${text}]`}</Text>
+                </Button>
+            );
         return tip(`parts-${task.id}`, words("partsTip", { done: task.partsDone, total: task.parts.length }), button);
     };
     // In place of its age, a blocked task shows what it waits for: «⛓ T-62», and how many more; a large task, its parts closed. After

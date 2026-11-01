@@ -15,8 +15,8 @@ export const taskColor = "#2E9AA6";
 export const outline = "#8080803d";
 export const stateLayer = "#80808014";
 export const quietColor = "#888780";
-// A link's or a document's chip under the pointer: one line high, no border, a stronger gray.
-export const chipHover = "#80808029";
+// A link's text on a chip drawn.
+export const linkColor = "#4C8FE0";
 // Every card's faint gray, the same for all, as Crew's.
 export const cardTint = "#80808003";
 // A ▶ that cannot be pressed now: gray, fainter than a dim one.
@@ -121,25 +121,18 @@ export function idleButtonSvg(label: string): { source: string; width: number; h
     return { source: svg(width, height, body, false), width, height };
 }
 
-/** A chip's line, 22 px; its ends 8 px wide, the room its text keeps from them. */
-export const chipEnd = { width: 8, height: 22 };
+// A chip's text, smaller than the panel's, and the room around it, the same on its four sides.
+const chipFont = 12;
+const chipPad = 4;
 
-/** A rounded end of a chip in its tint, corners of 4: the chip's middle is a Box, which has no corner radius. */
-export function chipEndSvg(side: "start" | "end", tint: string): string
+/** A chip whole, as a drawing: its text at 12 px in its color, on its tint, corners of 4, as much room beside the text as above and
+ * below it; a Box could have neither the smaller text nor the round corners. */
+export function chipSvg(label: string, tint: string, color: string): { source: string; width: number; height: number }
 {
-    const { width, height } = chipEnd;
-    const path = side === "start"
-        ? `M${width} 0H4A4 4 0 0 0 0 4V${height - 4}A4 4 0 0 0 4 ${height}H${width}Z`
-        : `M0 0H${width - 4}A4 4 0 0 1 ${width} 4V${height - 4}A4 4 0 0 1 ${width - 4} ${height}H0Z`;
-    return svg(width, height, `<path d="${path}" fill="${tint}"/>`, false);
-}
-
-/** The tint that, drawn over `base`, makes `hover`: two tints of one color, `#rrggbbaa`, told apart by their alpha. */
-export function overTint(base: string, hover: string): string
-{
-    const alpha = (tint: string) => parseInt(tint.slice(7, 9), 16) / 255;
-    const over = 1 - (1 - alpha(hover)) / (1 - alpha(base));
-    return `${hover.slice(0, 7)}${Math.round(over * 255).toString(16).padStart(2, "0")}`;
+    const height = chipFont + 2 * chipPad + 2;
+    const width = Math.ceil(labelWidth(label) * chipFont) + 2 * (chipPad + 2);
+    const body = `<rect width="${width}" height="${height}" rx="4" fill="${tint}"/><text x="${width / 2}" y="${height / 2}" dominant-baseline="central" text-anchor="middle" font-family="${font}" font-size="${chipFont}" fill="${color}">${xml(label)}</text>`;
+    return { source: svg(width, height, body, false), width, height };
 }
 
 /** A wide bar's square middle, filled or the track, stretched to the room it is given: its rounded ends are `barEndSvg`. */

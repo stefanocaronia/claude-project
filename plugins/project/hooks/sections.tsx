@@ -5,7 +5,7 @@ import type { EngineInterface } from "claude-code";
 import type { Proposal, Snapshot } from "../types";
 
 import { lineTitle } from "../lib/issues.mjs";
-import { chipHover, decisionColor, errorColor, scales, stateLayer, versionMark, warningColor } from "./draw.ts";
+import { decisionColor, errorColor, linkColor, quietColor, scales, stateLayer, versionMark, warningColor } from "./draw.ts";
 import type { Panel } from "./kit.tsx";
 import { backlog, postLink } from "./project.ts";
 import { submit } from "./start.ts";
@@ -14,24 +14,30 @@ import { submit } from "./start.ts";
 const proposalLength = 400;
 
 /** The extensions' links, a page to open or an action to post, and the key documents, each opened through the project's page: chips
- * one line high, rounded, with no border, a stronger gray under the pointer. */
+ * drawn small with round corners. */
 export function linkSections($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Link, isDesktop, snapshot, words, section, ground } = p;
-    const chips = (key: string, name: string, icon: string, title: string, items: JSX.Element[]) => (items.length > 0
+    const { Box, Text, Button, Link, isDesktop, snapshot, words, section, pill } = p;
+    // Each a chip drawn on the desktop, a link or a button laid over it; as it was on the terminal.
+    type Item = { text: string; href?: string; onPress?: () => unknown };
+    const chips = (key: string, name: string, icon: string, title: string, items: Item[]) => (items.length > 0
         ? section(key, icon, title, [
             <Box key={`${key}-row`} flexDirection="row" flexWrap="wrap" gap={1}>
-                {items.map((item, index) => (isDesktop ? ground(`${name}-box-${index}`, stateLayer, item, chipHover) : <Box key={`${name}-box-${index}`} paddingX={1}>{item}</Box>))}
+                {items.map((item, index) => (isDesktop
+                    ? pill(`${name}-box-${index}`, item.text, stateLayer, item.href || item.onPress ? linkColor : quietColor, item.href || item.onPress ? { ...item, key: `${name}-${index}` } : undefined)
+                    : (
+                        <Box key={`${name}-box-${index}`} paddingX={1}>
+                            {item.href ? <Link key={`${name}-${index}`} href={item.href}>{item.text}</Link>
+                                : item.onPress ? <Button key={`${name}-${index}`} plain label={item.text} onPress={() => void item.onPress?.()} />
+                                : <Text key={`${name}-${index}`} dimColor>{item.text}</Text>}
+                        </Box>
+                    )))}
             </Box>,
         ])
         : null);
     return [
-        chips("links", "link", "↗", words("sectionLinks"), (snapshot.links ?? []).map((link, index) => (link.href
-            ? <Link key={`link-${index}`} href={link.href}>{link.label}</Link>
-            : <Button key={`link-${index}`} plain label={link.label} onPress={() => postLink($, link.post ?? "")} />))),
-        chips("documents", "document", "📄", words("sectionDocuments"), (snapshot.documents ?? []).map((document, index) => (document.exists
-            ? <Link key={`document-${index}`} href={document.href}>{document.name}</Link>
-            : <Text key={`document-${index}`} dimColor>{document.name}</Text>))),
+        chips("links", "link", "↗", words("sectionLinks"), (snapshot.links ?? []).map((link) => (link.href ? { text: link.label, href: link.href } : { text: link.label, onPress: () => postLink($, link.post ?? "") }))),
+        chips("documents", "document", "📄", words("sectionDocuments"), (snapshot.documents ?? []).map((document) => (document.exists ? { text: document.name, href: document.href } : { text: document.name }))),
     ];
 }
 

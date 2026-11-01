@@ -3,6 +3,7 @@
 //   node backlog.mjs add "text" [--goal "<goal of the plan>"] [--p P2] [--effort <word>] [--to <name>] [--state todo|doing|postponed|done]
 //   node backlog.mjs start|done|postpone|todo T-12 [T-13…]
 //   node backlog.mjs archive T-12… | archive --done
+//   node backlog.mjs delete T-12…   (gone for good, its note too: only on the user's word; refused while another task cites it)
 //   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34] [--due 2026-11-15] [--type bug] [--by Stefano]
 //     [--<field> <value>]   (a field of the project's configuration, `fields:`; "" clears it; add takes them too)
 //   node backlog.mjs add --issue 34 ["text"]   (a task from a GitHub issue, its title the text when none is given; one another wrote
@@ -13,11 +14,13 @@
 //   node backlog.mjs comment T-12 [--by Stefano] -- "text"   (a comment on the task, kept in its note; show prints them)
 //   node backlog.mjs show T-12… | list [--atomic] [--state doing] [--to <name>] [--p P1] [--goal "…"] [--json] | find <words>… | goals
 //   node backlog.mjs export [--format json|csv|<an extension's>] [--state todo] [--all]   (the open tasks, or all of them, on stdout)
-//   node backlog.mjs import <file> [--format json|csv|<an extension's>] [--by <name>]   (new tasks, numbered here; all or none)
+//   node backlog.mjs import <file> [--format json|csv|<an extension's>] [--by <name>] [--done] [--preview]   (new tasks, numbered here, all or
+//     none: the open ones, the closed into the archive with --done; key, url and description in the note; a key already imported stays out)
 //   node backlog.mjs todos [--to <colleague>] [--json]   (with Crew: the colleagues' open todo lines that cite no task, each as <id>:<line>)
 //   node backlog.mjs take matteo-conti:8 [--to <name>] [--text "…"] [--p P1] [--type bug] [--goal "…"] [--keep]   (a todo line that is
 //     work for the project made a task, created by the colleague; the line then cites it, ticked as handed over, or open with --keep)
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { parseCsv, toCsv } from "../lib/csv.mjs";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
 import { codeView, issueOf } from "../lib/code.mjs";
@@ -33,10 +36,20 @@ import { syncIssues } from "./issues.mjs";
 import { assignees, changeableBacklog, commandLine, fail, firstLine, isClosed, isMain, loadProject, notePath, openStates, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, taskRules, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
-const changes = ["add", "start", "done", "postpone", "todo", "archive", "set", "import", "take"];
-const flags = ["json", "done", "atomic", "all", "keep", "approved"];
+const changes = ["add", "start", "done", "postpone", "todo", "archive", "delete", "set", "import", "take"];
+const flags = ["json", "done", "atomic", "all", "keep", "approved", "preview"];
+// The states another tool closes a task with: an import leaves them out, or brings them into the archive with --done.
+const closedStates = ["done", "archived", "closed", "resolved", "cancelled", "canceled"];
 // The columns of the backlog as CSV, the project's own fields after them.
 const csvColumns = ["id", "state", "priority", "effort", "to", "created", "goal", "type", "due", "parent", "after", "see", "by", "text", "started", "done", "archived"];
+
+/** The keys of the tasks already imported, from the Origin line of their notes: key → the task's id. */
+function importedKeys(config)
+{
+    const folder = config.files.notes;
+    const names = existsSync(folder) ? readdirSync(folder).filter((name) => name.endsWith(".md")) : [];
+    return new Map(names.map((name) => [read(join(folder, name)).match(/^Origin: (.+?)(?: · \S+)?$/m)?.[1]?.trim(), name.slice(0, -3)]).filter(([key]) => key));
+}
 
 /** What the backlog's checks need: the problems of the tasks as they are, for check.mjs. */
 export function backlogProblems(config, say)
@@ -105,7 +118,7 @@ async function run(args)
     const result = changes.includes(command) ? withBacklogLock(config, () => execute(command, options, words, config, say)) : execute(command, options, words, config, say);
 
     // Where the issues are in sync, a change of the backlog goes to GitHub at once, and what GitHub changed comes in.
-    if (changes.includes(command) && config.github?.issues === "sync") {
+    if (changes.includes(command) && options.preview !== true && config.github?.issues === "sync") {
         const quiet = [say("issuesInSync"), say("issuesBusy")];
         syncIssues(config, say).lines.filter((line) => !quiet.includes(line)).forEach((line) => console.log(line));
     }
@@ -187,9 +200,9 @@ function execute(command, options, words, config, say)
     // What a task is checked against, read at the first task checked.
     let rules = null;
     // A task as it will be written, among all the others: right in itself, its links to tasks and decisions that exist, no cycle of waits.
-    const checked = (task) => {
+    const checked = (task, others = tasks) => {
         rules ??= taskRules(config, say);
-        const all = [...tasks.filter((one) => one.id !== task.id), task];
+        const all = [...others.filter((one) => one.id !== task.id), task];
         // A goal given now must be open; a task keeps the goal it had, closed or not.
         const closed = typeof options.goal === "string" ? readGoals(config).find((goal) => goal.name === options.goal && goal.closed) : undefined;
         // An issue is done by one task only.
@@ -313,7 +326,7 @@ function execute(command, options, words, config, say)
 
         // A large task whose parts are now all closed: done is still to say, as for any task.
         for (const parent of new Set(ids.map((id) => moved.find((task) => task.id === id).parent).filter(Boolean))) {
-            if (moved.filter((task) => task.parent === parent).every(isClosed) && !isClosed(find(parent))) {
+            if (moved.filter((task) => task.parent === parent).every(isClosed) && !isClosed(moved.find((task) => `${prefix}-${task.id}` === parent))) {
                 console.log(say("partsAllDone", { id: parent }));
             }
         }
@@ -321,6 +334,18 @@ function execute(command, options, words, config, say)
         const chosen = options.done === true ? tasks.filter((task) => task.state === "done") : words.map(find);
         const ids = new Set(chosen.map((task) => task.id));
         save(tasks.map((task) => (ids.has(task.id) ? { ...task, state: "archived", archived: today() } : task)), say("archivedCount", { count: ids.size }));
+    } else if (command === "delete") {
+        const ids = new Set(words.map(find).map((task) => `${prefix}-${task.id}`));
+        const kept = tasks.filter((task) => !ids.has(`${prefix}-${task.id}`));
+
+        // A task another still waits for, sees or is a part of stays: its links would point nowhere.
+        for (const id of ids) {
+            const others = kept.filter((task) => [...task.after, ...task.see, task.parent].includes(id)).map((task) => `${prefix}-${task.id}`);
+            others.length > 0 && fail(say("deleteCited", { id, others: others.join(", ") }));
+        }
+
+        save(kept, say("deletedCount", { count: ids.size, ids: [...ids].join(", ") }));
+        [...ids].map((id) => notePath(config, id.slice(prefix.length + 1))).filter(existsSync).forEach((path) => unlinkSync(path));
     } else if (command === "set") {
         const task = find(words[0]);
         isIssueGiven && options.approved === undefined && task.issue !== `#${issueNumber()}` && givenIssue();
@@ -394,17 +419,30 @@ function execute(command, options, words, config, say)
         const shownTasks = tasks.filter((task) => wanted.every((word) => plain(`${task.text} ${task.goal} ${task.to}`).includes(word)));
         print(shownTasks, options.json, (task) => [`${line(task)} [${stateName(task)}]`, task.issue ? fromAnother(task) : null].filter(Boolean).join("  "), say("count", { count: shownTasks.length }));
     } else if (command === "import") {
-        // Each a new task, numbered after the others; a wrong one stops them all, so that nothing is half imported.
-        const added = [];
+        // Each item a new task, numbered after the others; a wrong one stops them all, so that nothing is half imported. One already
+        // imported (its key in a note's Origin line) stays out; so do the closed ones, which --done brings into the archive.
         const creator = typeof options.by === "string" ? options.by : byClaude();
-
-        for (const item of options.incoming) {
+        const known = importedKeys(config);
+        const day = /^\d{4}-\d{2}-\d{2}$/;
+        const keyOf = (item) => String(item.key ?? item.url ?? "").replace(/\s+/g, " ").replaceAll(" · ", " - ").trim();
+        const isShut = (item) => closedStates.includes(String(item.state ?? "").toLowerCase());
+        const already = options.incoming.filter((item) => keyOf(item) && known.has(keyOf(item)));
+        const shut = options.incoming.filter((item) => !already.includes(item) && isShut(item) && options.done !== true);
+        const kept = options.incoming.filter((item) => !already.includes(item) && !shut.includes(item))
+            .filter((item, at, all) => !keyOf(item) || all.findIndex((other) => keyOf(other) === keyOf(item)) === at);
+        // Every item numbered first, so that one may be a part of, wait for or see another by its key: an epic a large task.
+        const first = nextId(tasks);
+        const ids = new Map(kept.map((item, at) => [keyOf(item), `${prefix}-${first + at}`]).filter(([key]) => key));
+        // A key cites the task made of it, here or in an earlier import; one closed and left out, nothing: a wait already over.
+        const outKeys = new Set(shut.map(keyOf));
+        const resolved = (one) => (outKeys.has(String(one).trim()) ? null : ids.get(String(one).trim()) ?? known.get(String(one).trim()) ?? one);
+        const listed = (value, fallback) => (Array.isArray(value) ? value : value ? listOf(value) : fallback).map(resolved).filter(Boolean);
+        const fresh = kept.map((item, at) => {
             const split = splitLinks(String(item.text ?? "").replace(/\s+/g, " ").replaceAll(" · ", " - ").trim(), config.words.fields);
-            const state = stateKeys.includes(item.state) ? item.state : "todo";
-            const day = /^\d{4}-\d{2}-\d{2}$/;
-            const listed = (value, fallback) => (Array.isArray(value) ? value : value ? listOf(value) : fallback);
-            const task = {
-                id: nextId([...tasks, ...added]),
+            const closed = isShut(item);
+            const state = closed ? "archived" : stateKeys.includes(item.state) ? item.state : "todo";
+            return {
+                id: first + at,
                 priority: item.priority || "P2",
                 effort: item.effort || config.words.efforts.medium,
                 to: item.to || config.people[0],
@@ -413,21 +451,42 @@ function execute(command, options, words, config, say)
                 text: split.text,
                 after: listed(item.after, split.after),
                 see: listed(item.see, split.see),
-                parent: item.parent || split.parent,
+                parent: (item.parent ? resolved(item.parent) : split.parent) || null,
                 issue: split.issue,
                 due: item.due || split.due,
                 type: item.type ? typeKey(String(item.type)) : split.type,
                 by: item.by || creator,
                 fields: { ...split.fields, ...item.fields },
                 started: null,
-                done: state === "done" ? (day.test(item.done ?? "") ? item.done : today()) : null,
-                archived: null,
+                done: state === "done" || closed ? (day.test(item.done ?? "") ? item.done : today()) : null,
+                archived: closed ? today() : null,
                 state,
             };
-            added.push(checked(task));
-        }
+        });
+        // Checked among all the imported ones, which may cite each other.
+        fresh.forEach((task) => checked(task, [...tasks, ...fresh]));
+        // The note of each: the description, then where it comes from.
+        const notes = kept.map((item, at) => {
+            const description = String(item.description ?? "").trim();
+            const url = String(item.url ?? "").trim();
+            const origin = keyOf(item) ? `Origin: ${keyOf(item)}${url && url !== keyOf(item) ? ` · ${url}` : ""}` : "";
+            const task = fresh[at];
+            return description || origin ? { id: task.id, text: `# ${prefix}-${task.id} · ${task.text}\n${description ? `\n${description}\n` : ""}${origin ? `\n${origin}\n` : ""}` } : null;
+        }).filter(Boolean);
+        const left = [
+            ...(already.length > 0 ? [say("importAlready", { count: already.length, keys: already.map((item) => `${keyOf(item)} (${known.get(keyOf(item))})`).join(", ") })] : []),
+            ...(shut.length > 0 ? [say("importClosedOut", { count: shut.length })] : []),
+        ];
 
-        save([...tasks, ...added], say("imported", { count: added.length, ids: added.map((task) => `${prefix}-${task.id}`).join(", ") }));
+        if (options.preview === true) {
+            fresh.forEach((task) => console.log(`${line(task)} [${stateName(task)}]${notes.some((note) => note.id === task.id) ? `  ${say("importWithNote")}` : ""}`));
+            [...left, say("importPreview", { count: fresh.length })].forEach((one) => console.log(one));
+        } else if (fresh.length === 0) {
+            [...left, say("importNothing")].forEach((one) => console.log(one));
+        } else {
+            save([...tasks, ...fresh], [say("imported", { count: fresh.length, ids: fresh.map((task) => `${prefix}-${task.id}`).join(", ") }), ...left].join("\n"));
+            notes.forEach((note) => writeDoc(config, notePath(config, note.id), note.text));
+        }
     } else if (command === "todos") {
         const open = openTodos(config).filter((todo) => typeof options.to !== "string" || todo.name.toLowerCase() === options.to.toLowerCase());
 
