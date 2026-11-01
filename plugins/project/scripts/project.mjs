@@ -62,17 +62,37 @@ export function findRoot(from)
     }
 }
 
+// The last backlog read, by the texts of its files: the check and the page read it several times a run, and a backlog of thousands of
+// lines is worth reading once. Frozen, since every reader shares it.
+let lastBacklog = null;
+
 /** Every task, the backlog's by their sections and the archive's, each with its file, and the lines that do not read. */
 export function readBacklog(config)
 {
     const prefix = config.prefixes.task;
-    const live = parseBacklog(read(config.files.tasks), config.words, prefix, false);
-    const archived = parseBacklog(read(config.files.archive), config.words, prefix, true);
-    const tagged = (list, file) => list.map((one) => ({ ...one, file }));
-    return {
-        tasks: [...tagged(live.tasks, config.files.tasks), ...tagged(archived.tasks, config.files.archive)],
-        unread: [...tagged(live.unread, config.files.tasks), ...tagged(archived.unread, config.files.archive)],
-    };
+    const files = [config.files.tasks, config.files.archive];
+    const texts = files.map(read);
+    const isSame = lastBacklog && lastBacklog.words === config.words && lastBacklog.prefix === prefix && files.every((file, index) => lastBacklog.files[index] === file && lastBacklog.texts[index] === texts[index]);
+
+    if (isSame) {
+        return lastBacklog.backlog;
+    }
+
+    const live = parseBacklog(texts[0], config.words, prefix, false);
+    const archived = parseBacklog(texts[1], config.words, prefix, true);
+    const tagged = (list, file) => list.map((one) => deepFreeze({ ...one, file }));
+    const backlog = Object.freeze({
+        tasks: Object.freeze([...tagged(live.tasks, files[0]), ...tagged(archived.tasks, files[1])]),
+        unread: Object.freeze([...tagged(live.unread, files[0]), ...tagged(archived.unread, files[1])]),
+    });
+    lastBacklog = { words: config.words, prefix, files, texts, backlog };
+    return backlog;
+}
+
+function deepFreeze(value)
+{
+    Object.values(value).filter((one) => one && typeof one === "object").forEach(deepFreeze);
+    return Object.freeze(value);
 }
 
 /** Writes the backlog and the archive back, each task under its state: the archive first, which only gains lines, so that a task the
@@ -254,6 +274,14 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
     const holds = readHolds(config);
     const now = today();
     const isSpec = (one) => one.startsWith(`${config.prefixes.spec}-`);
+    // Who waits for each task, gathered in one pass: looked up task by task, the waits of a large backlog cost its square.
+    const waiters = new Map();
+
+    for (const other of tasks) {
+        for (const one of new Set(other.after)) {
+            waiters.set(one, [...(waiters.get(one) ?? []), `${prefix}-${other.id}`]);
+        }
+    }
 
     return new Map(tasks.map((task) => {
         const id = `${prefix}-${task.id}`;
@@ -274,7 +302,7 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
             specs: task.see.filter(isSpec),
             blockedBy: graph.blockers(id),
             chain: graph.chain(id),
-            waitedBy: tasks.filter((other) => other.after.includes(id)).map((other) => `${prefix}-${other.id}`),
+            waitedBy: waiters.get(id) ?? [],
             seenFrom: from.get(id) ?? [],
             note: notes.has(`${id}.md`) ? shown(config, notePath(config, task.id)) : null,
             decisions: decisions.get(id) ?? [],
@@ -573,6 +601,9 @@ export function realPath(path)
     }
 }
 
+// The top of the repo each folder is in, by folder.
+const tops = new Map();
+
 /** The project's repos: the configured ones, else the project's and, when the docs are a repo of their own, theirs. */
 export function projectRepos(config)
 {
@@ -580,7 +611,14 @@ export function projectRepos(config)
         return config.repos;
     }
 
-    const top = (folder) => git(folder, ["rev-parse", "--show-toplevel"]).trim().toLowerCase();
+    const top = (folder) => {
+        // A folder in a repo stays in it while a script or the page runs: git is asked once; a folder in none, again, until it is.
+        if (!tops.get(folder)) {
+            tops.set(folder, git(folder, ["rev-parse", "--show-toplevel"]).trim().toLowerCase());
+        }
+
+        return tops.get(folder);
+    };
     const project = top(config.root);
     const docs = existsSync(config.docs) ? top(realPath(config.docs)) : "";
     return [{ name: config.words.repoProject, path: config.root }, ...(docs && docs !== project ? [{ name: config.words.repoDocs, path: realPath(config.docs) }] : [])];

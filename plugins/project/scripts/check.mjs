@@ -7,6 +7,7 @@ import { planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
 import { codeView, issueOf } from "../lib/code.mjs";
 import { parseTodo } from "../lib/todos.mjs";
+import { partsOf } from "../lib/links.mjs";
 import { readCode, readIssues } from "./code.mjs";
 import { syncSummary } from "./issues.mjs";
 import { taskSide } from "../lib/issues.mjs";
@@ -16,8 +17,9 @@ import { readable } from "../lib/words.mjs";
 import { betterDescription, joinFrontmatter, splitFrontmatter } from "../lib/frontmatter.mjs";
 import { citingFiles, docFiles, isMain, legacyFormat, stampDoc, loadProject, read, readBacklog, readDecisions, readContracts, readDependencies, readGoals, readSpecs, readTodos, runCli, shown, specCitations, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
 
-/** Every finding about the docs, from errors that must be fixed to notes for the cleanup: { severity, kind, file, line, message }. */
-export function check(config, say)
+/** Every finding about the docs, from errors that must be fixed to notes for the cleanup: { severity, kind, file, line, message }. `code`,
+ * the commits and pull requests by task when the caller has read them already. */
+export function check(config, say, { code } = {})
 {
     const findings = [];
     const add = (severity, kind, file, line, message) => findings.push({ severity, kind, file: file === null ? null : shown(config, file), line, message });
@@ -31,7 +33,7 @@ export function check(config, say)
     checkTodos(config, say, add);
     checkBacklog(config, say, add);
     checkLinks(config, say, add);
-    checkCode(config, say, add);
+    checkCode(config, say, add, code);
     checkIssues(config, say, add);
     checkTime(config, say, add);
     checkPlan(config, say, add);
@@ -288,9 +290,12 @@ function checkLinks(config, say, add)
     // A large task follows its parts: closed while some are open, or open once all are closed.
     const isClosed = (task) => task.state === "done" || task.state === "archived";
 
-    for (const large of tasks.filter((task) => tasks.some((part) => part.parent === `${prefix}-${task.id}`))) {
+    const parts = partsOf(tasks, prefix);
+    const byId = new Map(tasks.map((task) => [`${prefix}-${task.id}`, task]));
+
+    for (const large of tasks.filter((task) => parts.has(`${prefix}-${task.id}`))) {
         const id = `${prefix}-${large.id}`;
-        const open = tasks.filter((part) => part.parent === id && !isClosed(part)).map((part) => `${prefix}-${part.id}`);
+        const open = parts.get(id).filter((part) => !isClosed(byId.get(part)));
 
         if (isClosed(large) && open.length > 0) {
             add("warning", "links", large.file, large.line, say("partsOpen", { id, state: large.state === "done" ? config.labels.doneMarker : config.labels.archivedMarker, list: open.join(", ") }));
@@ -312,10 +317,10 @@ function checkLinks(config, say, add)
 }
 
 /** A task still open that a merged pull request cites: the work may be finished, the task not yet closed. */
-function checkCode(config, say, add)
+function checkCode(config, say, add, given)
 {
     const prefix = config.prefixes.task;
-    const code = readCode(config);
+    const code = given ?? readCode(config);
 
     for (const task of readBacklog(config).tasks.filter((one) => ["doing", "todo", "postponed"].includes(one.state))) {
         const merged = codeView(code.get(task.id)).mergedPull;

@@ -5,21 +5,37 @@ import { escapeRegex } from "./text.mjs";
 import { effortWord, priorityKeys, readablePattern, stateKeys, stateOfHeading } from "./words.mjs";
 
 const separator = " · ";
+// A task line's patterns, by the project's words and its prefix: made once, not once a line of a backlog of thousands.
+const patterns = new WeakMap();
+
+function linePatterns(words, prefix)
+{
+    const byPrefix = patterns.get(words) ?? new Map();
+    patterns.set(words, byPrefix);
+
+    if (!byPrefix.has(prefix)) {
+        const day = "(\\d{4}-\\d{2}-\\d{2})";
+        byPrefix.set(prefix, {
+            line: new RegExp(`^- ${escapeRegex(prefix)}-(\\d+) · (P[1-3]) · ([^·]+?) · ([^·]+?) · (\\d{4}-\\d{2}-\\d{2}) · ([^·]+?) · (.*)$`),
+            marks: new RegExp(`^(.*?)(?: · (?:${readablePattern(words, "startedMarker")}) ${day})?(?: · (?:${readablePattern(words, "doneMarker")}) ${day})?(?: · (?:${readablePattern(words, "archivedMarker")}) ${day})?$`),
+        });
+    }
+
+    return byPrefix.get(prefix);
+}
 
 /** A task line taken apart, with the state its section gives it; null for any other line. */
 export function parseLine(line, state, words, prefix = "T")
 {
-    const pattern = new RegExp(`^- ${escapeRegex(prefix)}-(\\d+) · (P[1-3]) · ([^·]+?) · ([^·]+?) · (\\d{4}-\\d{2}-\\d{2}) · ([^·]+?) · (.*)$`);
-    const match = pattern.exec(line.trim());
+    const pattern = linePatterns(words, prefix);
+    const match = pattern.line.exec(line.trim());
 
     if (!match) {
         return null;
     }
 
     const [, id, priority, effort, to, created, goal, rest] = match;
-    const day = "(\\d{4}-\\d{2}-\\d{2})";
-    const marks = new RegExp(`^(.*?)(?: · (?:${readablePattern(words, "startedMarker")}) ${day})?(?: · (?:${readablePattern(words, "doneMarker")}) ${day})?(?: · (?:${readablePattern(words, "archivedMarker")}) ${day})?$`);
-    const [, whole, started, done, archived] = marks.exec(rest);
+    const [, whole, started, done, archived] = pattern.marks.exec(rest);
     return { id: Number(id), priority, effort: effortWord(words, effort.trim()), to: to.trim(), created, goal: goal.trim(), ...splitLinks(whole, words.fields ?? []), started: started ?? null, done: done ?? null, archived: archived ?? null, state };
 }
 

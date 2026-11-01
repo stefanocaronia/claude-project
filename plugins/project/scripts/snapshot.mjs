@@ -33,10 +33,10 @@ export async function snapshot(config, say, withHealth = true)
     const { open } = readDecisions(config);
     const now = today();
     const extensions = await loadExtensions(config);
-    const findings = withHealth ? [...check(config, say), ...(await extensionChecks(config, say, extensions))] : null;
+    const code = readCode(config);
+    const findings = withHealth ? [...check(config, say, { code }), ...(await extensionChecks(config, say, extensions))] : null;
     const page = `http://localhost:${config.page.port}`;
     const links = taskLinks(config, tasks);
-    const code = readCode(config);
     const issues = readIssues(config);
     const login = readLogin(config);
 

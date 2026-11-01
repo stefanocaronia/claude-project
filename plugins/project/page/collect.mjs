@@ -29,6 +29,8 @@ const boardDays = 14;
 export async function collect(config, say, extensions = [])
 {
     const plan = readPlan(config);
+    // The commits and pull requests by task, read once for the board and the check.
+    const code = readCode(config);
     const extra = {};
 
     for (const extension of extensions) {
@@ -58,14 +60,14 @@ export async function collect(config, say, extensions = [])
         colleagues: readColleagues(config),
         owner: await ownerOf(config),
         tasks: readTasks(config),
-        board: readBoard(config),
+        board: readBoard(config, code),
         releases: readReleasesData(config),
         specs: readSpecsData(config),
         issues: freeIssues(readIssues(config), readBacklog(config).tasks).map(({ number, title, url }) => ({ number, title, url, instruction: readsAsInstruction(title) })),
         issuesSync: syncSummary(config),
         boardDays,
         holds: readHolds(config),
-        health: [...check(config, say), ...(await extensionChecks(config, say, extensions))],
+        health: [...check(config, say, { code }), ...(await extensionChecks(config, say, extensions))],
         activity: activity(config),
         extensions: extensions.map((extension) => ({ id: extension.id, script: extension.script ? `/extension/${extension.id}/page.js` : null })),
         extra,
@@ -157,14 +159,13 @@ async function ownerOf(config)
 }
 
 /** The backlog for the board and the lists: every task not archived, and those archived within the board's days, with who holds it. */
-function readBoard(config)
+function readBoard(config, code)
 {
     const since = today(new Date(Date.now() - boardDays * 86_400_000));
     const ids = new Map(colleagues(config).map((colleague) => [colleague.name, colleague.id]));
     const { tasks } = readBacklog(config);
     const planned = new Set(readGoals(config).map((goal) => goal.name));
     const links = taskLinks(config, tasks);
-    const code = readCode(config);
     const issues = readIssues(config);
     const login = readLogin(config);
     const released = new Map(readReleases(config).flatMap((release) => release.tasks.map((id) => [id, release.version])));

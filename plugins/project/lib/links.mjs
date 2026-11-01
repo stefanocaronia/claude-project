@@ -212,8 +212,17 @@ function cyclesOf(waits)
     return [...cycles.values()];
 }
 
+// The pattern of a suffix, by the kinds it may name: made once, not once a suffix of every line.
+const suffixPatterns = new Map();
+
 function suffixOf(text, known = kinds)
 {
-    const match = new RegExp(`\\s*\\((${known.map(escapeRegex).join("|")}):\\s*([^()]*)\\)\\s*$`, "i").exec(text);
+    const key = known.join("|");
+
+    if (!suffixPatterns.has(key)) {
+        suffixPatterns.set(key, new RegExp(`\\s*\\((${known.map(escapeRegex).join("|")}):\\s*([^()]*)\\)\\s*$`, "i"));
+    }
+
+    const match = suffixPatterns.get(key).exec(text);
     return match ? { kind: match[1].toLowerCase(), items: match[2], index: match.index } : null;
 }

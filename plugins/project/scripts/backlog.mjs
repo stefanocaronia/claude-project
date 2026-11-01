@@ -45,6 +45,7 @@ export function backlogProblems(config, say)
     const people = assignees(config);
     const goals = readGoals(config).map((goal) => goal.name);
     const seen = new Map();
+    const known = new Set(tasks.map((task) => `${prefix}-${task.id}`));
 
     for (const task of tasks) {
         const at = { file: task.file, line: task.line };
@@ -63,7 +64,7 @@ export function backlogProblems(config, say)
         }
 
         // A link to a task that is in neither the backlog nor the archive; a decision's the check of the references says.
-        for (const cited of [...task.after, ...task.see, ...(task.parent ? [task.parent] : [])].filter((one) => one.startsWith(`${prefix}-`) && !tasks.some((other) => `${prefix}-${other.id}` === one))) {
+        for (const cited of [...task.after, ...task.see, ...(task.parent ? [task.parent] : [])].filter((one) => one.startsWith(`${prefix}-`) && !known.has(one))) {
             problems.push({ ...at, message: say("linkUnknown", { id, other: cited }) });
         }
 
