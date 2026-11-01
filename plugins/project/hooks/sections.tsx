@@ -178,7 +178,7 @@ export function releaseSection(p: Panel)
         ...releases.list.map((release) => (
             <Box key={`release-${release.version}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
                 <Box flexShrink={0}><Link key={`release-link-${release.version}`} href={`${snapshot.page}/#releases/${release.version}`}>{`v${release.version}`}</Link></Box>
-                <Box flexShrink={0}><Text dimColor>{[release.day, release.count === null ? words("releaseTagOnly") : words("releaseTasks", { count: release.count })].filter(Boolean).join(" · ")}</Text></Box>
+                <Box flexShrink={0}><Text dimColor>{[release.day, release.count === null ? words(release.declared ? "releaseDeclared" : "releaseTagOnly") : words("releaseTasks", { count: release.count })].filter(Boolean).join(" · ")}</Text></Box>
                 {release.summary ? <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden"><Text wrap="truncate-end">{release.summary}</Text></Box> : null}
             </Box>
         )),

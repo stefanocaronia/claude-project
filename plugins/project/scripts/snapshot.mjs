@@ -185,7 +185,8 @@ function specsOf(config)
 }
 
 /** The releases for the panel: the last ten, the newest first, how many there are in all (the page lists them all), and the work done
- * since the last one with the version it suggests. A version known only by its tag has no count of tasks. */
+ * since the last one with the version it suggests. A version known only by its tag has no count of tasks; one its package or manifest
+ * alone says is `declared`. */
 function releasesOf(config, tasks, goals)
 {
     const releases = readReleases(config);
@@ -198,7 +199,7 @@ function releasesOf(config, tasks, goals)
     const contracts = readContracts(config, releases);
     const { pending, suggested, raised } = releaseState(releases, tasks, goals, config.prefixes.task, contracts);
     return {
-        list: [...releases].reverse().slice(0, 10).map(({ version, day, summary, tasks: listed, tagOnly }) => ({ version, day, summary, count: tagOnly ? null : listed.length })),
+        list: [...releases].reverse().slice(0, 10).map(({ version, day, summary, tasks: listed, tagOnly, tagged }) => ({ version, day, summary, count: tagOnly ? null : listed.length, declared: tagOnly && !tagged })),
         total: releases.length,
         pending: pending.length,
         next: suggested.version,

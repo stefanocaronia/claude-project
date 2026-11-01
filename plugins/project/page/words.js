@@ -50,7 +50,7 @@ const pageWords = {
         releasesNone: "No version written yet: release.mjs status says what is done and which number it suggests.",
         releaseTasks: (count) => `${count} tasks`,
         releaseTagOnlyShort: "tag",
-        releaseTagOnly: (source) => (source === "package" ? "The package's version: no tag and no notes for it." : `No notes were written for it: here is ${source === "tag" ? "its tag's message" : "the message of the commit its tag marks"}.`),
+        releaseTagOnly: (source) => (source === "package" ? "The package's version: no tag and no notes for it." : source === "plugin" ? "The version the plugin's manifest says: no tag and no notes for it." : `No notes were written for it: here is ${source === "tag" ? "its tag's message" : "the message of the commit its tag marks"}.`),
         errorsBadge: (count) => (count === 1 ? "1 error" : `${count} errors`),
 
         ringLabel: (percent) => `Plan ${percent}% done`,
@@ -322,7 +322,7 @@ const pageWords = {
         releasesNone: "Ancora nessuna versione scritta: release.mjs status dice cosa è fatto e quale numero suggerisce.",
         releaseTasks: (count) => `${count} compiti`,
         releaseTagOnlyShort: "tag",
-        releaseTagOnly: (source) => (source === "package" ? "La versione del pacchetto: né tag né note." : `Per questa non ci sono note: ecco ${source === "tag" ? "il messaggio del suo tag" : "il messaggio del commit che il suo tag segna"}.`),
+        releaseTagOnly: (source) => (source === "package" ? "La versione del pacchetto: né tag né note." : source === "plugin" ? "La versione che dice il manifest del plugin: né tag né note." : `Per questa non ci sono note: ecco ${source === "tag" ? "il messaggio del suo tag" : "il messaggio del commit che il suo tag segna"}.`),
         errorsBadge: (count) => (count === 1 ? "1 errore" : `${count} errori`),
 
         ringLabel: (percent) => `Piano completato al ${percent}%`,

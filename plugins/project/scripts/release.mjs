@@ -20,7 +20,10 @@ function run(args)
     const { config, say } = loadProject();
     const { options, words } = commandLine(rest);
     const prefix = config.prefixes.task;
-    const releases = readReleases(config);
+    const known = readReleases(config);
+    // The notes of the version the plugin's manifest already says, written after it: the work goes back to the release before it.
+    const asked = (command === "notes" || command === "write") && typeof words[0] === "string" ? words[0].trim().replace(/^v/, "") : "";
+    const releases = known.at(-1)?.source === "plugin" && asked === known.at(-1).version ? known.slice(0, -1) : known;
     const contracts = readContracts(config, releases);
     const { last, pending, counts, closedGoals, urgent, raised } = releaseState(releases, readBacklog(config).tasks, readGoals(config), prefix, contracts);
     const breaking = typeof options.breaking === "string" ? options.breaking.split(";").map((item) => item.trim()).filter(Boolean) : [];

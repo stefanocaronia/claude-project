@@ -191,6 +191,42 @@ test("the repo's tags are the versions, the notes go with theirs; with neither, 
     rmSync(tagged, { recursive: true, force: true });
 });
 
+test("a plugin's version is its manifest's past every tag, on the day the manifest took it; its notes written after it hold the work since the tag", { skip: spawnSync("git", ["--version"]).status === 0 ? false : "no git here" }, async () => {
+    const folder = mkdtempSync(join(tmpdir(), "claude-project-plugin-"));
+    const write = (path, text) => {
+        mkdirSync(dirname(join(folder, path)), { recursive: true });
+        writeFileSync(join(folder, path), text);
+    };
+    const release = (...args) => spawnSync(process.execPath, [join(scripts, "release.mjs"), ...args], { cwd: folder, encoding: "utf8", env: env() });
+    const git = (day, ...args) => spawnSync("git", ["-C", folder, "-c", "user.name=T", "-c", "user.email=t@t", ...args], { encoding: "utf8", env: { ...process.env, GIT_AUTHOR_DATE: `${day}T12:00:00`, GIT_COMMITTER_DATE: `${day}T12:00:00` } });
+    const { readReleases, loadProject } = await import("../scripts/project.mjs");
+    const versions = () => readReleases(loadProject(folder).config).map(({ version, day, source }) => [version, day, source]);
+    write(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\n");
+    write("docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n## Postponed\n\n## Done\n\n- T-1 · P2 · medium · Claude · 2026-10-01 · — · the dice (type: feature) · done 2026-10-10\n- T-2 · P2 · medium · Claude · 2026-10-01 · — · the map (type: feature) · done 2099-01-01\n");
+    git("2026-10-01", "init", "-q", "-b", "main");
+    git("2026-10-01", "add", ".");
+    git("2026-10-01", "commit", "-q", "-m", "one");
+    git("2026-10-01", "tag", "v0.4.0");
+    // The marketplace's one plugin: its folder's plugin.json, which Claude Code reads first, says the version; not committed, it has no day.
+    write(".claude-plugin/marketplace.json", JSON.stringify({ name: "dice", plugins: [{ name: "dice", source: "./plugins/dice", version: "0.5.0" }] }));
+    write("plugins/dice/.claude-plugin/plugin.json", JSON.stringify({ name: "dice", version: "0.6.0" }));
+    assert.deepEqual(versions(), [["0.4.0", "2026-10-01", "commit"], ["0.6.0", "", "plugin"]]);
+    git("2026-10-20", "add", ".");
+    git("2026-10-20", "commit", "-q", "-m", "two");
+    assert.deepEqual(versions().at(-1), ["0.6.0", "2026-10-20", "plugin"]);
+    // The version holds T-1, done by the manifest's day; T-2 is still to release, from it. A version below it is not past it.
+    assert.match(release("status").stdout, /Last release: v0\.6\.0[\s\S]*Done since: 1 tasks[\s\S]*Suggested: v0\.7\.0/);
+    assert.notEqual(release("write", "0.5.0").status, 0);
+    // Its notes, written after the manifest took it, hold the work since the tag; then the notes are the version.
+    assert.match(release("write", "0.6.0", "--summary", "The dice roll.").stdout, /v0\.6\.0/);
+    assert.match(readFileSync(join(folder, "docs/releases/v0.6.0.md"), "utf8"), /T-1 · the dice[\s\S]*T-2 · the map|T-2 · the map[\s\S]*T-1 · the dice/);
+    assert.deepEqual(versions().map(([version, , source]) => [version, source]), [["0.4.0", "commit"], ["0.6.0", "notes"]]);
+    // A manifest behind the tags says nothing: the plugin's own plugin.json, at the root, comes first.
+    write(".claude-plugin/plugin.json", JSON.stringify({ name: "dice", version: "0.3.0" }));
+    assert.deepEqual(versions().map(([version]) => version), ["0.4.0", "0.6.0"]);
+    rmSync(folder, { recursive: true, force: true });
+});
+
 function env()
 {
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...rest } = process.env;

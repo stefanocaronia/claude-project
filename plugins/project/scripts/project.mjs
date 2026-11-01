@@ -531,7 +531,8 @@ function normalized(path)
  * make them (v1.2.3 or 1.2.3), each on its tag's day; the notes in <docs>/releases go with their version's tag. Notes not tagged yet
  * (written, the tag still to make) are releases too, `tagged` false; a tag without notes has `tagOnly`, its summary and text from the
  * tag's own message when it says more than the version, else from the commit it marks (`source` "tag" or "commit"). With neither, the
- * version of the project's package.json, without a day: a project that released before the plugin starts from where it is. */
+ * version of the project's package.json, without a day: a project that released before the plugin starts from where it is. A Claude
+ * Code plugin's version, in its manifest, counts past every tag and notes (`source` "plugin"), on the day the manifest took it. */
 export function readReleases(config)
 {
     const notes = new Map((!existsSync(config.files.releases) ? [] : readdirSync(config.files.releases))
@@ -561,7 +562,12 @@ export function readReleases(config)
             : { version, day: tag.day, summary: messageSummary(tag.text, version), tasks: [], text: tag.text, tagged: true, tagOnly: true, source: tag.source };
     });
     const packaged = releases.length === 0 ? packageVersion(config) : null;
-    return [...releases, ...(packaged ? [{ version: packaged, day: "", summary: "", tasks: [], text: "", tagged: false, tagOnly: true, source: "package" }] : [])]
+    // A plugin's version is the one Claude Code installs, written in its manifest, whose tags may stop being made: it counts once it is
+    // past every tag and notes.
+    const plugin = packaged ? null : pluginVersion(config);
+    const declared = plugin && releases.every((release) => compareVersions(plugin.version, release.version) > 0)
+        ? { version: plugin.version, day: plugin.day, summary: "", tasks: [], text: "", tagged: false, tagOnly: true, source: "plugin" } : null;
+    return [...releases, ...(packaged ? [{ version: packaged, day: "", summary: "", tasks: [], text: "", tagged: false, tagOnly: true, source: "package" }] : []), ...(declared ? [declared] : [])]
         .sort((first, second) => compareVersions(first.version, second.version));
 }
 
@@ -601,6 +607,35 @@ function packageVersion(config)
     } catch {
         return null;
     }
+}
+
+/** The version of a Claude Code plugin the project is: its .claude-plugin/plugin.json's, else that of the one plugin its
+ * .claude-plugin/marketplace.json lists (its folder's plugin.json's, which Claude Code reads first, else the entry's), as
+ * MAJOR.MINOR.PATCH; { version, day }, day that of the last commit that changed the version in that file, while the committed file says
+ * the same; else null. */
+function pluginVersion(config)
+{
+    const json = (path) => {
+        try {
+            return JSON.parse(read(path));
+        } catch {
+            return null;
+        }
+    };
+    const own = join(config.root, ".claude-plugin", "plugin.json");
+    const plugins = json(join(config.root, ".claude-plugin", "marketplace.json"))?.plugins;
+    const only = Array.isArray(plugins) && plugins.length === 1 ? plugins[0] : null;
+    const folder = typeof only?.source === "string" && only.source.startsWith("./") ? join(config.root, only.source, ".claude-plugin", "plugin.json") : null;
+    const [version, file] = [[json(own)?.version, own], [folder && json(folder)?.version, folder], [only?.version, join(config.root, ".claude-plugin", "marketplace.json")]]
+        .find(([one]) => /^\d+\.\d+\.\d+$/.test(String(one ?? ""))) ?? [];
+
+    if (!version) {
+        return null;
+    }
+
+    const path = relativeTo(config.root, file);
+    const committed = git(config.root, ["show", `HEAD:./${path}`]).includes(`"${version}"`);
+    return { version, day: committed ? git(config.root, ["log", "-1", "--format=%cs", "-G", "\"version\"", "--", path]).trim() : "" };
 }
 
 /** Whether a program is on the path, without running it: `git`, `gh`; on Windows with its .exe or .cmd. */
