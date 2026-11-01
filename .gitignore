@@ -2,3 +2,7 @@ node_modules/
 .DS_Store
 # Types Claude Code lays beside a mod it loads from a folder
 plugins/*/.claude-plugin/types/
+
+# The plugin's own project, kept with the plugin, not published: its docs in private/, its configuration and local tooling in .claude/
+/private/
+/.claude/
