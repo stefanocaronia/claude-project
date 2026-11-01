@@ -17,7 +17,7 @@ const archiveAskFor = 4000;
 
 export function taskDetails($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Link, Input, Select, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, dueWords } = p;
+    const { Box, Text, Button, Link, Input, Select, hasForms, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, dueWords } = p;
     const choices = (values: string[]) => values.map((value) => ({ value, label: value }));
     const refColor = (id: string) => (id.startsWith(`${snapshot.prefixes.decision}-`) ? decisionColor : id.startsWith(`${prefix}-`) ? taskColor : undefined);
     // A labeled row of chips, none without one.
@@ -110,13 +110,13 @@ export function taskDetails($: EngineInterface, p: Panel)
         const key = `task-${task.id}`;
         return (
             <Box key={`details-${task.id}`} flexDirection="column" gap={1} paddingLeft={isDesktop ? 4 : 2}>
-                {view.editing === key ? editing(task) : facts(task, isPart)}
+                {hasForms && view.editing === key ? editing(task) : facts(task, isPart)}
                 <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
                     <Button key={`done-${task.id}`} plain label={words("markDone")} onPress={() => markDone($, snapshot, task)} />
                     {task.state === "postponed"
                         ? <Button key={`resume-${task.id}`} plain label={words("backToDo")} onPress={() => backlog($, ["todo", ...withParts(task, "postponed")])} />
                         : <Button key={`postpone-${task.id}`} plain dimColor label={words("postpone")} onPress={() => backlog($, ["postpone", ...withParts(task, "todo")])} />}
-                    <Button key={`edit-text-${task.id}`} plain dimColor label={words(view.editing === key ? "cancelEdit" : "editText")} onPress={() => void change((old) => ({ ...old, editing: old.editing === key ? null : key }))} />
+                    {hasForms ? <Button key={`edit-text-${task.id}`} plain dimColor label={words(view.editing === key ? "cancelEdit" : "editText")} onPress={() => void change((old) => ({ ...old, editing: old.editing === key ? null : key }))} /> : null}
                     {view.archiving === task.id
                         ? <Button key={`archive-${task.id}`} plain label={words("archiveSure", { id: idOf(task) })} onPress={() => archive(task)} />
                         : <Button key={`archive-${task.id}`} plain dimColor label={words("archive")} onPress={() => askArchive(task)} />}

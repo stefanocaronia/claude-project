@@ -277,6 +277,16 @@ test("the check, the panel and the page tell a task whose issue is gone, and a s
     edit((state) => {
         state.offline = false;
     });
+
+    // A line of the backlog that does not read as a task, which writing the backlog again would lose: the sync changes nothing, on
+    // either side, and says why where its last run shows.
+    const tasks = readFileSync(join(root, "docs/TASKS.md"), "utf8");
+    put("docs/TASKS.md", tasks.replace("## To do\n", "## To do\n\n- a line that is not a task\n"));
+    const calls = gh().calls.length;
+    assert.match(issues("sync").stdout, /^The backlog has lines that do not read as tasks, .*: docs\/TASKS\.md:\d+\.$/m);
+    assert.equal(gh().calls.length, calls);
+    assert.match(sync().error, /do not read as tasks/);
+    put("docs/TASKS.md", tasks);
     put(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude, Stefano]\n");
     assert.match(issues("sync").stdout, /github: \{ issues: sync \} in \.claude\/project\.yaml turns it on/);
 });

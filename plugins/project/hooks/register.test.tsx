@@ -551,6 +551,17 @@ test("a task added from the list to do, with its priority, type and large task, 
     await ui.unmount();
 });
 
+test("on the mobile app, which draws no form, no button opens one: the rest of an open task stays", async ($, on) => {
+    world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "mobile", component: "Pane", requestId: "project", props });
+    expect(await ui.find({ key: "new-task" })).toBeUndefined();
+    await ui.press({ key: "open-80" });
+    expect(await ui.find({ key: "edit-text-80" })).toBeUndefined();
+    expect(await ui.find({ key: "done-80" })).toBeDefined();
+    await ui.unmount();
+});
+
 test("the owner's GitHub picture on their tasks and beside every decision; without it, the initials of the person who decides", async ($, on) => {
     const owned = { ...good, stdout: JSON.stringify({ ...snapshot, owner: { name: "Stefano", fullName: "Stefano Caronia", portrait: "data:image/jpeg;base64,AAAA" } }) };
     world(on, [owned]);

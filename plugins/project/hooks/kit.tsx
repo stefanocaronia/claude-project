@@ -27,8 +27,10 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
 {
     const ui = $.ui.resolve(e);
     const { Box, Text, Button, Link } = ui;
-    // The forms' fields, which the mobile app does not draw yet.
+    // The forms' fields, which the mobile app does not draw yet (its table lacks them, though resolve hands them out): there, no button
+    // opens a form.
     const { Input, Select } = ui as Elements["desktop"];
+    const hasForms = e.surface !== "mobile";
     // The drawings are the desktop's: the terminal draws text.
     const Svg = e.surface !== "terminal" && "Svg" in ui ? ui.Svg : null;
     const isDesktop = Svg !== null;
@@ -121,5 +123,5 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
         return Svg && drawn ? <Svg source={drawn} alt={priority} width={14} height={14} /> : <Text color={markOf(priority).color}>{markOf(priority).glyph}</Text>;
     };
 
-    return { Box, Text, Button, Link, Input, Select, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, isOpen, limited, isStarting, age, dueWords, opener, card, section, more, tip, chip, idleButton, face, priorityIcon };
+    return { Box, Text, Button, Link, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, isOpen, limited, isStarting, age, dueWords, opener, card, section, more, tip, chip, idleButton, face, priorityIcon };
 }

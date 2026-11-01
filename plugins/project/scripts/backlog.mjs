@@ -16,7 +16,7 @@
 //   node backlog.mjs todos [--to <colleague>] [--json]   (with Crew: the colleagues' open todo lines that cite no task, each as <id>:<line>)
 //   node backlog.mjs take matteo-conti:8 [--to <name>] [--text "…"] [--p P1] [--type bug] [--goal "…"] [--keep]   (a todo line that is
 //     work for the project made a task, created by the colleague; the line then cites it, ticked as handed over, or open with --keep)
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { parseCsv, toCsv } from "../lib/csv.mjs";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
 import { codeView, issueOf } from "../lib/code.mjs";
@@ -151,7 +151,7 @@ async function importedTasks(config, say, file, options)
 
     const format = typeof options.format === "string" ? options.format : file.toLowerCase().endsWith(".csv") ? "csv" : "json";
     const importer = await formatOf(config, say, "importers", format);
-    const text = readFileSync(file, "utf8");
+    const text = read(file);
     let items;
 
     try {

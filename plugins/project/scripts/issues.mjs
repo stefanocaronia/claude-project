@@ -13,7 +13,7 @@ import { isAbsolute, join } from "node:path";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
 import { issueTask, labelFor, labelsSaying, lineTitle, parseSyncIssues, planFields, planSync, taskFields, taskSide } from "../lib/issues.mjs";
 import { doneComment, forgetGh, gh, ghLogin, readCode } from "./code.mjs";
-import { assignees, fail, git, isMain, loadProject, readBacklog, readGoals, runCli, taskRules, today, withBacklogLock, writeBacklog } from "./project.mjs";
+import { assignees, changeableBacklog, fail, git, isMain, loadProject, ProjectError, readBacklog, readGoals, runCli, taskRules, today, withBacklogLock, writeBacklog } from "./project.mjs";
 
 // A sync left running longer than this died: the next one goes ahead.
 const syncStale = 120_000;
@@ -85,6 +85,19 @@ function sync(config, say, dry, keepTitle)
     }
 
     const base = keepTitle === null ? state.base : { ...state.base, [keepTitle]: { ...state.base[keepTitle], fields: { ...state.base[keepTitle].fields, title: refused }, held: undefined } };
+
+    // A line of the backlog that does not read as a task would be lost by writing the backlog again: nothing changes, on either side,
+    // until it is fixed, and the sync says so where its last run shows.
+    try {
+        changeableBacklog(config);
+    } catch (error) {
+        if (!(error instanceof ProjectError)) {
+            throw error;
+        }
+
+        dry || writeState(config, { ...state, last: { at: new Date().toISOString(), lines: [error.message], error: error.message } });
+        return { lines: [error.message], changed: false };
+    }
 
     let me;
     let issues;
@@ -182,7 +195,7 @@ function sync(config, say, dry, keepTitle)
 
     if (isChanged) {
         withBacklogLock(config, () => {
-            let all = readBacklog(config).tasks;
+            let all = changeableBacklog(config);
             const day = today();
 
             for (const one of plan.closeTasks) {

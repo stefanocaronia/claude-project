@@ -22,7 +22,7 @@ let newText = "";
 
 export function taskLists($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Input, Select, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, limited, isStarting, age, dueWords, opener, card, section, more, tip, face, priorityIcon } = p;
+    const { Box, Text, Button, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, limited, isStarting, age, dueWords, opener, card, section, more, tip, face, priorityIcon } = p;
     const details = taskDetails($, p);
     const indent = isDesktop ? 4 : 2;
     // A part shows under its large task, whatever its state; on its own only when its large task is not open.
@@ -221,7 +221,8 @@ export function taskLists($: EngineInterface, p: Panel)
         }
     };
     const pick = (field: "priority" | "type" | "parent") => (value: string) => void change((old) => ({ ...old, draft: { ...draft, ...old.draft, [field]: value } }));
-    const newTask = () => (view.editing === "new"
+    // Where the surface draws no form (the mobile app), no button opens one.
+    const newTask = () => (!hasForms ? null : view.editing === "new"
         ? (
             <Box key="new-task-form" flexDirection="column" gap={1}>
                 <Box flexDirection="row" flexWrap="wrap" columnGap={2}>

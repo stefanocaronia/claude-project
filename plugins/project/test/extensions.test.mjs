@@ -62,6 +62,9 @@ test("the backlog goes out as JSON, CSV or an extension's format, and comes in f
     put("bad.json", JSON.stringify([{ text: "fine" }, { text: "wrong", system: "gurps" }]));
     assert.match(run("backlog.mjs", "import", "bad.json").stderr, /The System «gurps»/);
     assert.doesNotMatch(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /fine/);
+    // A file that starts with a byte-order mark, as PowerShell writes it, reads as any other.
+    put("bom.json", `${String.fromCharCode(0xfeff)}${JSON.stringify([{ text: "from PowerShell" }])}`);
+    assert.match(run("backlog.mjs", "import", "bom.json").stdout, /imported: T-8\b/);
 });
 
 function run(script, ...args)

@@ -430,7 +430,8 @@ export function shown(config, path)
 /** A file's text; "" for a file that is not there. */
 export function read(path)
 {
-    return existsSync(path) ? readFileSync(path, "utf8") : "";
+    // Without the byte-order mark some editors and PowerShell put first, which a heading, a frontmatter or JSON would not read past.
+    return existsSync(path) ? readFileSync(path, "utf8").replace(/^\uFEFF/, "") : "";
 }
 
 /** A file written, its folder made when missing. */
