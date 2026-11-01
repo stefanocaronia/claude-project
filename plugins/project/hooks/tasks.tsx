@@ -7,7 +7,7 @@ import type { Task } from "../types";
 
 import { typeColor } from "../lib/schedule.mjs";
 import { taskDetails } from "./details.tsx";
-import { effortMeters, effortSvg, errorColor, idleColor, markOf, prioritySvg, stateLayer, taskColor, typeSvg, warningColor, workColor, workMark } from "./draw.ts";
+import { addMark, effortMeters, effortSvg, errorColor, idleColor, markOf, prioritySvg, stateLayer, taskColor, typeSvg, warningColor, workColor, workMark } from "./draw.ts";
 import { noChoice, oneLine } from "./kit.tsx";
 import type { Panel } from "./kit.tsx";
 import { backlog } from "./project.ts";
@@ -22,7 +22,7 @@ let newText = "";
 
 export function taskLists($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, limited, isStarting, age, dueWords, rowText, opener, card, section, more, tip, face, priorityIcon, isWorking } = p;
+    const { Box, Text, Button, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, limited, isStarting, age, dueWords, rowText, opener, card, section, more, tip, ground, iconButton, face, priorityIcon, isWorking } = p;
     const details = taskDetails($, p);
     const indent = isDesktop ? 4 : 2;
     // A part shows under its large task, whatever its state; on its own only when its large task is not open.
@@ -146,7 +146,7 @@ export function taskLists($: EngineInterface, p: Panel)
                 <Text color={isDoing ? workColor : undefined} dimColor={!isDoing}>{isDesktop ? text : `[${text}]`}</Text>
             </Button>
         );
-        const button = isDesktop ? <Box key={`parts-box-${task.id}`} flexShrink={0} paddingX={1} backgroundColor={isDoing ? `${workColor}26` : stateLayer}>{label}</Box> : label;
+        const button = isDesktop ? ground(`parts-box-${task.id}`, isDoing ? `${workColor}26` : stateLayer, label) : label;
         return tip(`parts-${task.id}`, words("partsTip", { done: task.partsDone, total: task.parts.length }), button);
     };
     // In place of its age, a blocked task shows what it waits for: «⛓ T-62», and how many more; a large task, its parts closed. After
@@ -231,8 +231,8 @@ export function taskLists($: EngineInterface, p: Panel)
                     <Select key="new-type" label={words("fieldType")} value={draft.type} options={[noChoice, ...Object.entries(snapshot.types ?? {}).map(([key, name]) => ({ value: key, label: name }))]} onSelect={pick("type")} />
                     <Select key="new-parent" label={words("fieldParent")} value={draft.parent} options={[noChoice, ...snapshot.tasks.filter((task) => !task.parent).sort(byOrder).map((task) => ({ value: idOf(task), label: `${idOf(task)} · ${task.text.length > 40 ? `${task.text.slice(0, 40)}…` : task.text}` }))]} onSelect={pick("parent")} />
                 </Box>
-                <Input key="new-task" value={newText} placeholder={words("newTaskHint")} autoFocus submitLabel={words("addTask")} onInput={(value) => { newText = value; }} onSubmit={addTask} />
-                <Button key="new-task-cancel" plain dimColor label={words("cancelEdit")} onPress={closeNew} />
+                <Input key="new-task" value={newText} placeholder={words("newTaskHint")} autoFocus submitLabel={addMark} onInput={(value) => { newText = value; }} onSubmit={addTask} />
+                {iconButton("new-task-cancel", words("cancelEdit"), closeNew, true)}
             </Box>
         )
         : <Button key="new-task" plain dimColor label={words("newTask")} onPress={() => void change((old) => ({ ...old, editing: "new" }))} />);

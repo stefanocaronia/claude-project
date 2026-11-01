@@ -14,14 +14,14 @@ import { submit } from "./start.ts";
 const proposalLength = 400;
 
 /** The extensions' links, a page to open or an action to post, and the key documents, each opened through the project's page: chips
- * one line high, with no border, a stronger gray under the pointer. */
+ * one line high, rounded, with no border, a stronger gray under the pointer. */
 export function linkSections($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Link, isDesktop, snapshot, words, section } = p;
+    const { Box, Text, Button, Link, isDesktop, snapshot, words, section, ground } = p;
     const chips = (key: string, name: string, icon: string, title: string, items: JSX.Element[]) => (items.length > 0
         ? section(key, icon, title, [
             <Box key={`${key}-row`} flexDirection="row" flexWrap="wrap" gap={1}>
-                {items.map((item, index) => <Box key={`${name}-box-${index}`} paddingX={1} {...(isDesktop ? { backgroundColor: stateLayer, hover: { backgroundColor: chipHover } } : {})}>{item}</Box>)}
+                {items.map((item, index) => (isDesktop ? ground(`${name}-box-${index}`, stateLayer, item, chipHover) : <Box key={`${name}-box-${index}`} paddingX={1}>{item}</Box>))}
             </Box>,
         ])
         : null);

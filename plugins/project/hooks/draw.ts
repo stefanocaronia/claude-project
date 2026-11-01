@@ -29,6 +29,10 @@ export const workMark = "⚒︎";
 export const goalMark = "⚑︎";
 export const scales = "⚖︎";
 export const versionMark = "🏷︎";
+// The marks on a field's button: a text saved, a comment sent, a task added.
+export const saveMark = "✓";
+export const sendMark = "➤";
+export const addMark = "+";
 // The effort a task needs, as the terminal draws it.
 export const effortMeters: Record<string, string> = { low: "▮▯▯▯", medium: "▮▮▯▯", high: "▮▮▮▯", xhigh: "▮▮▮▮", max: "▮▮▮▮", none: "" };
 
@@ -115,6 +119,27 @@ export function idleButtonSvg(label: string): { source: string; width: number; h
     const width = Math.ceil(labelWidth(label) * 15) + 24;
     const body = `<rect width="${width}" height="${height}" rx="4" fill="${stateLayer}"/><text x="${width / 2}" y="${height / 2}" dominant-baseline="central" text-anchor="middle" font-family="${font}" font-size="15" fill="${idleColor}">${xml(label)}</text>`;
     return { source: svg(width, height, body, false), width, height };
+}
+
+/** A chip's line, 22 px; its ends 8 px wide, the room its text keeps from them. */
+export const chipEnd = { width: 8, height: 22 };
+
+/** A rounded end of a chip in its tint, corners of 4: the chip's middle is a Box, which has no corner radius. */
+export function chipEndSvg(side: "start" | "end", tint: string): string
+{
+    const { width, height } = chipEnd;
+    const path = side === "start"
+        ? `M${width} 0H4A4 4 0 0 0 0 4V${height - 4}A4 4 0 0 0 4 ${height}H${width}Z`
+        : `M0 0H${width - 4}A4 4 0 0 1 ${width} 4V${height - 4}A4 4 0 0 1 ${width - 4} ${height}H0Z`;
+    return svg(width, height, `<path d="${path}" fill="${tint}"/>`, false);
+}
+
+/** The tint that, drawn over `base`, makes `hover`: two tints of one color, `#rrggbbaa`, told apart by their alpha. */
+export function overTint(base: string, hover: string): string
+{
+    const alpha = (tint: string) => parseInt(tint.slice(7, 9), 16) / 255;
+    const over = 1 - (1 - alpha(hover)) / (1 - alpha(base));
+    return `${hover.slice(0, 7)}${Math.round(over * 255).toString(16).padStart(2, "0")}`;
 }
 
 /** A wide bar's square middle, filled or the track, stretched to the room it is given: its rounded ends are `barEndSvg`. */

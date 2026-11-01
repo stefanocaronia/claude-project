@@ -153,6 +153,11 @@ test("a task opens in place; Done and Postpone and the priority go through the b
         expect(await ui.find({ type: "Text", text: /^\[?⚑ Revisione\]?$/ })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /^\[?nato il 2026-10-28\]?$/ })).toBeDefined();
         expect(await ui.find({ type: "Text", text: /impegno/ })).toBeUndefined();
+        // On the desktop a chip has rounded ends, each a drawing, and a button is its mark, its words under the pointer; the terminal
+        // keeps the words.
+        expect((await ui.findAll({ type: "Svg" })).filter((one) => /^<svg[^>]*width="8" height="22"/.test(String((one.props as { source?: string }).source))).length > 0).toBe(surface !== "terminal");
+        expect((await ui.find({ key: "done-61" }))?.props.label).toBe(surface === "terminal" ? "✓ Fatto" : "✓");
+        expect(await ui.find({ type: "Text", text: "Fatto" })).toEqual(surface === "terminal" ? undefined : expect.anything());
         await ui.press({ key: "done-61" });
         await ui.press({ key: "postpone-61" });
         await ui.press({ key: "priority-61" });

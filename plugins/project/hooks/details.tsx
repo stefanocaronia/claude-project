@@ -1,12 +1,13 @@
 // A task opened in its row: its whole text, then chips for what the row does not show (its goal, its days, its fields, its issue and
 // note), then a labeled row of chips for each tie (parts, waits, links both ways, decisions, specs, code), then the comments left on it
 // and a field for another. What the row shows already, who holds it, its type, priority, effort and number, is not said again. Below,
-// what can be done with it: done, postponed or back to do, its text and fields written again, archived.
+// what can be done with it, on the desktop each a mark with its words under the pointer: done, postponed or back to do, its text and
+// fields written again, archived.
 import type { EngineInterface } from "claude-code";
 
 import type { Pull, Task } from "../types";
 
-import { decisionColor, errorColor, taskColor, warningColor, workColor } from "./draw.ts";
+import { decisionColor, errorColor, saveMark, sendMark, taskColor, warningColor, workColor } from "./draw.ts";
 import { noChoice, oneLine } from "./kit.tsx";
 import type { Panel } from "./kit.tsx";
 import { backlog } from "./project.ts";
@@ -17,7 +18,7 @@ const archiveAskFor = 4000;
 
 export function taskDetails($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Link, Input, Select, hasForms, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, dueWords, linkedText, face, decider } = p;
+    const { Box, Text, Button, Link, Input, Select, hasForms, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, iconButton, dueWords, linkedText, face, decider } = p;
     const choices = (values: string[]) => values.map((value) => ({ value, label: value }));
     const refColor = (id: string) => (id.startsWith(`${snapshot.prefixes.decision}-`) ? decisionColor : id.startsWith(`${prefix}-`) ? taskColor : undefined);
     // A labeled row of chips, none without one.
@@ -91,7 +92,7 @@ export function taskDetails($: EngineInterface, p: Panel)
                     </Box>
                 </Box>
             )),
-            hasForms ? <Input key={`comment-field-${task.id}-${left.length}`} placeholder={words("commentHint")} rows={2} submitLabel={words("commentSend")} onSubmit={send} /> : null,
+            hasForms ? <Input key={`comment-field-${task.id}-${left.length}`} placeholder={words("commentHint")} rows={2} submitLabel={sendMark} onSubmit={send} /> : null,
         ];
     };
     // Its text written again; its goal, who does it and the project's own fields, each changed at once by the backlog's command.
@@ -108,19 +109,19 @@ export function taskDetails($: EngineInterface, p: Panel)
             }
         };
         return [
-            <Input key={`edit-${task.id}`} value={task.text} rows={2} autoFocus submitLabel={words("saveText")} onSubmit={saveText} />,
+            <Input key={`edit-${task.id}`} value={task.text} rows={2} autoFocus submitLabel={saveMark} onSubmit={saveText} />,
             <Box key={`edit-fields-${task.id}`} flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={1}>
                 <Select key={`edit-goal-${task.id}`} label={words("fieldGoal")} value={task.goal} options={choices(goals)} onSelect={set("goal")} />
                 <Select key={`edit-to-${task.id}`} label={words("fieldTo")} value={task.to} options={choices(holders)} onSelect={set("to")} />
                 {Object.entries(snapshot.fields ?? {}).map(([field, own]) => (own.values
                     ? <Select key={`edit-field-${field}-${task.id}`} label={own.name} value={task.fields?.[field] ?? ""} options={[noChoice, ...choices(own.values)]} onSelect={set(field)} />
-                    : <Input key={`edit-field-${field}-${task.id}`} label={own.name} value={task.fields?.[field] ?? ""} submitLabel={words("saveText")} onSubmit={(value) => set(field)(value.trim())} />))}
+                    : <Input key={`edit-field-${field}-${task.id}`} label={own.name} value={task.fields?.[field] ?? ""} submitLabel={saveMark} onSubmit={(value) => set(field)(value.trim())} />))}
             </Box>,
         ];
     };
     // A task's id, and for a large task its parts in a state too: a large task postponed or put back to do takes those parts along.
     const withParts = (task: Task, state: Task["state"]) => [idOf(task), ...partsOf(task).filter((part) => part.state === state).map((part) => idOf(part))];
-    // A task is archived on a second press; the first asks for a few seconds.
+    // A task is archived on a second press; the first asks for a few seconds, in words.
     const askArchive = (task: Task) => {
         void change((old) => ({ ...old, archiving: task.id }));
         $.clock.after(archiveAskFor, () => void change((old) => (old.archiving === task.id ? { ...old, archiving: null } : old)));
@@ -136,14 +137,14 @@ export function taskDetails($: EngineInterface, p: Panel)
             <Box key={`details-${task.id}`} flexDirection="column" gap={1} paddingLeft={isDesktop ? 4 : 2}>
                 {hasForms && view.editing === key ? editing(task) : facts(task, isPart)}
                 <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
-                    <Button key={`done-${task.id}`} plain label={words("markDone")} onPress={() => markDone($, snapshot, task)} />
+                    {iconButton(`done-${task.id}`, words("markDone"), () => markDone($, snapshot, task))}
                     {task.state === "postponed"
-                        ? <Button key={`resume-${task.id}`} plain label={words("backToDo")} onPress={() => backlog($, ["todo", ...withParts(task, "postponed")])} />
-                        : <Button key={`postpone-${task.id}`} plain dimColor label={words("postpone")} onPress={() => backlog($, ["postpone", ...withParts(task, "todo")])} />}
-                    {hasForms ? <Button key={`edit-text-${task.id}`} plain dimColor label={words(view.editing === key ? "cancelEdit" : "editText")} onPress={() => void change((old) => ({ ...old, editing: old.editing === key ? null : key }))} /> : null}
+                        ? iconButton(`resume-${task.id}`, words("backToDo"), () => backlog($, ["todo", ...withParts(task, "postponed")]))
+                        : iconButton(`postpone-${task.id}`, words("postpone"), () => backlog($, ["postpone", ...withParts(task, "todo")]), true)}
+                    {hasForms ? iconButton(`edit-text-${task.id}`, words(view.editing === key ? "cancelEdit" : "editText"), () => change((old) => ({ ...old, editing: old.editing === key ? null : key })), true) : null}
                     {view.archiving === task.id
                         ? <Button key={`archive-${task.id}`} plain label={words("archiveSure", { id: idOf(task) })} onPress={() => archive(task)} />
-                        : <Button key={`archive-${task.id}`} plain dimColor label={words("archive")} onPress={() => askArchive(task)} />}
+                        : iconButton(`archive-${task.id}`, words("archive"), () => askArchive(task), true)}
                 </Box>
             </Box>
         );

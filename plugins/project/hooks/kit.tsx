@@ -5,7 +5,7 @@ import type { Elements, EngineInterface, RenderInput } from "claude-code";
 import { linksIn } from "../lib/text.mjs";
 import type { Board, Snapshot, Task, View } from "../types";
 
-import { cardTint, claudeSvg, faceSvg, idleButtonSvg, idleColor, markOf, outline, prioritySvg, stateLayer, tooltipBackground, tooltipText } from "./draw.ts";
+import { cardTint, chipEnd, chipEndSvg, claudeSvg, faceSvg, idleButtonSvg, idleColor, markOf, outline, overTint, prioritySvg, stateLayer, tooltipBackground, tooltipText } from "./draw.ts";
 import { startingFor } from "./start.ts";
 import { changeView, say } from "./state.ts";
 
@@ -102,13 +102,47 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
             </Box>
         )
         : control);
+    // A chip's ground, one line high on a tint with rounded ends, each end a drawing, as a Box has no corner radius; under the pointer, a
+    // stronger tint where it has one, drawn over its ends too.
+    const ground = (key: string, tint: string, content: JSX.Element, hoverTint?: string) => {
+        if (!Svg) {
+            return <Box key={key} flexShrink={0} paddingX={1} backgroundColor={tint}>{content}</Box>;
+        }
+
+        const end = (side: "start" | "end") => (
+            <Box key={`${key}-${side}`} flexShrink={0}>
+                <Svg source={chipEndSvg(side, tint)} alt="" width={chipEnd.width} height={chipEnd.height} />
+                {hoverTint
+                    ? (
+                        <Box position="absolute" top={0} left={0} display="none" hover={{ display: "flex" }}>
+                            <Svg source={chipEndSvg(side, overTint(tint, hoverTint))} alt="" width={chipEnd.width} height={chipEnd.height} />
+                        </Box>
+                    )
+                    : null}
+            </Box>
+        );
+        return (
+            <Box key={key} flexShrink={0} flexDirection="row">
+                {end("start")}
+                <Box flexDirection="row" alignItems="center" backgroundColor={tint} {...(hoverTint ? { hover: { backgroundColor: hoverTint } } : {})}>{content}</Box>
+                {end("end")}
+            </Box>
+        );
+    };
     // A chip is one line high: a tinted background, no border; in brackets on the terminal. A link, or a text with a hint.
     const chip = (key: string, text: string, color?: string, href?: string | null, hint?: string) => {
         const label = href ? <Link key={`${key}-link`} href={href}>{text}</Link> : <Text key={`${key}-text`} color={color} dimColor={!color}>{text}</Text>;
         const drawn = isDesktop
-            ? <Box key={key} flexShrink={0} paddingX={1} backgroundColor={color ? `${color}26` : stateLayer}>{label}</Box>
+            ? ground(key, color ? `${color}26` : stateLayer, label)
             : <Box key={key} flexShrink={0}>{href ? label : <Text color={color} dimColor={!color}>{`[${text}]`}</Text>}</Box>;
         return hint ? tip(key, hint, drawn) : drawn;
+    };
+    // A button drawn as its mark alone on the desktop, the words after the mark under the pointer; whole on the terminal, which shows no
+    // hint.
+    const iconButton = (key: string, label: string, onPress: () => unknown, isDim = false) => {
+        const [mark = label, ...rest] = label.split(" ");
+        const button = <Button key={key} plain dimColor={isDim} label={isDesktop ? mark : label} onPress={() => void onPress()} />;
+        return isDesktop ? tip(key, rest.join(" "), button) : button;
     };
     // A button that cannot be pressed now keeps its place, dim, but no Button at all: no pointer, no focus, no press; its reason, when it
     // has one, under the pointer. On the desktop a drawing of its buttons, as high and as round, on a gray ground (a Box with a border
@@ -145,5 +179,5 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
         return Svg && drawn ? <Svg source={drawn} alt={priority} width={14} height={14} /> : <Text color={markOf(priority).color}>{markOf(priority).glyph}</Text>;
     };
 
-    return { Box, Text, Button, Link, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, isOpen, limited, isStarting, age, dueWords, rowText, linkedText, opener, card, section, more, tip, chip, idleButton, isWorking, chatButton, face, priorityIcon };
+    return { Box, Text, Button, Link, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, isOpen, limited, isStarting, age, dueWords, rowText, linkedText, opener, card, section, more, tip, ground, chip, iconButton, idleButton, isWorking, chatButton, face, priorityIcon };
 }
