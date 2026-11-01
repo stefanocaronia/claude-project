@@ -1,6 +1,7 @@
 // What the panel shows, as one JSON on stdout: the open tasks, the plan's goals with their counts, the decisions to take and the latest,
 // the colleagues, the docs' health. node snapshot.mjs [--no-health]
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 import { effortKey } from "../lib/backlog.mjs";
 import { proposalOf } from "../lib/decisions.mjs";
 import { phaseStates, planPhases, planUpdated } from "../lib/plan.mjs";
@@ -97,12 +98,21 @@ export async function snapshot(config, say, withHealth = true)
                 return { ...proposal, text: plainMarkdown(proposal.text), line: point.line, whole: point.text };
             }),
         },
-        // The files whose change makes the panel read the project again: the issues' sync state too, where they are in sync.
-        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.specs, config.files.notes, config.files.releases, ...todoFiles(config).map((one) => one.file), ...(config.github?.issues === "sync" ? [syncStateFile(config)].filter(Boolean) : [])],
+        // The files whose change makes the panel read the project again: the issues' sync state too, where they are in sync, and the
+        // repo's tags, where a version tagged outside release.mjs shows.
+        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.specs, config.files.notes, config.files.releases, ...todoFiles(config).map((one) => one.file), ...(config.github?.issues === "sync" ? [syncStateFile(config)].filter(Boolean) : []), ...tagFiles(config)],
         health: findings && { errors: severityCount(findings, "error"), warnings: severityCount(findings, "warning"), notes: severityCount(findings, "note") },
         // The core docs the scripts own, which the panel keeps from a direct read or write (lib/guard.mjs).
         guard: guardOf(config, unread),
     };
+}
+
+/** Where the project's repo keeps its tags: the folder of their refs, which changes when one is made or removed, and packed-refs, where
+ * git packs them; the repo's common folder, which a worktree shares. None outside a repo. */
+function tagFiles(config)
+{
+    const common = git(config.root, ["rev-parse", "--git-common-dir"]).trim();
+    return common ? [`${resolve(config.root, common)}/refs/tags`, `${resolve(config.root, common)}/packed-refs`].map((path) => path.replaceAll("\\", "/")) : [];
 }
 
 /** The docs the scripts own, each { path, script, owned } relative to the root: the backlog and its archive, read and changed through

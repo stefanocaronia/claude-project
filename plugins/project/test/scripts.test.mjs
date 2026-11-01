@@ -1,7 +1,7 @@
 // The command lines on a small project made in a temporary folder: the backlog changed and read, the decisions read, the check's findings.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
@@ -245,6 +245,18 @@ test("the docs made private: --private project makes a new project's docs' folde
     for (const folder of [fresh, here, moved, blocked]) {
         rmSync(folder, { recursive: true, force: true });
     }
+});
+
+test("the panel watches the repo's tags, so that a version tagged outside release.mjs shows; outside a repo, none", () => {
+    const folder = mkdtempSync(join(tmpdir(), "claude-project-tags-"));
+    const env = { ...environment(), CLAUDE_PROJECT_DIR: folder };
+    const watch = () => JSON.parse(execFileSync(process.execPath, [join(scripts, "snapshot.mjs"), "--no-health"], { cwd: folder, encoding: "utf8", env })).watch.map((path) => path.toLowerCase());
+    execFileSync(process.execPath, [join(scripts, "init.mjs"), "--language", "en"], { cwd: folder, encoding: "utf8", env });
+    assert.equal(watch().some((path) => path.includes("refs/tags")), false);
+    execFileSync("git", ["init", "-q", folder]);
+    const git = `${realpathSync(folder).replaceAll("\\", "/")}/.git`.toLowerCase();
+    assert.deepEqual(watch().slice(-2), [`${git}/refs/tags`, `${git}/packed-refs`]);
+    rmSync(folder, { recursive: true, force: true });
 });
 
 test("adopt finds a project's own docs and language, writes the configuration that reads them, and moves the plan's steps into the backlog", () => {
