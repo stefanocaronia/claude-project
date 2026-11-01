@@ -46,7 +46,7 @@ const snapshot = {
 type Answer = { exitCode: number; stdout: string; stderr: string };
 const good: Answer = { exitCode: 0, stdout: JSON.stringify(snapshot), stderr: "" };
 
-function world(on: On, answers: Answer[] = [good]): { runs: string[][]; prompts: string[]; commands: string[]; stamp: { mtimeMs: number }; opens: { count: number } }
+function world(on: On, answers: Answer[] = [good], whileReading?: () => void): { runs: string[][]; prompts: string[]; commands: string[]; stamp: { mtimeMs: number }; opens: { count: number } }
 {
     const runs: string[][] = [];
     const prompts: string[] = [];
@@ -75,6 +75,11 @@ function world(on: On, answers: Answer[] = [good]): { runs: string[][]; prompts:
     on("process.run", (_, e) => {
         const args = e.argv.slice(1).map((arg) => arg.replace(/^.*\/scripts\//, ""));
         runs.push(args);
+
+        if (args[0] === "snapshot.mjs") {
+            whileReading?.();
+        }
+
         const answer = args[0] === "snapshot.mjs" ? answers[Math.min(reads++, answers.length - 1)] ?? good : { exitCode: 0, stdout: "", stderr: "" };
         return { value: { ...answer, isStdoutTruncated: false, isStderrTruncated: false } } as never;
     });
@@ -427,6 +432,20 @@ test("with nobody working in the chat, the panel looks at the files every few se
     stamp.mtimeMs = 2;
     await clock.advance(15_000);
     expect(reads()).toBe(before + 1);
+    await clock.advance(15_000);
+    expect(reads()).toBe(before + 1);
+});
+
+test("a file changed while the panel reads the project is read again at the next look, not left as it was", async ($, on) => {
+    // A chat closes tasks one after the other while the panel reads: the reading sees the first ones only.
+    let closing = false;
+    const { runs, stamp, clock } = world(on, [good], () => closing && stamp.mtimeMs++);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const reads = () => runs.filter((args) => args[0] === "snapshot.mjs").length;
+    closing = true;
+    stamp.mtimeMs = 2;
+    await clock.advance(15_000);
+    const before = reads();
     await clock.advance(15_000);
     expect(reads()).toBe(before + 1);
 });

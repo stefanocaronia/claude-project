@@ -873,7 +873,10 @@ async function refresh($: EngineInterface, force: boolean): Promise<void>
 
         const snapshot = JSON.parse(stdout) as Snapshot;
         const readAt = await $.clock.now();
-        const fresh = await stampOf($, snapshot.watch);
+        // The stamp taken before the reading, so that a file changed while the script read it differs from it and the next look reads
+        // it again; the files' own, at the first reading or when the project watches other files now.
+        const same = snapshot.watch.join("|") === (current.snapshot?.watch ?? []).join("|");
+        const fresh = same ? stamp : await stampOf($, snapshot.watch);
         await update($, board, (old) => ({ ...old, snapshot, problem: null, readAt, stamp: fresh }));
         await readHolds($).catch(() => undefined);
     } catch (error) {
