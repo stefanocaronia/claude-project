@@ -15,6 +15,8 @@ export function parseSpecs(text, words, prefix = "S")
     let section = "";
     let group = "";
     const superseded = readable(words, "superseded").map((word) => word.toLowerCase());
+    const specLine = new RegExp(`^- ${escapeRegex(prefix)}-(\\d+) · (.+)$`);
+    const specOpening = new RegExp(`^- ${escapeRegex(prefix)}-\\d+`);
 
     (text ?? "").split(/\r?\n/).forEach((line, index) => {
         if (/^## /.test(line)) {
@@ -30,12 +32,12 @@ export function parseSpecs(text, words, prefix = "S")
             return;
         }
 
-        const spec = new RegExp(`^- ${escapeRegex(prefix)}-(\\d+) · (.+)$`).exec(line);
+        const spec = specLine.exec(line);
 
         if (spec) {
             const body = spec[2].trim();
             specs.push({ number: Number(spec[1]), text: body, section, group, line: index + 1, superseded: superseded.some((word) => body.toLowerCase().startsWith(word)) });
-        } else if (new RegExp(`^- ${escapeRegex(prefix)}-\\d+`).test(line)) {
+        } else if (specOpening.test(line)) {
             unread.push({ line: index + 1, text: line });
         }
     });
@@ -63,6 +65,7 @@ export function numberSpecs(text, prefix = "S", first = 1)
     let next = first;
     let isCode = false;
     const numbered = [];
+    const isNumbered = new RegExp(`^${escapeRegex(prefix)}-\\d+ · `);
     const lines = (text ?? "").split("\n").map((line, index) => {
         if (/^(```|~~~)/.test(line)) {
             isCode = !isCode;
@@ -71,7 +74,7 @@ export function numberSpecs(text, prefix = "S", first = 1)
 
         const item = /^[-*+] (.*)$/.exec(line);
 
-        if (isCode || !item || new RegExp(`^${escapeRegex(prefix)}-\\d+ · `).test(item[1]) || item[1].trim() === "") {
+        if (isCode || !item || isNumbered.test(item[1]) || item[1].trim() === "") {
             return line;
         }
 

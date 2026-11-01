@@ -5,9 +5,11 @@ import { escapeRegex } from "./text.mjs";
 import { effortWord, priorityKeys, readablePattern, stateKeys, stateOfHeading } from "./words.mjs";
 
 const separator = " · ";
+const byId = (first, second) => first.id - second.id;
 // A task line's patterns, by the project's words and its prefix: made once, not once a line of a backlog of thousands.
 const patterns = new WeakMap();
 
+/** The patterns of a task line: `line` the whole of it, `marks` the days it started, was done and archived at the end of its text. */
 function linePatterns(words, prefix)
 {
     const byPrefix = patterns.get(words) ?? new Map();
@@ -16,7 +18,7 @@ function linePatterns(words, prefix)
     if (!byPrefix.has(prefix)) {
         const day = "(\\d{4}-\\d{2}-\\d{2})";
         byPrefix.set(prefix, {
-            line: new RegExp(`^- ${escapeRegex(prefix)}-(\\d+) · (P[1-3]) · ([^·]+?) · ([^·]+?) · (\\d{4}-\\d{2}-\\d{2}) · ([^·]+?) · (.*)$`),
+            line: new RegExp(`^- ${escapeRegex(prefix)}-(\\d+) · (P[1-3]) · ([^·]+?) · ([^·]+?) · ${day} · ([^·]+?) · (.*)$`),
             marks: new RegExp(`^(.*?)(?: · (?:${readablePattern(words, "startedMarker")}) ${day})?(?: · (?:${readablePattern(words, "doneMarker")}) ${day})?(?: · (?:${readablePattern(words, "archivedMarker")}) ${day})?$`),
         });
     }
@@ -55,7 +57,8 @@ export function parseBacklog(text, words, prefix = "T", isArchive = false)
     const tasks = [];
     const unread = [];
     const lines = (text ?? "").split(/\r?\n/);
-    const bodyStart = lines.findIndex((line) => new RegExp(`^(## |- ${escapeRegex(prefix)}-)`).test(line));
+    const opening = new RegExp(`^(## |- ${escapeRegex(prefix)}-)`);
+    const bodyStart = lines.findIndex((line) => opening.test(line));
     let state = isArchive ? "archived" : null;
 
     lines.forEach((line, index) => {
@@ -90,7 +93,6 @@ export function parseBacklog(text, words, prefix = "T", isArchive = false)
 /** The backlog's text: what came before the first section kept, then each state's heading with its tasks by number. */
 export function renderBacklog(tasks, previous, words, prefix = "T")
 {
-    const byId = (first, second) => first.id - second.id;
     const sections = stateKeys.map((key) => {
         const lines = tasks.filter((task) => task.state === key).sort(byId).map((task) => formatLine(task, words, prefix));
         return [`## ${words.states[key]}`, ...(lines.length > 0 ? ["", ...lines] : [])].join("\n");
@@ -101,7 +103,7 @@ export function renderBacklog(tasks, previous, words, prefix = "T")
 /** The archive's text: what came before the first task kept, then the archived tasks by number. */
 export function renderArchive(tasks, previous, words, prefix = "T")
 {
-    const lines = tasks.filter((task) => task.state === "archived").sort((first, second) => first.id - second.id).map((task) => formatLine(task, words, prefix));
+    const lines = tasks.filter((task) => task.state === "archived").sort(byId).map((task) => formatLine(task, words, prefix));
     return `${headerOf(previous, prefix)}${lines.join("\n")}\n`;
 }
 
@@ -111,7 +113,7 @@ export function moveTasks(tasks, ids, state, today)
     const wanted = new Set(ids.map(Number));
     const missing = [...wanted].filter((id) => !tasks.some((task) => task.id === id));
     // The day it started: set when it goes into progress, kept while it is and once it is done, gone when it waits again.
-    const started = (task) => (state === "doing" ? (task.state === "doing" && task.started ? task.started : today) : state === "done" ? task.started ?? null : null);
+    const started = (task) => (state === "doing" ? (task.state === "doing" && task.started) || today : state === "done" ? task.started ?? null : null);
     const moved = tasks.map((task) => (wanted.has(task.id) ? { ...task, state, started: started(task), done: state === "done" ? (task.done ?? today) : null, archived: null } : task));
     return { tasks: moved, missing };
 }
@@ -210,9 +212,16 @@ export function effortKey(word, words)
     return Object.entries(words.efforts).find(([, value]) => value === effortWord(words, word))?.[0];
 }
 
+/** What a backlog's text holds before its first section or task, kept as written; a text with neither is all header, a blank line
+ * after it. */
 function headerOf(previous, prefix)
 {
     const text = previous ?? "";
     const first = text.search(new RegExp(`^(## |- ${escapeRegex(prefix)}-)`, "m"));
-    return first > 0 ? text.slice(0, first) : first === 0 ? "" : text.trim() === "" ? "" : `${text.trimEnd()}\n\n`;
+
+    if (first >= 0) {
+        return text.slice(0, first);
+    }
+
+    return text.trim() === "" ? "" : `${text.trimEnd()}\n\n`;
 }

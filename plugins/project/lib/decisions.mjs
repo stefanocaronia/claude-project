@@ -44,8 +44,9 @@ export function nextDecision(decided, cited)
  * (nor the parenthesis that holds the day). */
 export function proposalOf(text, words, today)
 {
-    const priority = /^(P[1-3]) · /.exec(text)?.[1] ?? null;
-    const rest = priority ? text.slice(5) : text;
+    const lead = /^(P[1-3]) · /.exec(text);
+    const priority = lead?.[1] ?? null;
+    const rest = lead ? text.slice(lead[0].length) : text;
     const day = dayOf(rest, words.months, today);
     const plain = rest.replace(new RegExp(`\\s*\\((?:[^()]*?, )?(?:\\d{4}-\\d{2}-\\d{2}|\\d{1,2} (?:${words.months.join("|")}))\\)`, "i"), "");
     return { priority, day, text: plain.trim() };
@@ -55,7 +56,7 @@ export function proposalOf(text, words, today)
  * would fall ahead of today; `(… 2026-10-12)` as written. */
 export function dayOf(text, months, today)
 {
-    const iso = /\((?:[^()]*?)(\d{4}-\d{2}-\d{2})/.exec(text)?.[1];
+    const iso = /\([^()]*?(\d{4}-\d{2}-\d{2})/.exec(text)?.[1];
 
     if (iso) {
         return iso;

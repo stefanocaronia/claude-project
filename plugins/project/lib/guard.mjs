@@ -3,6 +3,7 @@
 // decisions and the specs are searched through their scripts and read whole only to be edited. And the user's yes the panel and the
 // page give the backlog's command, --approved, is never Claude's to give (D-16). Pure: the panel's hook asks it of each tool call, with
 // the files from snapshot.mjs.
+import { escapeRegex } from "./text.mjs";
 
 // The programs that read, search or write a file's text from a shell.
 const textPrograms = /^(grep|egrep|fgrep|rg|ag|ack|cat|bat|head|tail|less|more|sed|awk|gawk|perl|nl|cut|sort|uniq|tac|type|findstr|select-string|sls|get-content|gc|set-content|add-content|out-file|tee|tee-object|python|python3|py)$/i;
@@ -82,15 +83,16 @@ function segments(command)
     return parts;
 }
 
+/** A path's last part, in lower case. */
 function baseName(path)
 {
     return path.toLowerCase().split("/").at(-1);
 }
 
+/** Whether a shell segment names a file, as a word of its own or at the end of a path. */
 function mentions(segment, name)
 {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(^|[\\s'"/\\\\=:<>])${escaped}(?=$|[\\s'"),;])`, "i").test(segment);
+    return new RegExp(`(^|[\\s'"/\\\\=:<>])${escapeRegex(name)}(?=$|[\\s'"),;])`, "i").test(segment);
 }
 
 /** The program a shell segment runs: its first word past variables set before it, without folder or extension. */
@@ -106,7 +108,8 @@ function isScript(segment)
     return /^node$/i.test(program(segment)) && /\s(-e|-p|--eval|--print)\b/.test(segment);
 }
 
+/** Whether a shell segment writes into the file with > or >>. */
 function isRedirect(segment, name)
 {
-    return new RegExp(`>>?\\s*["']?[^\\s"']*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(segment);
+    return new RegExp(`>>?\\s*["']?[^\\s"']*${escapeRegex(name)}`, "i").test(segment);
 }

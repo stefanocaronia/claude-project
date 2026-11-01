@@ -99,7 +99,7 @@ export function listOf(given)
 }
 
 /** The names a suffix gives that are no task or todo id (in after), no task, decision or spec (in see), no task (in in), no issue number
- * (in issue), no day (in due), no word (in type). */
+ * (in issue), no day (in due), no word (in type), no one name (in by). */
 export function badLinks(kind, items, prefixes)
 {
     const task = `${escapeRegex(prefixes.task)}-\\d+`;
@@ -215,7 +215,8 @@ function cyclesOf(waits)
 // The pattern of a suffix, by the kinds it may name: made once, not once a suffix of every line.
 const suffixPatterns = new Map();
 
-function suffixOf(text, known = kinds)
+/** The last suffix of a text, `(after: T-3)` at its very end, of one of the kinds known: { kind, items, index }, or null for none. */
+function suffixOf(text, known)
 {
     const key = known.join("|");
 

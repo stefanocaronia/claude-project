@@ -1,12 +1,16 @@
 // The project's releases, as the trade keeps them: a version, MAJOR.MINOR.PATCH, groups the work done since the last one; its notes,
 // one file a version, list that work by kind, the first line its version and day. Pure.
+import { escapeRegex, shortened } from "./text.mjs";
 
-const versionPattern = /^(\d+)\.(\d+)\.(\d+)$/;
+// The kind of work a task's type is in a release's notes, as Keep a Changelog groups it, in the notes' order; any other type is "other".
+const kinds = new Map([["feature", "added"], ["bug", "fixed"], ["chore", "maintenance"]]);
+const kindOrder = [...kinds.values(), "other"];
+const kindOf = (task) => kinds.get(task.type) ?? "other";
 
 /** A version as its three numbers, or null when it is not MAJOR.MINOR.PATCH. */
 export function parseVersion(text)
 {
-    const match = versionPattern.exec(String(text ?? "").trim().replace(/^v/, ""));
+    const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(text ?? "").trim().replace(/^v/, ""));
     return match ? match.slice(1).map(Number) : null;
 }
 
@@ -21,9 +25,14 @@ export function compareVersions(first, second)
 export function parseRelease(text, prefix = "T")
 {
     const head = /^#\s+v?(\d+\.\d+\.\d+)\s+·\s+(\d{4}-\d{2}-\d{2})/m.exec(text);
-    const tasks = [...text.matchAll(new RegExp(`^- ${prefix}-(\\d+) · `, "gm"))].map((match) => Number(match[1]));
-    const summary = head ? (text.slice(head.index + head[0].length).split(/\n#{1,6}\s/)[0].trim().split(/\n\s*\n/)[0] ?? "").trim() : "";
-    return head ? { version: head[1], day: head[2], summary, tasks } : null;
+
+    if (!head) {
+        return null;
+    }
+
+    const tasks = [...text.matchAll(new RegExp(`^- ${escapeRegex(prefix)}-(\\d+) · `, "gm"))].map((match) => Number(match[1]));
+    const summary = text.slice(head.index + head[0].length).split(/\n#{1,6}\s/)[0].trim().split(/\n\s*\n/)[0].trim();
+    return { version: head[1], day: head[2], summary, tasks };
 }
 
 /** A version's summary from its tag's or its commit's message, for a version with no notes: the message's first paragraph without the
@@ -49,7 +58,7 @@ export function messageSummary(message, version)
         summary = summary ? `${summary} ${sentence}` : sentence;
     }
 
-    summary = summary.length > 200 ? `${summary.slice(0, 197).replace(/\s+\S*$/, "")}…` : summary;
+    summary = shortened(summary);
     return summary.charAt(0).toUpperCase() + summary.slice(1);
 }
 
@@ -60,11 +69,10 @@ export function releaseState(releases, tasks, goals, prefix = "T", contracts = [
     const last = releases.at(-1) ?? null;
     const raised = contracts.filter((contract) => contract.state === "raised").map((contract) => contract.name);
     const pending = unreleased(tasks, releases);
-    const count = (type) => pending.filter((task) => (type === "other" ? !["feature", "bug", "chore"].includes(task.type) : task.type === type)).length;
     return {
         last,
         pending,
-        counts: { added: count("feature"), fixed: count("bug"), maintenance: count("chore"), other: count("other") },
+        counts: Object.fromEntries(kindOrder.map((kind) => [kind, pending.filter((task) => kindOf(task) === kind).length])),
         suggested: nextVersion(last?.version, pending, false, raised.length > 0),
         // A contract that went up since the last release: a release is due for it alone.
         raised,
@@ -83,8 +91,8 @@ export function unreleased(tasks, releases)
 }
 
 /** The next version for these tasks, by the rule of Semantic Versioning: a change that breaks what users rely on raises MAJOR (MINOR
- * before 1.0.0), a new feature or a contract gone up MINOR, fixes and the rest PATCH. { version, kind }; 0.1.0 when there is no release
- * yet. */
+ * before 1.0.0), a new feature or a contract gone up MINOR, fixes and the rest PATCH. { version, kind }, kind "breaking", "minor",
+ * "contract" (a minor for a contract alone) or "patch"; 0.1.0 and "first" when there is no release yet. */
 export function nextVersion(last, tasks, isBreaking = false, contractRaised = false)
 {
     if (!last) {
@@ -92,21 +100,17 @@ export function nextVersion(last, tasks, isBreaking = false, contractRaised = fa
     }
 
     const [major, minor, patch] = parseVersion(last);
-    const kind = isBreaking ? (major === 0 ? "minor" : "major") : tasks.some((task) => task.type === "feature") || contractRaised ? "minor" : "patch";
+    const hasFeature = tasks.some((task) => task.type === "feature");
+    const kind = isBreaking ? (major === 0 ? "minor" : "major") : hasFeature || contractRaised ? "minor" : "patch";
     const version = kind === "major" ? `${major + 1}.0.0` : kind === "minor" ? `${major}.${minor + 1}.0` : `${major}.${minor}.${patch + 1}`;
-    return { version, kind: isBreaking ? "breaking" : kind === "minor" && contractRaised && !tasks.some((task) => task.type === "feature") ? "contract" : kind };
+    return { version, kind: isBreaking ? "breaking" : contractRaised && !hasFeature ? "contract" : kind };
 }
 
 /** A release's notes: its version and day, a summary, what breaks, the contracts that moved, then the tasks by kind as Keep a Changelog
  * groups them. */
 export function renderRelease({ version, day, summary, breaking = [], contracts = [], tasks, prefix = "T", names })
 {
-    const groups = [
-        ["added", tasks.filter((task) => task.type === "feature")],
-        ["fixed", tasks.filter((task) => task.type === "bug")],
-        ["maintenance", tasks.filter((task) => task.type === "chore")],
-        ["other", tasks.filter((task) => !["feature", "bug", "chore"].includes(task.type))],
-    ].filter(([, group]) => group.length > 0);
+    const groups = kindOrder.map((kind) => [kind, tasks.filter((task) => kindOf(task) === kind)]).filter(([, group]) => group.length > 0);
     const lines = [`# v${version} · ${day}`, ""];
 
     if (summary) {

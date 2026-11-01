@@ -1,4 +1,5 @@
-// What the scripts and the panel say, by language: an AI reads the errors, so each says what went wrong and how to fix it.
+// What the scripts and the panel say, by language: an AI reads the errors, so each says what went wrong and how to fix it. The page
+// says its own words, in page/words.js.
 
 const messages = {
     en: {
@@ -306,7 +307,6 @@ const messages = {
         badDue: "A due names a day, YYYY-MM-DD, not {list}.",
         badBy: "A by names who created the task, one name, not {list}.",
         unknownCreator: "{value} is not among who may create a task: {list}.",
-        createdBy: "created by {name}",
         badType: "A type is one word in lower case, not {list}.",
         unknownType: "The type «{value}» is not the project's: {list}. Add it under types: in .claude/project.yaml.",
         dueLabel: "due on {day}",
@@ -320,7 +320,6 @@ const messages = {
         staleTip: "In progress since {day} and nobody holds it",
         startedLabel: "in progress since {day}",
         decisionsOf: "decisions: {list}",
-        tasksOf: "tasks: {list}",
         labelPartOf: "part of",
         labelParts: "parts · {done}/{total}",
         labelWaits: "waits for",
@@ -418,7 +417,6 @@ const messages = {
         sectionDoing: "In progress",
         sectionRest: "To do",
         sectionGoals: "Plan",
-        sectionDecisions: "Decisions",
         sectionReleases: "Versions",
         githubButton: "🐙 Put it on GitHub",
         githubSetup: "🐙 Set GitHub up",
@@ -431,7 +429,6 @@ const messages = {
         specsAll: "All {count} specifications in the page",
         releaseTagOnly: "tag, no notes",
         releaseTasks: "{count} tasks",
-        decisionsCount: "{count} to decide",
         showAllTasks: "Show all ({count})",
         showAllDecisions: "Show all ({count})",
         planOf: "plan of {date}",
@@ -440,14 +437,10 @@ const messages = {
         postpone: "⏸ Postpone",
         backToDo: "↩ Back to do",
         starting: "⏳ Starting…",
-        atWork: "⚒ at work",
         continueInPage: "Continue in the page ↗",
         asChoice: "☰ Bring it to me as a choice",
-        allInPage: "All in the page ↗",
         toDecide: "To decide",
-        decidedLately: "Decided lately",
         days: "{days} d",
-        effort: "effort",
         born: "born on {date}",
         bornBy: "created by {name} on {date}",
         newTask: "＋ New task",
@@ -475,7 +468,6 @@ const messages = {
         openNote: "📄 Note ↗",
         promptGive: "Give {id} to {name}: {text}",
         promptChoice: "Bring me as a choice, with your recommendation first, this point to decide (line {line} of the decisions): {text}",
-        priorityTip: "{label}: press to turn it",
         paneNoConfig: "No .claude/project.yaml in this project: /project:init sets it up.",
         paneProblem: "The panel could not read the project: {problem}",
         panelOpened: "Project panel opened.",
@@ -787,7 +779,6 @@ const messages = {
         badDue: "Un due nomina un giorno, AAAA-MM-GG, non {list}.",
         badBy: "Un by nomina chi ha creato il compito, un nome solo, non {list}.",
         unknownCreator: "{value} non è fra chi può creare un compito: {list}.",
-        createdBy: "creato da {name}",
         badType: "Un type è una parola in minuscolo, non {list}.",
         unknownType: "Il tipo «{value}» non è del progetto: {list}. Aggiungilo sotto types: in .claude/project.yaml.",
         dueLabel: "scade il {day}",
@@ -801,7 +792,6 @@ const messages = {
         staleTip: "In corso dal {day} e nessuno lo tiene",
         startedLabel: "in corso dal {day}",
         decisionsOf: "decisioni: {list}",
-        tasksOf: "compiti: {list}",
         labelPartOf: "parte di",
         labelParts: "parti · {done}/{total}",
         labelWaits: "aspetta",
@@ -899,7 +889,6 @@ const messages = {
         sectionDoing: "In corso",
         sectionRest: "Da fare",
         sectionGoals: "Piano",
-        sectionDecisions: "Decisioni",
         sectionReleases: "Versioni",
         githubButton: "🐙 Mettilo su GitHub",
         githubSetup: "🐙 Prepara GitHub",
@@ -912,7 +901,6 @@ const messages = {
         specsAll: "Tutte le {count} specifiche nella pagina",
         releaseTagOnly: "tag, senza note",
         releaseTasks: "{count} compiti",
-        decisionsCount: "{count} da decidere",
         showAllTasks: "Mostra tutti ({count})",
         showAllDecisions: "Mostra tutte ({count})",
         planOf: "piano del {date}",
@@ -921,14 +909,10 @@ const messages = {
         postpone: "⏸ Rimanda",
         backToDo: "↩ Di nuovo da fare",
         starting: "⏳ Avvio…",
-        atWork: "⚒ al lavoro",
         continueInPage: "Continua nella pagina ↗",
         asChoice: "☰ Portamela come scelta",
-        allInPage: "Tutte nella pagina ↗",
         toDecide: "Da decidere",
-        decidedLately: "Decise di recente",
         days: "{days} g",
-        effort: "impegno",
         born: "nato il {date}",
         bornBy: "creato da {name} il {date}",
         newTask: "＋ Nuovo compito",
@@ -956,7 +940,6 @@ const messages = {
         openNote: "📄 Nota ↗",
         promptGive: "Dai {id} a {name}: {text}",
         promptChoice: "Portami come scelta, con la tua raccomandazione prima, questo punto da decidere (riga {line} delle decisioni): {text}",
-        priorityTip: "{label}: premi per cambiarla",
         paneNoConfig: "Nessun .claude/project.yaml in questo progetto: /project:init lo prepara.",
         paneProblem: "Il pannello non riesce a leggere il progetto: {problem}",
         panelOpened: "Pannello del progetto aperto.",
@@ -965,7 +948,8 @@ const messages = {
     },
 };
 
-/** The function that says a message in a language, its {names} filled in; English for a language or a message it lacks. */
+/** The function that says a message in a language, `(key, values) => text`, its {names} filled in from the values; English for a
+ * language or a message it lacks, the key itself for a message no language has. */
 export function sayer(language)
 {
     const own = messages[language] ?? messages.en;

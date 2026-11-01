@@ -11,7 +11,7 @@
 import { closeSync, existsSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
-import { issueTask, labelFor, labelsOf, lineTitle, parseSyncIssues, planFields, planSync, taskFields, taskSide } from "../lib/issues.mjs";
+import { issueTask, labelFor, labelsSaying, lineTitle, parseSyncIssues, planFields, planSync, taskFields, taskSide } from "../lib/issues.mjs";
 import { forgetGh, gh, readCode } from "./code.mjs";
 import { assignees, git, isMain, loadProject, ProjectError, readBacklog, readGoals, runCli, today, withBacklogLock, writeBacklog } from "./project.mjs";
 
@@ -296,7 +296,7 @@ function editor(config)
 
         for (const kind of ["type", "priority"].filter((one) => one in push)) {
             const wanted = push[kind] === null ? null : labelFor(kind, push[kind], repoLabels(), config.types);
-            labelsOf(kind, issue.labels, config.types).filter((one) => one !== wanted).forEach((one) => args.push("--remove-label", one));
+            labelsSaying(kind, issue.labels, config.types).filter((one) => one !== wanted).forEach((one) => args.push("--remove-label", one));
             wanted && !issue.labels.includes(wanted) && args.push("--add-label", label(wanted));
         }
 

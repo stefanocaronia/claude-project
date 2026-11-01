@@ -1,5 +1,6 @@
 // A document's frontmatter, the YAML block between two `---` lines at its very top: its title, description, kind, the day it was created
 // and the day it last changed, and whatever else a project keeps there. Pure.
+import { shortened } from "./text.mjs";
 import { parse } from "./vendor/yaml/index.js";
 
 // The keys the plugin keeps, in their order; any other key a document has follows them as it was.
@@ -31,8 +32,8 @@ export function splitFrontmatter(given)
 export function joinFrontmatter(data, body)
 {
     const keys = [...ordered.filter((key) => data[key] !== undefined && data[key] !== null), ...Object.keys(data).filter((key) => !ordered.includes(key) && data[key] !== undefined)];
-    const value = (key, item) => (typeof item === "string" && (day.test(item) || /^[\w][\w .,'’()/-]*$/.test(item)) && !/^(true|false|null|yes|no|~)$/i.test(item) && !/: /.test(item) ? item : JSON.stringify(item));
-    const lines = keys.map((key) => `${key}: ${value(key, data[key])}`);
+    const value = (item) => (typeof item === "string" && (day.test(item) || /^\w[\w .,'’()/-]*$/.test(item)) && !/^(true|false|null|yes|no|~)$/i.test(item) && !/: /.test(item) ? item : JSON.stringify(item));
+    const lines = keys.map((key) => `${key}: ${value(data[key])}`);
     return `---\n${lines.join("\n")}\n---\n\n${body.replace(/^(\r?\n)+/, "")}`;
 }
 
@@ -81,12 +82,7 @@ export function betterDescription(description, body)
     return made && description === made && now && now !== made ? now : "";
 }
 
-function shortened(text)
-{
-    return text.length > 200 ? `${text.slice(0, 197).replace(/\s+\S*$/, "")}…` : text;
-}
-
-/** A line of markdown as plain words: links as their text, no emphasis or code marks. */
+/** A line of markdown as plain words: links and images as their text, no emphasis or code marks, one line. */
 function plainLine(text)
 {
     return text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();

@@ -25,7 +25,8 @@ export function contractValue(text, contract)
         value = pointerValue(data, contract.pointer);
     }
 
-    return value !== undefined && value !== null && /^\d+(\.\d+)*$/.test(String(value).trim()) ? String(value).trim() : null;
+    const number = String(value ?? "").trim();
+    return /^\d+(\.\d+)*$/.test(number) ? number : null;
 }
 
 /** What a JSON pointer names in a value: `/engine/api`, `~1` for a slash and `~0` for a tilde in a key; undefined when nothing. */
@@ -56,6 +57,7 @@ export function compareContract(first, second)
  * at the last release, or no release) or "unread" (the file does not hold it now). */
 export function contractState(contract, current, before)
 {
-    const state = current === null ? "unread" : before === null || before === undefined ? "new" : Math.sign(compareContract(current, before));
-    return { name: contract.name, file: contract.file, current, before: before ?? null, state: { 1: "raised", "-1": "lowered", 0: "same" }[state] ?? state };
+    const moved = { 1: "raised", "-1": "lowered", 0: "same" };
+    const state = current === null ? "unread" : before === null || before === undefined ? "new" : moved[Math.sign(compareContract(current, before))];
+    return { name: contract.name, file: contract.file, current, before: before ?? null, state };
 }

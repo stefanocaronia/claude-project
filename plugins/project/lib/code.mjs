@@ -1,6 +1,7 @@
 // The code that cites a task: commits whose message names it, pull requests whose title or body names it. Pure: git's and gh's output
 // in, the citations by task out.
 import { citedTasks } from "./backlog.mjs";
+import { jsonList } from "./text.mjs";
 
 /** The commits of `git log --format=%H%x1f%ad%x1f%s%x1f%b%x1e --date=short`, each { hash, day, subject, body }. */
 export function parseLog(text)
@@ -14,24 +15,14 @@ export function parseLog(text)
 /** The pull requests of `gh pr list --json number,title,body,state,url,mergedAt`, each { number, title, body, state, url, merged }. */
 export function parsePulls(json)
 {
-    try {
-        const list = JSON.parse(json || "[]");
-        return Array.isArray(list) ? list.map((pull) => ({ number: pull.number, title: pull.title ?? "", body: pull.body ?? "", state: String(pull.state ?? "").toLowerCase(), url: pull.url ?? null, merged: pull.mergedAt ? String(pull.mergedAt).slice(0, 10) : null })) : [];
-    } catch {
-        return [];
-    }
+    return jsonList(json, (pull) => ({ number: pull.number, title: pull.title ?? "", body: pull.body ?? "", state: String(pull.state ?? "").toLowerCase(), url: pull.url ?? null, merged: pull.mergedAt ? String(pull.mergedAt).slice(0, 10) : null }));
 }
 
 /** The issues of `gh issue list --json number,title,state,url,closedAt[,author]`, each { number, title, state, url, closed, author }, the
  * author a login, null when gh was not asked for it. */
 export function parseIssues(json)
 {
-    try {
-        const list = JSON.parse(json || "[]");
-        return Array.isArray(list) ? list.map((issue) => ({ number: issue.number, title: issue.title ?? "", state: String(issue.state ?? "").toLowerCase(), url: issue.url ?? null, closed: issue.closedAt ? String(issue.closedAt).slice(0, 10) : null, author: issue.author?.login ? String(issue.author.login) : null })) : [];
-    } catch {
-        return [];
-    }
+    return jsonList(json, (issue) => ({ number: issue.number, title: issue.title ?? "", state: String(issue.state ?? "").toLowerCase(), url: issue.url ?? null, closed: issue.closedAt ? String(issue.closedAt).slice(0, 10) : null, author: issue.author?.login ? String(issue.author.login) : null }));
 }
 
 /** By task number, the commits and the pull requests that cite it: { commits: [{ hash, day, subject, repo, url }], pulls: [{ number, title,
@@ -58,9 +49,9 @@ export function citationsOf(repos, pulls, prefix = "T", own = [])
         }
     }
 
-    for (const cited of byTask.values()) {
-        cited.commits.sort((first, second) => second.day.localeCompare(first.day));
-        cited.pulls.sort((first, second) => second.number - first.number);
+    for (const found of byTask.values()) {
+        found.commits.sort((first, second) => second.day.localeCompare(first.day));
+        found.pulls.sort((first, second) => second.number - first.number);
     }
 
     return byTask;

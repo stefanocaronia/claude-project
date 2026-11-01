@@ -1,6 +1,5 @@
 // The plan's text: the phases' table (`| 2. Name | outcome |`), the goals as `### Name (phase 2)` under the goals heading, and the line
 // that says when it was updated. Pure.
-import { escapeRegex } from "./text.mjs";
 import { readable, readablePattern } from "./words.mjs";
 
 /** The goals of the plan, in order, each with the phase its heading names, or null. */
@@ -13,8 +12,9 @@ export function planGoals(text, words)
         const { heading, closed } = closedOf(match[1], words);
         const found = phase.exec(heading);
         // What the goal is: the text under its heading, up to the next one.
-        const rest = part.slice((match.index ?? 0) + match[0].length);
-        const description = rest.slice(0, rest.search(/^#{2,3} /m) < 0 ? rest.length : rest.search(/^#{2,3} /m)).trim();
+        const rest = part.slice(match.index + match[0].length);
+        const end = rest.search(/^#{2,3} /m);
+        const description = (end < 0 ? rest : rest.slice(0, end)).trim();
         return { name: heading.replace(phase, "").trim(), phase: found ? Number(found[1]) : null, description, closed };
     });
 }
@@ -67,15 +67,15 @@ export function planUpdated(text, words)
     return new RegExp(`(?:${readablePattern(words, "updated")}) (\\d{4}-\\d{2}-\\d{2})`).exec(text ?? "")?.[1] ?? null;
 }
 
+/** The end of a goal's heading that names its phase, «(phase 2)», the number caught. */
+export function phaseSuffix(words)
+{
+    return new RegExp(`\\s*\\((?:${readablePattern(words, "phase")}) (\\d+)\\)\\s*$`, "i");
+}
+
 /** A goal's heading without the day it closed, `· done 2026-10-30` at its end, and that day or null. */
 function closedOf(heading, words)
 {
     const match = new RegExp(`\\s*· (?:${readablePattern(words, "doneMarker")}) (\\d{4}-\\d{2}-\\d{2})\\s*$`).exec(heading);
     return match ? { heading: heading.slice(0, match.index).trim(), closed: match[1] } : { heading: heading.trim(), closed: null };
-}
-
-/** The end of a goal's heading that names its phase, «(phase 2)», the number caught. */
-export function phaseSuffix(words)
-{
-    return new RegExp(`\\s*\\((?:${readablePattern(words, "phase")}) (\\d+)\\)\\s*$`, "i");
 }

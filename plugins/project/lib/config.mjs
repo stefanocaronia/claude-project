@@ -1,12 +1,14 @@
 // The project's configuration, .claude/project.yaml, read into one object with every default filled in. Pure: the scripts and the panel
 // hand it the file's text and the project's root.
+import { isMap } from "./text.mjs";
 import { parse } from "./vendor/yaml/index.js";
 import { labelsOf, wordsOf } from "./words.mjs";
 
 /** Where the configuration lives, relative to the project's root. */
 export const configFile = ".claude/project.yaml";
 
-export const defaults = {
+// What a setting is when the configuration does not say.
+const defaults = {
     language: "en",
     docs: "project",
     people: ["Claude"],
@@ -35,7 +37,8 @@ export function readConfig(text, root)
     const words = { ...wordsOf(language, given.words), fields: Object.keys(fields) };
     const files = { ...words.files, ...(given.files ?? {}) };
     const docs = resolve(root, given.docs ?? defaults.docs);
-    const config = {
+
+    return {
         root: clean(root),
         rootSetting: given.root === undefined ? undefined : resolve(root, given.root),
         name: given.name === undefined ? undefined : String(given.name),
@@ -89,8 +92,6 @@ export function readConfig(text, root)
         // the repo's only collaborator.
         github: githubOf(given.github),
     };
-
-    return config;
 }
 
 /** The GitHub settings: { issues: "sync" | "off", unassigned: "auto" | "take" | "leave", logins: { person: login } }. */
@@ -100,8 +101,9 @@ function githubOf(given)
         throw new Error(`github is a map (github: { issues: sync }), not ${Array.isArray(given) ? "a list" : typeof given}.`);
     }
 
-    const issues = given?.issues === true ? "sync" : given?.issues === false || given?.issues === undefined || given?.issues === null ? "off" : String(given.issues);
-    const unassigned = given?.unassigned === undefined || given?.unassigned === null ? "auto" : String(given.unassigned);
+    const sync = given?.issues ?? false;
+    const issues = sync === true ? "sync" : sync === false ? "off" : String(sync);
+    const unassigned = String(given?.unassigned ?? "auto");
 
     if (!["sync", "off"].includes(issues) || !["auto", "take", "leave"].includes(unassigned)) {
         throw new Error(`github: issues is sync or off, unassigned is take, leave or auto, not ${JSON.stringify(given)}.`);
@@ -165,12 +167,7 @@ export function defaultPort(root)
 export function resolve(folder, path)
 {
     const given = String(path).replaceAll("\\", "/");
-
-    if (/^([a-zA-Z]:)?\//.test(given)) {
-        return clean(given);
-    }
-
-    return clean(`${folder}/${given}`);
+    return clean(/^([a-zA-Z]:)?\//.test(given) ? given : `${folder}/${given}`);
 }
 
 /** A path relative to a folder, for messages; the path itself when it is not under it. */
@@ -181,6 +178,7 @@ export function relativeTo(folder, path)
     return full.toLowerCase().startsWith(base.toLowerCase()) ? full.slice(base.length) : full;
 }
 
+/** A path with "/" between its parts, "." and ".." folded away, its root (`/` or `C:/`) kept. */
 function clean(path)
 {
     const parts = [];
@@ -226,11 +224,7 @@ function fieldsOf(given)
     }));
 }
 
-function isMap(value)
-{
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
+/** A setting given as one value or a list, as a list of texts; the fallback when it is not given. */
 function list(value, fallback)
 {
     if (value === undefined || value === null) {

@@ -1,11 +1,11 @@
 // A colleague's todo lines, as Crew writes them: `- [ ] P2 · 2026-10-29 · text`, the priority on open lines, the date on all. Pure.
 
-const taskPattern = /^(\s*)([-*]|\d+b?\.)\s+\[( |x)\]\s+(?:(P[1-3]) · )?(?:(\d{4}-\d{2}-\d{2}) · )?(.*)$/;
+const todoPattern = /^(\s*)([-*]|\d+b?\.)\s+\[( |x)\]\s+(?:(P[1-3]) · )?(?:(\d{4}-\d{2}-\d{2}) · )?(.*)$/;
 
-/** A checkbox line taken apart, or null when the line is not one. */
+/** A checkbox line taken apart, { indent, marker, done, priority, created, text }, or null when the line is not one. */
 export function parseTodo(line)
 {
-    const match = taskPattern.exec(line);
+    const match = todoPattern.exec(line);
 
     if (!match) {
         return null;
@@ -16,14 +16,14 @@ export function parseTodo(line)
 }
 
 /** The line again, with what it has of priority and date. */
-export function formatTodo(task)
+export function formatTodo(todo)
 {
-    const priority = task.priority && !task.done ? `${task.priority} · ` : "";
-    const created = task.created ? `${task.created} · ` : "";
-    return `${task.indent}${task.marker} [${task.done ? "x" : " "}] ${priority}${created}${task.text}`;
+    const priority = todo.priority && !todo.done ? `${todo.priority} · ` : "";
+    const created = todo.created ? `${todo.created} · ` : "";
+    return `${todo.indent}${todo.marker} [${todo.done ? "x" : " "}] ${priority}${created}${todo.text}`;
 }
 
-/** A line's text reduced to what stays when it is edited a little: no markdown, no case. */
+/** A line's text reduced to what stays when it is edited a little: no markdown, no case, its first `length` characters. */
 export function todoKey(text, length)
 {
     return text.replace(/\*\*|__|`|~~/g, "").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").toLowerCase().replace(/\s+/g, " ").trim().slice(0, length);

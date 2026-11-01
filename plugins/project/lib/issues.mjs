@@ -1,28 +1,24 @@
 // The GitHub issues in sync with the backlog (D-13): what comes in, and the openings and closings both ways. Pure: the issues as gh
 // gives them, the tasks, and the state the last sync left in; out, what to do on each side and the state after it. A change is told
 // from the last state in sync, so that it never bounces back: a side that moved since then wins; without one, a closing wins.
+import { jsonList } from "./text.mjs";
 
 /** The issues of `gh issue list --json number,title,state,stateReason,assignees,author,labels,milestone,url,closedAt`, each { number,
  * title, state ("open" | "closed"), reason ("completed" | "not_planned" | null), assignees, author, labels, milestone, url, closed }. */
 export function parseSyncIssues(json)
 {
-    try {
-        const list = JSON.parse(json || "[]");
-        return Array.isArray(list) ? list.map((issue) => ({
-            number: issue.number,
-            title: String(issue.title ?? ""),
-            state: String(issue.state ?? "").toLowerCase(),
-            reason: issue.stateReason ? String(issue.stateReason).toLowerCase() : null,
-            assignees: (issue.assignees ?? []).map((one) => String(one.login ?? one)),
-            author: issue.author?.login ? { login: String(issue.author.login), name: String(issue.author.name ?? "") } : null,
-            labels: (issue.labels ?? []).map((one) => String(one.name ?? one)),
-            milestone: issue.milestone?.title ? String(issue.milestone.title) : null,
-            url: issue.url ?? null,
-            closed: issue.closedAt ? String(issue.closedAt).slice(0, 10) : null,
-        })) : [];
-    } catch {
-        return [];
-    }
+    return jsonList(json, (issue) => ({
+        number: issue.number,
+        title: String(issue.title ?? ""),
+        state: String(issue.state ?? "").toLowerCase(),
+        reason: issue.stateReason ? String(issue.stateReason).toLowerCase() : null,
+        assignees: (issue.assignees ?? []).map((one) => String(one.login ?? one)),
+        author: issue.author?.login ? { login: String(issue.author.login), name: String(issue.author.name ?? "") } : null,
+        labels: (issue.labels ?? []).map((one) => String(one.name ?? one)),
+        milestone: issue.milestone?.title ? String(issue.milestone.title) : null,
+        url: issue.url ?? null,
+        closed: issue.closedAt ? String(issue.closedAt).slice(0, 10) : null,
+    }));
 }
 
 // The labels GitHub and the trade use, by the task's type; and by priority.
@@ -35,10 +31,16 @@ const typeLabels = {
 };
 const priorityLabels = { P1: ["p1", "p0", "priority: high", "high priority", "high", "critical", "urgent"], P3: ["p3", "priority: low", "low priority", "low"] };
 
+/** A label as the word it says: in lower case, without the `type:` or `kind/` some repos put before it. */
+function labelWord(label)
+{
+    return label.toLowerCase().replace(/^(type|kind)\s*[:/]\s*/, "");
+}
+
 /** The task's type an issue's labels say: one of the project's types by its key or its name, else the trade's labels; null for none. */
 export function typeOfLabels(labels, types = {})
 {
-    const names = labels.map((label) => label.toLowerCase().replace(/^(type|kind)\s*[:/]\s*/, ""));
+    const names = labels.map(labelWord);
     const own = Object.entries(types).find(([key, name]) => names.includes(key.toLowerCase()) || names.includes(String(name).toLowerCase()));
     return own?.[0] ?? Object.entries(typeLabels).find(([key, words]) => key in types && words.some((word) => names.includes(word)))?.[0] ?? null;
 }
@@ -80,7 +82,10 @@ export function planSync({ issues, tasks, base = {}, me, takeUnassigned = false 
             // An issue whose task was there at the last sync and is gone: taken out by hand, not to come in again.
             if (issue.state === "open" && !before && (isMine || isFree)) {
                 plan.incoming.push(issue);
-                isFree && plan.assign.push(issue.number);
+
+                if (isFree) {
+                    plan.assign.push(issue.number);
+                }
             }
 
             continue;
@@ -159,8 +164,9 @@ export function readsAsInstruction(title)
     return instructionSigns.some((sign) => sign.test(String(title ?? "")));
 }
 
-/** The same fields of an issue: its title as a task's line can hold it, the type and the priority its labels say, its first assignee. */
-export function issueFields(issue, types)
+/** The fields of `taskFields` on an issue's side: its title as a task's line can hold it, the type and the priority its labels say, its
+ * first assignee, its milestone. */
+function issueFields(issue, types)
 {
     return {
         title: lineTitle(issue.title),
@@ -176,12 +182,13 @@ export function issueFields(issue, types)
  * person of the project (else null). */
 export function issueTask(issue, { types, people, goals })
 {
-    const author = issue.author ? people.find((person) => [issue.author.login, issue.author.name.split(/\s+/)[0]].some((name) => name && name.toLowerCase() === person.toLowerCase())) ?? null : null;
+    // The author by their login, or by the first of their names on GitHub.
+    const names = issue.author ? [issue.author.login, issue.author.name.split(/\s+/)[0]].filter(Boolean).map((name) => name.toLowerCase()) : [];
     return {
         priority: priorityOfLabels(issue.labels),
         type: typeOfLabels(issue.labels, types),
         goal: goals.find((one) => !one.closed && issue.milestone && one.name.toLowerCase() === issue.milestone.toLowerCase())?.name ?? null,
-        by: author,
+        by: people.find((person) => names.includes(person.toLowerCase())) ?? null,
     };
 }
 
@@ -246,12 +253,12 @@ export function labelFor(kind, value, repoLabels, types = {})
         return null;
     }
 
-    const own = repoLabels.find((label) => words.includes(label.toLowerCase().replace(/^(type|kind)\s*[:/]\s*/, "")));
+    const own = repoLabels.find((label) => words.includes(labelWord(label)));
     return own ?? (kind === "type" ? typeLabels[value]?.[0] ?? value : value);
 }
 
 /** The labels of an issue that say a type, or a priority: those a change of it takes away. */
-export function labelsOf(kind, labels, types = {})
+export function labelsSaying(kind, labels, types = {})
 {
     return labels.filter((label) => (kind === "type" ? typeOfLabels([label], types) !== null : priorityOfLabels([label]) !== "P2"));
 }
