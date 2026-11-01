@@ -9,6 +9,12 @@ T-61: In progress
 D-73: hidden rolls carry a fingerprint the player can check afterwards…
 ```
 
+<p align="center">
+  <img src="images/panel.png" alt="The panel beside the chat: counts, the next task and decision, the tasks in progress and to do, the plan's goals, the points to decide, the versions" height="400">
+  <img src="images/page.png" alt="The project's page: the overview, with the share of tasks done, the decisions, the commits, the version and the plan's phases" height="400">
+</p>
+<p align="center"><sub>The panel beside the chat, and the project's page, for a small static site generator three weeks into its work.</sub></p>
+
 One plugin, `project`:
 
 - **The plan**: phases (`| 2. Name | at the end you can… |`) and goals (`### Name (phase 2)`), in `PLAN.md`. `plan.mjs close` closes a goal whose tasks are all closed, with its day (`### Name (phase 2) · done 2026-10-30`), out of the open bars; `open` opens it again; a phase whose goals are all closed is closed too (`plan.mjs phases`), and the panel shows it as one line.
@@ -22,6 +28,8 @@ One plugin, `project`:
 - **The scripts, enforced**: the start of a session tells Claude to read tasks, decisions and specs through the scripts, and the panel refuses a direct read or write of the backlog and a direct search of the decisions and the specs (a grep, a cat, a Read), naming the command to use: fewer tokens, and lines that never break.
 - **The panel** beside the chat: tiles with the counts; buttons for the next task (by priority, then the oldest, past the blocked ones), the next decision, tidying the backlog (priorities, large tasks, texts, tasks already done or made moot, as proposals), where the project stands (a short report, 30 lines at most: what closed, what is best to do next, what could be improved or added) and the docs' tidying; the project's links; in a chat already at work on a task no other starts, neither the next task nor any ▶, as another task belongs to a new session of the project; the tasks in progress, each with ▶ to go on with it (in the chat that holds it, or here), and the tasks to do by priority, each with ▶ to start it (a task that waits shows «⛓ T-62» in place of its age, and its ▶ asks Claude for the whole chain with one yes), a large task's closed parts under it, checked and without ▶, its links and its note when opened, Done and Postpone, the priority turned with a press, its text written again, Archive on a second press; a new task written at the top of the list to do; the plan's goals with their bars; the points still to decide, one brought to the chat as a choice; the specifications with their coverage; the GitHub issues no task does yet, and the last sync; the last versions, each opening its notes in the page; the decisions taken are the page's. It follows the files: a change made elsewhere shows within seconds. `/project-panel` shows or hides it.
 - **The page** with the charts, served on localhost from the start of a session, each project on its own port: overview, rhythm, decisions, tasks (added, changed in every field and archived from the list), health with the cleanup, docs, versions (each with its notes, and the work waiting for the next). A project adds parts of its own as extensions.
+
+<p align="center"><img src="images/page-tasks.png" alt="The page's tasks: filters by state, priority, type, person and goal; each task with its waits, its decisions, its note and the commits that cite it" width="760"></p>
 
 The files speak the project's language: English and Italian come built in, any word can be overridden.
 
@@ -98,6 +106,8 @@ claude plugin validate .
 ```
 
 The page's test opens it in a headless Chrome or Edge, the one installed or the one `CHROME_PATH` names, and is skipped without one.
+
+`node tools/screenshots.mjs` makes this README's pictures again, in `images/`: it writes a small demo project with three weeks of history, photographs its page in the same browser, and its panel as `tools/preview.mjs` draws it.
 
 Installed from a local folder (`/plugin marketplace add <folder>`), the plugin is read from that folder: after a change, `/reload-plugins`.
 
