@@ -127,15 +127,22 @@ test("a task's note is written once, in the notes folder, and show names it", ()
 
 test("a comment on a task goes in its note, the note's own text kept; show prints them whole, with who wrote them and when", () => {
     const day = new Date().toLocaleDateString("sv-SE");
-    // Without --by, the project's first person who is not Claude; Claude by its name, in any case.
-    assert.match(run("comment", "T-2", "--", "Roll them twice?\nThe second counts."), /Comment added to T-2, in its note: docs\/tasks\/T-2\.md/);
-    run("comment", "T-2", "--by", "claude", "--", "--done, as asked");
+    // A person by --by, in any case; without it, Claude, who runs the command.
+    assert.match(run("comment", "T-2", "--by", "ann", "--", "Roll them twice?\nThe second counts."), /Comment added to T-2, in its note: docs\/tasks\/T-2\.md/);
+    run("comment", "T-2", "--", "--done, as asked");
     assert.match(read("docs/tasks/T-2.md"), new RegExp(`Where it got to\\.\\n\\n## Comments\\n\\n### ${day} · Ann\\n\\nRoll them twice\\?\\nThe second counts\\.\\n\\n### ${day} · Claude\\n\\n--done, as asked\\n$`));
     assert.match(run("show", "T-2"), new RegExp(`comment by Ann, ${day}:\\n {4}Roll them twice\\?\\n {4}The second counts\\.\\n  comment by Claude, ${day}:\\n {4}--done, as asked`));
     // A task without a note has one written for its first comment; a comment without words is refused.
     run("comment", "T-1", "--by", "Giulia", "--", "Seen in the review.");
     assert.match(read("docs/tasks/T-1.md"), /^---\n[\s\S]*\n---\n\n# T-1 · [^\n]+\n\n## Comments\n\n### \d{4}-\d{2}-\d{2} · Giulia\n\nSeen in the review\.\n$/);
     assert.match(fails("comment", "T-1", "--", "  "), /Give the comment's text/);
+    // One already there, by its number: written again, its day and who wrote it kept, a line with # still escaped; then deleted.
+    run("comment", "T-1", "--", "Twice.");
+    assert.match(run("comment", "T-1", "--edit", "2", "--", "# Once."), /Comment 2 of T-1 written again/);
+    assert.match(read("docs/tasks/T-1.md"), new RegExp(`Seen in the review\\.\\n\\n### ${day} · Claude\\n\\n\\\\# Once\\.\\n$`));
+    assert.match(run("comment", "T-1", "--delete", "2"), /Comment 2 of T-1 deleted/);
+    assert.match(fails("comment", "T-1", "--delete", "2"), /T-1 has no comment 2/);
+    assert.match(read("docs/tasks/T-1.md"), /· Giulia\n\nSeen in the review\.\n$/);
 });
 
 test("the check finds a cycle through a todo line, an after to a todo id nobody gave, a link to a missing task and an orphan note", () => {

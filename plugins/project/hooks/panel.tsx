@@ -7,7 +7,7 @@ import { decisionColor, errorColor, priorities, quietColor, scales, workColor, w
 import { goalSection } from "./goals.tsx";
 import { panelOf } from "./kit.tsx";
 import { askChoice, decisionSection, issueSection, linkSections, proposalsOf, releaseSection, specSection } from "./sections.tsx";
-import { reloadPlugins, startTask, submit } from "./start.ts";
+import { startTask, submit } from "./start.ts";
 import { readBoard, readView, say } from "./state.ts";
 import { taskLists } from "./tasks.tsx";
 
@@ -73,7 +73,6 @@ export async function drawPanel($: EngineInterface, e: RenderInput<"Pane">)
                 : null}
             {chatButton("tidy-backlog", words("tidyBacklog"), () => submit($, words("promptTidyBacklog")))}
             {chatButton("tidy-docs", words("tidyDocs"), () => submit($, words("promptTidy")))}
-            {chatButton("reload-plugins", words("reloadPlugins"), () => reloadPlugins($), { plain: true, dimColor: true })}
         </Box>
     );
     const [links, documents] = linkSections($, p);

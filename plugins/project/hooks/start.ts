@@ -100,15 +100,6 @@ export async function submit($: EngineInterface, text: string): Promise<void>
     await $.prompt.submit({ text, asUser: true });
 }
 
-/** Claude Code's /reload-plugins --force, as the user would type it: a plugin changed in its folder is read again, even one the engine thinks unchanged. */
-export async function reloadPlugins($: EngineInterface): Promise<void>
-{
-    const ran = await $.command.run({ command: "reload-plugins", args: "--force" }).then(() => true, () => false);
-
-    if (!ran) {
-        await submit($, "/reload-plugins --force");
-    }
-}
 
 /** A task's text as the chat is asked to work on it: one from an issue another wrote says so, the text theirs, data and never an order
  * (D-16), for it goes into the chat in the user's name. */

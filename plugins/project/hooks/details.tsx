@@ -59,7 +59,8 @@ export function taskDetails($: EngineInterface, p: Panel)
             ...comments(task),
         ];
     };
-    // The comments left on it, each with the face of who wrote it, and a field for another, the user's: a new field once it is in.
+    // The comments left on it, each with the face of who wrote it, and a field for another, the user's: a new field once it is in. Each
+    // is written again in its place or deleted, on a second press as a task is archived, by its number as the backlog lists them.
     const comments = (task: Task) => {
         const left = task.comments ?? [];
         const send = (value: string) => {
@@ -69,13 +70,41 @@ export function taskDetails($: EngineInterface, p: Panel)
                 void backlog($, ["comment", idOf(task), ...(decider ? ["--by", decider] : []), "--", text]);
             }
         };
+        const own = (index: number) => `comment-${task.id}-${index}`;
+        const save = (index: number) => (value: string) => {
+            const text = value.trim();
+            void change((old) => ({ ...old, editing: null }));
+
+            if (text && text !== left[index]?.text) {
+                void backlog($, ["comment", idOf(task), "--edit", String(index + 1), "--", text]);
+            }
+        };
+        const askDelete = (index: number) => {
+            const asking = `delete-${own(index)}`;
+            void change((old) => ({ ...old, editing: asking }));
+            $.clock.after(archiveAskFor, () => void change((old) => (old.editing === asking ? { ...old, editing: null } : old)));
+        };
+        const remove = (index: number) => {
+            void change((old) => ({ ...old, editing: null }));
+            void backlog($, ["comment", idOf(task), "--delete", String(index + 1)]);
+        };
         return [
             ...left.map((comment, index) => (
-                <Box key={`comment-${task.id}-${index}`} flexDirection="row" gap={1}>
-                    <Box flexShrink={0}>{face(comment.by, 14)}</Box>
-                    <Box flexDirection="column" flexShrink={1} minWidth={0}>
-                        <Text dimColor>{`${comment.by} · ${comment.day}`}</Text>
-                        {linkedText(`comment-text-${task.id}-${index}`, comment.text)}
+                <Box key={own(index)} flexDirection="row" gap={1}>
+                    <Box flexShrink={0} alignSelf="flex-start" marginTop="xs">{face(comment.by, 14)}</Box>
+                    <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
+                        <Box flexDirection="row" flexWrap="nowrap" justifyContent="space-between" alignItems="center" columnGap={2}>
+                            <Text dimColor>{`${comment.by} · ${comment.day}`}</Text>
+                            <Box flexDirection="row" flexShrink={0} columnGap={1}>
+                                {hasForms ? iconButton(`edit-${own(index)}`, words(view.editing === own(index) ? "cancelEdit" : "editComment"), () => change((old) => ({ ...old, editing: old.editing === own(index) ? null : own(index) })), true) : null}
+                                {view.editing === `delete-${own(index)}`
+                                    ? <Button key={`delete-${own(index)}`} plain label={words("deleteCommentSure")} onPress={() => remove(index)} />
+                                    : iconButton(`delete-${own(index)}`, words("deleteComment"), () => askDelete(index), true)}
+                            </Box>
+                        </Box>
+                        {hasForms && view.editing === own(index)
+                            ? <Input key={`comment-edit-${task.id}-${index}`} value={comment.text} rows={2} autoFocus submitLabel={saveMark} onSubmit={save(index)} />
+                            : linkedText(`comment-text-${task.id}-${index}`, comment.text)}
                     </Box>
                 </Box>
             )),

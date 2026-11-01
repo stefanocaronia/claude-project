@@ -184,7 +184,7 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
         ? idleButton(`${key}-idle`, label, words("busyTurn"), Boolean(look.plain))
         : <Button key={key} label={label} onPress={() => void onPress()} {...look} />);
     // Who holds a task: Claude's critter, a colleague's portrait or initials, the owner's GitHub picture, a person's initials in gray;
-    // the name under the pointer.
+    // the name under the pointer. It stands at the top of its row, beside the first line of what it holds, however many lines that has.
     const face = (name: string, size: number) => {
         const member = byName.get(name) ?? (owner && name === owner.name ? { id: name, name, fullName: owner.fullName, role: "", color: "gray", portrait: owner.portrait } : undefined);
 
@@ -194,7 +194,11 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
 
         const source = name === "Claude" ? claudeSvg(size) : faceSvg(member ?? { id: name, name, fullName: name, role: "", color: "gray" }, member?.portrait, size);
         const fullName = member?.fullName ?? name;
-        return tip(`face-${name}`, fullName, <Svg key={`face-${name}`} source={source} alt={fullName} width={size} height={size} />, "left");
+        return (
+            <Box key={`face-${name}`} flexShrink={0} alignSelf="flex-start">
+                {tip(`face-${name}`, fullName, <Svg source={source} alt={fullName} width={size} height={size} />, "left")}
+            </Box>
+        );
     };
     // A priority's mark, drawn on the desktop, its glyph on the terminal.
     const priorityIcon = (priority: string) => {

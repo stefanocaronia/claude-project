@@ -587,7 +587,7 @@ test("while this chat's turn runs, the buttons that write to it wait, low and gr
     on("turn.complete", () => ({ text: "" }));
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
     const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
-    const chatKeys = ["where-we-stand", "tidy-backlog", "tidy-docs", "reload-plugins"];
+    const chatKeys = ["where-we-stand", "tidy-backlog", "tidy-docs"];
     await $.turn.start({ text: "", turnId: "colleague", agentId: "a1" } as never);
     expect(await ui.find({ type: "Button", key: "tidy-docs" })).toBeDefined();
     await $.turn.start({ text: "lavora", turnId: "main" } as never);

@@ -105,7 +105,7 @@ export async function listen(server, port)
  * task made of a GitHub issue, another's too, the click being the user's yes (D-16); a comment on a task, in its note; or, through the
  * issues' sync, the user's no to a title another gave an issue. A task the page adds, and a comment, are the creator's, the person the
  * page's owner is. Anything else is refused. */
-function changeBacklog(config, { command, id, priority, issue, title, text, goal, type, to, due, effort, parent, see, fields: own }, creator)
+function changeBacklog(config, { command, id, number, priority, issue, title, text, goal, type, to, due, effort, parent, see, fields: own }, creator)
 {
     const task = /^[\w-]+-\d+$/.test(String(id)) ? String(id) : null;
     // A field's value as one line of text, without the line's separator; "" clears a field that may be empty.
@@ -125,10 +125,13 @@ function changeBacklog(config, { command, id, priority, issue, title, text, goal
         : command === "keep-title" && /^\d+$/.test(String(issue)) ? ["keep-title", String(issue)]
         // A comment keeps its lines, after a lone --: what it says never reads as an option.
         : command === "comment" && task && typeof text === "string" && text.trim() ? ["comment", task, ...by, "--", text.replaceAll("\r\n", "\n").trim().slice(0, 4000)]
+        // One already there, by its number as the backlog lists them: written again, or deleted.
+        : command === "comment-edit" && task && /^\d+$/.test(String(number)) && typeof text === "string" && text.trim() ? ["comment", task, `--edit=${number}`, "--", text.replaceAll("\r\n", "\n").trim().slice(0, 4000)]
+        : command === "comment-delete" && task && /^\d+$/.test(String(number)) ? ["comment", task, `--delete=${number}`]
         : null;
 
     if (!args) {
-        return { ok: false, message: "The page changes a task's state (start, done, postpone, todo, archive) or its fields (set: text, goal, priority, type, to, due, effort), by its id; adds a task (add, with its text); makes a task of a GitHub issue (issue with its number); keeps a task's title over the one another gave its issue (keep-title with the issue's number); or comments on a task (comment, by its id, with its text)." };
+        return { ok: false, message: "The page changes a task's state (start, done, postpone, todo, archive) or its fields (set: text, goal, priority, type, to, due, effort), by its id; adds a task (add, with its text); makes a task of a GitHub issue (issue with its number); keeps a task's title over the one another gave its issue (keep-title with the issue's number); or comments on a task (comment, by its id, with its text), writes a comment again (comment-edit, with its number and its text) or deletes it (comment-delete, with its number)." };
     }
 
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...env } = process.env;

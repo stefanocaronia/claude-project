@@ -65,3 +65,28 @@ export function withComment(note, { day, by, text })
 
     return `${[...before, "", ...block, ...(next === -1 ? [] : ["", ...lines.slice(end)])].join("\n")}\n`;
 }
+
+/** A note with its comment at `index`, the oldest 0, written again with `text` (its day and who wrote it kept), or taken out when
+ * `text` is null; the section goes with its last comment, the rest of the note as it was. Null when the note has no such comment. */
+export function changeComment(note, index, text)
+{
+    const comments = parseComments(note);
+
+    if (!Number.isInteger(index) || index < 0 || index >= comments.length) {
+        return null;
+    }
+
+    const kept = text === null ? comments.filter((_, at) => at !== index) : comments.map((comment, at) => (at === index ? { ...comment, text } : comment));
+    const lines = String(note ?? "").replaceAll("\r\n", "\n").replace(/\n+$/, "").split("\n");
+    const start = lines.findIndex((line) => line.trim() === commentsHeading);
+    const next = lines.findIndex((line, at) => at > start && /^## /.test(line));
+    const before = lines.slice(0, start);
+
+    while (before.length > 0 && before.at(-1).trim() === "") {
+        before.pop();
+    }
+
+    const after = next === -1 ? [] : ["", ...lines.slice(next)];
+    const rest = `${[...before, ...after].join("\n")}\n`;
+    return kept.reduce((written, comment) => withComment(written, comment), rest);
+}

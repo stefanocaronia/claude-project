@@ -46,6 +46,12 @@ function setupActions()
             saveTask(target.dataset.saveTask);
         } else if (target.dataset.commentTask) {
             commentTask(Number(target.dataset.commentTask));
+        } else if (target.dataset.editComment) {
+            editComment(target.dataset.editComment);
+        } else if (target.dataset.saveComment) {
+            changeComment(target.dataset.saveComment, false);
+        } else if (target.dataset.deleteComment) {
+            changeComment(target.dataset.deleteComment, true);
         } else if (target.hasAttribute("data-cancel-task")) {
             editing = null;
             newTaskSpecs = "";
@@ -220,16 +226,62 @@ function taskForm(task)
         </li>`;
 }
 
-/** The comments left on a task, the oldest first, each with who wrote it and when: the user's, a colleague's, Claude's; then a field
- * for the user's own. */
+/** The comments left on a task, the oldest first, each with who wrote it and when: the user's, a colleague's, Claude's, each written
+ * again in its place or deleted; then a field for the user's own. */
 function taskComments(task)
 {
-    const left = (task.comments ?? []).map((comment) => `<div class="comment"><b>${escape(comment.by)}</b> <span class="comment-day">${escape(formatDay(comment.day))}</span><p>${escape(comment.text)}</p></div>`);
+    const left = (task.comments ?? []).map((comment, index) => `<div class="comment" id="comment-${task.id}-${index + 1}"><b>${escape(comment.by)}</b> <span class="comment-day">${escape(formatDay(comment.day))}</span>
+                    <button type="button" class="link-button" data-edit-comment="${task.id}-${index + 1}" title="${attribute(t("commentEdit"))}">✎</button>
+                    <button type="button" class="link-button" data-delete-comment="${task.id}-${index + 1}" title="${attribute(t("commentDelete"))}">🗑</button>
+                    <p>${escape(comment.text)}</p></div>`);
     return `<div class="task-comments">
                     ${left.join("")}
                     <textarea id="form-comment-${task.id}" rows="2" placeholder="${attribute(t("commentHint"))}"></textarea>
                     <div class="actions"><button type="button" class="action" data-comment-task="${task.id}">${t("commentSend")}</button></div>
                 </div>`;
+}
+
+/** A comment written again in its place: its text in a field, saved through the backlog's command. */
+function editComment(which)
+{
+    const [id, number] = which.split("-").map(Number);
+    const comment = data.board.find((task) => task.id === id)?.comments?.[number - 1];
+    const box = document.getElementById(`comment-${which}`);
+
+    if (!comment || !box) {
+        return;
+    }
+
+    box.querySelector("p").outerHTML = `<textarea id="comment-field-${which}" rows="2">${escape(comment.text)}</textarea>
+                    <div class="actions"><button type="button" class="action" data-save-comment="${which}">${t("commentSave")}</button></div>`;
+    document.getElementById(`comment-field-${which}`)?.focus();
+}
+
+/** Saves a comment written again, or deletes one on the user's yes; then opens the task's form again. */
+async function changeComment(which, isDelete)
+{
+    const [id, number] = which.split("-").map(Number);
+    const name = taskName({ id });
+
+    if (isDelete) {
+        if (!confirm(t("commentDeleteConfirm", name))) {
+            return;
+        }
+
+        editing = null;
+        await changeTask({ command: "comment-delete", id: name, number }, t("commentDeleted", name));
+    } else {
+        const text = document.getElementById(`comment-field-${which}`)?.value.trim() ?? "";
+
+        if (!text) {
+            return;
+        }
+
+        editing = null;
+        await changeTask({ command: "comment-edit", id: name, number, text }, t("commentChanged", name));
+    }
+
+    openTaskForm(id);
 }
 
 /** Adds the user's comment to a task through the backlog's command, then opens its form again with the comment in it. */

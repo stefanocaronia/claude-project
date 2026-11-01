@@ -11,7 +11,8 @@
 //   node backlog.mjs issue-close T-12   (closes its GitHub issue with a comment: only on the user's yes)
 //   Where the issues are in sync (github: { issues: sync }), each change is followed by a sync with GitHub (issues.mjs).
 //   node backlog.mjs note T-12   (its note, written when missing: the path)
-//   node backlog.mjs comment T-12 [--by Stefano] -- "text"   (a comment on the task, kept in its note; show prints them)
+//   node backlog.mjs comment T-12 [--by Stefano] -- "text"   (a comment on the task, kept in its note; show prints them; Claude's without --by)
+//   node backlog.mjs comment T-12 --edit 2 -- "text" | --delete 2   (its second comment, as show lists them, written again or taken out)
 //   node backlog.mjs show T-12… | list [--atomic] [--state doing] [--to <name>] [--p P1] [--goal "…"] [--json] | find <words>… | goals
 //   node backlog.mjs export [--format json|csv|<an extension's>] [--state todo] [--all]   (the open tasks, or all of them, on stdout)
 //   node backlog.mjs import <file> [--format json|csv|<an extension's>] [--by <name>] [--done] [--preview]   (new tasks, numbered here, all or
@@ -28,7 +29,7 @@ import { issueTask, lineTitle } from "../lib/issues.mjs";
 import { listOf, nestedParts, splitLinks, todoLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { formatTodo, parseTodo } from "../lib/todos.mjs";
-import { withComment } from "../lib/notes.mjs";
+import { changeComment, withComment } from "../lib/notes.mjs";
 import { effortWord, stateKeys } from "../lib/words.mjs";
 import { closeIssue, doneComment, ghLogin, readCode, readIssue, readIssues, readLogin } from "./code.mjs";
 import { context, loadExtensions } from "./extensions.mjs";
@@ -373,15 +374,32 @@ function execute(command, options, words, config, say)
 
         console.log(shown(config, path));
     } else if (command === "comment") {
-        // A person's words on a task, which Claude reads with it: in its note, written when missing. Who: --by, else the first person of
-        // the project who is not Claude.
+        // A person's words on a task, which Claude reads with it: in its note, written when missing. Who: --by, else Claude, who runs the
+        // command; the panel and the page name the user, and a comment the user asks for in the chat names them too.
         const task = find(words[0]);
-        const text = words.slice(1).join(" ").trim() || fail(say("commentEmpty"));
-        const given = typeof options.by === "string" ? options.by.replace(/\s+/g, " ").replaceAll(" · ", " - ").trim() : "";
-        const by = given ? (assignees(config).find((name) => name.toLowerCase() === given.toLowerCase()) ?? given) : (config.people.find((person) => person !== "Claude") ?? "Claude");
-        const path = notePath(config, task.id);
-        writeDoc(config, path, withComment(existsSync(path) ? read(path) : `# ${prefix}-${task.id} · ${task.text}\n`, { day: today(), by, text }));
-        console.log(say("commentAdded", { id: `${prefix}-${task.id}`, path: shown(config, path) }));
+        const id = `${prefix}-${task.id}`;
+
+        // One already there, by its number as show lists them: written again, its day and who wrote it kept, or taken out.
+        if (options.edit !== undefined || options.delete !== undefined) {
+            const number = String(options.edit ?? options.delete);
+            const path = notePath(config, task.id);
+            const text = options.delete !== undefined ? null : (words.slice(1).join(" ").trim() || fail(say("commentEmpty")));
+            const changed = existsSync(path) && /^\d+$/.test(number) ? changeComment(read(path), Number(number) - 1, text) : null;
+
+            if (changed === null) {
+                fail(say("commentNone", { id, number }));
+            }
+
+            writeDoc(config, path, changed);
+            console.log(say(text === null ? "commentDeleted" : "commentChanged", { id, number }));
+        } else {
+            const text = words.slice(1).join(" ").trim() || fail(say("commentEmpty"));
+            const given = typeof options.by === "string" ? options.by.replace(/\s+/g, " ").replaceAll(" · ", " - ").trim() : "";
+            const by = given ? (assignees(config).find((name) => name.toLowerCase() === given.toLowerCase()) ?? given) : "Claude";
+            const path = notePath(config, task.id);
+            writeDoc(config, path, withComment(existsSync(path) ? read(path) : `# ${prefix}-${task.id} · ${task.text}\n`, { day: today(), by, text }));
+            console.log(say("commentAdded", { id, path: shown(config, path) }));
+        }
     } else if (command === "show") {
         const shownTasks = words.map(find);
         const links = linksOf(tasks, config, say, stateName);
