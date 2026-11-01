@@ -10,7 +10,7 @@ import { phaseSuffix, planGoals, planPhases } from "../lib/plan.mjs";
 import { escapeRegex, quoted } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { legacyFiles, presets, readable, stateKeys, wordsOf } from "../lib/words.mjs";
-import { colleagues, git, loadProject, readmeTitle, ProjectError, read, readBacklog, readDecisions, realPath, shown, today, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
+import { changeableBacklog, colleagues, fail, loadProject, readmeTitle, read, readDecisions, realPath, repoTop, shown, today, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
 
 const skipped = new Set(["node_modules", ".git", "dist", "build", "tmp", "sandbox", ".codegraph", "worktrees", "coverage"]);
 const textFile = /\.(md|ts|tsx|js|mjs|cjs|yaml|yml|json|py)$/;
@@ -21,7 +21,7 @@ export function survey(root)
 {
     const docs = docsFolder(root);
     const names = docs ? readdirSync(join(root, docs)) : [];
-    const language = languageOf(root, docs, names);
+    const language = docsLanguage(root, docs, names);
     const words = wordsOf(language);
     const decisionsName = names.find((name) => [words.files.decisions, legacyFiles.decisions].includes(name)) ?? words.files.decisions;
     const tasks = docs ? [read(join(root, docs, words.files.tasks)), read(join(root, docs, words.files.archive))] : [];
@@ -37,7 +37,8 @@ export function survey(root)
         ...(decisionsName !== words.files.decisions ? { files: { decisions: decisionsName } } : {}),
     };
 
-    return { found: { docs, names, ownRepo: docs !== null && repoOf(join(root, docs)) !== repoOf(root) }, settings, report: report(root, settings) };
+    const isOwnRepo = docs !== null && repoTop(realPath(join(root, docs))) !== repoTop(realPath(root));
+    return { found: { docs, names, ownRepo: isOwnRepo }, settings, report: report(root, settings) };
 }
 
 /** Writes the configuration the survey found, unless one is there; then the docs that are missing, by init. */
@@ -63,21 +64,17 @@ export function writeSettings(root, settings)
 /** The plan's checkbox steps under its goals, moved into the backlog: open ones to do, done ones archived; the plan keeps the rest. */
 export function moveSteps(root)
 {
-    const { config, say } = loadProject(root);
-    return withBacklogLock(config, () => moveStepsLocked(config, say));
+    const { config } = loadProject(root);
+    return withBacklogLock(config, () => moveStepsLocked(config));
 }
 
-function moveStepsLocked(config, say)
+/** The steps moved, once the backlog's lock is held: their lines in the backlog. */
+function moveStepsLocked(config)
 {
     const text = read(config.files.plan);
     const newline = text.includes("\r\n") ? "\r\n" : "\n";
-    const { tasks, unread } = readBacklog(config);
-
     // Writing the backlog again would lose the lines it cannot read: they are fixed first, as the backlog's own commands ask.
-    if (unread.length > 0) {
-        throw new ProjectError(say("unreadFirst", { lines: unread.map((one) => `${shown(config, one.file)}:${one.line}`).join(", ") }));
-    }
-
+    const tasks = changeableBacklog(config);
     const goals = new Set(planGoals(text, config.words).map((goal) => goal.name));
     const phase = phaseSuffix(config.words);
     const day = today();
@@ -136,7 +133,7 @@ export function moveDecisions(root, file, heading)
     const start = lines.findIndex((line) => new RegExp(`^(#+)\\s+${escapeRegex(heading)}\\s*$`).test(line));
 
     if (start < 0) {
-        throw new ProjectError(say("noHeading", { heading, file }));
+        fail(say("noHeading", { heading, file }));
     }
 
     const level = /^#+/.exec(lines[start])[0].length;
@@ -160,7 +157,7 @@ export function moveDecisions(root, file, heading)
     const clash = rows.filter((row) => taken.has(row.number)).map((row) => `${config.prefixes.decision}-${row.number}`);
 
     if (clash.length > 0) {
-        throw new ProjectError(say("decisionsClash", { list: clash.join(", ") }));
+        fail(say("decisionsClash", { list: clash.join(", ") }));
     }
 
     // The why of a decision written in prose, in the format's word or the language's.
@@ -206,19 +203,19 @@ function report(root, settings)
     const plan = read(config.files.plan);
     const backlog = parseBacklog(read(config.files.tasks), config.words, config.prefixes.task);
     const decisions = parseDecisions(read(config.files.decisions), config.words);
-    const steps = goalsSteps(plan, config);
-    const lines = [];
-    const shown = (path) => relativeTo(root, path);
-    const present = (path) => existsSync(path);
-
-    lines.push(present(config.files.plan) ? `plan ${shown(config.files.plan)}: ${planPhases(plan).length} phases, ${planGoals(plan, config.words).length} goals${steps.open + steps.done > 0 ? `, ${steps.open} open and ${steps.done} done checkbox steps under the goals (adopt --steps moves them into the backlog)` : ""}` : `plan ${shown(config.files.plan)}: missing, init writes it`);
-    lines.push(present(config.files.tasks) ? `backlog ${shown(config.files.tasks)}: ${backlog.tasks.length} tasks${backlog.unread.length > 0 ? `, ${backlog.unread.length} lines that do not read (first at line ${backlog.unread[0].line})` : ""}; its headings: ${stateKeys.map((key) => config.words.states[key]).join(", ")}` : `backlog ${shown(config.files.tasks)}: missing, init writes it`);
-    lines.push(present(config.files.decisions) ? `decisions ${shown(config.files.decisions)}: ${decisions.decided.length} decided, ${decisions.open.length} to decide${decisions.openLine === null ? ` (no "## ${config.words.open}" heading)` : ""}` : `decisions ${shown(config.files.decisions)}: missing, init writes it`);
-    lines.push(`colleagues: ${colleagues(config).length}${colleagues(config).length > 0 ? " (Crew)" : ", no Crew: tasks go to the people"}`);
-    return lines;
+    const steps = countSteps(plan, config);
+    const team = colleagues(config).length;
+    const where = (path) => relativeTo(root, path);
+    return [
+        existsSync(config.files.plan) ? `plan ${where(config.files.plan)}: ${planPhases(plan).length} phases, ${planGoals(plan, config.words).length} goals${steps.open + steps.done > 0 ? `, ${steps.open} open and ${steps.done} done checkbox steps under the goals (adopt --steps moves them into the backlog)` : ""}` : `plan ${where(config.files.plan)}: missing, init writes it`,
+        existsSync(config.files.tasks) ? `backlog ${where(config.files.tasks)}: ${backlog.tasks.length} tasks${backlog.unread.length > 0 ? `, ${backlog.unread.length} lines that do not read (first at line ${backlog.unread[0].line})` : ""}; its headings: ${stateKeys.map((key) => config.words.states[key]).join(", ")}` : `backlog ${where(config.files.tasks)}: missing, init writes it`,
+        existsSync(config.files.decisions) ? `decisions ${where(config.files.decisions)}: ${decisions.decided.length} decided, ${decisions.open.length} to decide${decisions.openLine === null ? ` (no "## ${config.words.open}" heading)` : ""}` : `decisions ${where(config.files.decisions)}: missing, init writes it`,
+        `colleagues: ${team}${team > 0 ? " (Crew)" : ", no Crew: tasks go to the people"}`,
+    ];
 }
 
-function goalsSteps(plan, config)
+/** How many checkbox steps the plan has under its goals, open and done: what adopt --steps would move. */
+function countSteps(plan, config)
 {
     const goals = new Set(planGoals(plan, config.words).map((goal) => goal.name));
     const phase = phaseSuffix(config.words);
@@ -264,7 +261,7 @@ function docsFolder(root)
 
 /** The project's language: the one its configuration names, once written; else the one whose words the docs use the most, the backlog's
  * headings, the plan's goals, the decisions' file and open heading, as each language's files wrote them before the format went English. */
-function languageOf(root, docs, names)
+function docsLanguage(root, docs, names)
 {
     const named = /^language:\s*["']?([a-z]{2})/m.exec(read(join(root, ".claude", "project.yaml")))?.[1];
 
@@ -312,11 +309,7 @@ function citingParts(root, docs)
         .map((entry) => entry.name);
 }
 
-function repoOf(folder)
-{
-    return git(realPath(folder), ["rev-parse", "--show-toplevel"]).trim().toLowerCase();
-}
-
+/** A step's text on the one line a task holds, the « · » that would split it into fields made a comma. */
 function oneLine(text)
 {
     return text.replace(/\s+·\s+/g, ", ").replace(/\s+/g, " ").trim();

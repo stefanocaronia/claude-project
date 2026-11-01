@@ -7,13 +7,8 @@ import { nextDecision, numbering, citedDecisions } from "../lib/decisions.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { citingFiles, isMain, loadProject, read, readDecisions, runCli, shown } from "./project.mjs";
 
+// How much of a decision find shows, without --full.
 const shownLength = 220;
-
-/** Every number cited in the configured places, each time it appears. */
-export function citedNumbers(config)
-{
-    return citingFiles(config).flatMap((file) => citedDecisions(read(file), config.prefixes.decision));
-}
 
 if (isMain(import.meta.url)) {
     runCli(() => run(process.argv.slice(2)));
@@ -28,9 +23,11 @@ function run(args)
     const { decided, open } = readDecisions(config);
     const prefix = config.prefixes.decision;
     const id = (number) => `${prefix}-${number}`;
+    const numberOf = (word) => Number(word.replace(new RegExp(`^${escapeRegex(prefix)}-`, "i"), ""));
 
     if (command === "next") {
-        const cited = citedNumbers(config);
+        // Every number cited in the configured places, each time it appears.
+        const cited = citingFiles(config).flatMap((file) => citedDecisions(read(file), prefix));
         const { twice } = numbering(decided);
         console.log(id(nextDecision(decided, cited)));
 
@@ -45,7 +42,7 @@ function run(args)
             console.log(say("citedAhead", { list: ahead.map(id).join(", ") }));
         }
     } else if (command === "show" && words.length > 0) {
-        for (const number of words.map((one) => Number(one.replace(new RegExp(`^${escapeRegex(prefix)}-`, "i"), "")))) {
+        for (const number of words.map(numberOf)) {
             const found = decided.filter((decision) => decision.number === number);
 
             if (found.length === 0) {
@@ -71,7 +68,7 @@ function run(args)
             process.exitCode = 1;
         }
     } else if (command === "cites" && words.length === 1) {
-        const number = Number(words[0].replace(new RegExp(`^${escapeRegex(prefix)}-`, "i"), ""));
+        const number = numberOf(words[0]);
         const pattern = new RegExp(`\\b${escapeRegex(prefix)}-${number}\\b`);
         let count = 0;
 

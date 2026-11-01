@@ -4,9 +4,7 @@
 //   node plan.mjs goals [--json]   (by phase, each saying whether its goals are all closed)
 //   node plan.mjs phases [--json]
 import { closeGoal, phaseStates, planPhases } from "../lib/plan.mjs";
-import { isMain, loadProject, ProjectError, read, readBacklog, readGoals, runCli, today, write, writeDoc } from "./project.mjs";
-
-const openStates = ["doing", "todo", "postponed"];
+import { fail, isMain, loadProject, openStates, read, readBacklog, readGoals, runCli, today, writeDoc } from "./project.mjs";
 
 if (isMain(import.meta.url)) {
     runCli(() => run(process.argv.slice(2)));
@@ -19,11 +17,7 @@ function run(args)
     const goals = readGoals(config);
     const name = rest.filter((arg) => !arg.startsWith("--")).join(" ").trim();
     const goal = goals.find((one) => one.name === name);
-    const fail = (message) => {
-        throw new ProjectError(message);
-    };
-
-    const phases = phaseStates(planPhases(read(config.files.plan)), goals);
+    const phases =phaseStates(planPhases(read(config.files.plan)), goals);
     const phaseLine = (phase) => say(phase.isClosed ? "phaseClosedLine" : "phaseOpenLine", { number: phase.number, name: phase.name, closed: phase.closedGoals, total: phase.goals });
 
     if (command === "phases") {

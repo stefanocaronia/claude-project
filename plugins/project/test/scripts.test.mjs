@@ -190,7 +190,7 @@ test("adopt finds a project's own docs and language, writes the configuration th
     assert.equal(existsSync(join(old, ".claude/project.yaml")), false);
 
     assert.match(fails2(init, "adopt", "--docs", "x", "--write"), /adopt prende --language, --people e --name, non --docs/);
-    assert.match(fails2(init, "adopt", "--language", "xx", "--write"), /The language is one of/);
+    assert.match(fails2(init, "adopt", "--language", "xx", "--write"), /La lingua è una fra en, it, non xx/);
     assert.equal(existsSync(join(old, ".claude/project.yaml")), false);
     const written = init("adopt", "--people", "Claude,Ann", "--name", "I dadi", "--write");
     assert.match(written, /\+ notes\/plan\/TASKS\.md/);

@@ -9,14 +9,15 @@
 //   node github.mjs release <version> [--write]   the tag and the gh release of a version, with its notes
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { splitFrontmatter } from "../lib/frontmatter.mjs";
-import { isMain, loadProject, ProjectError, read, runCli, write } from "./project.mjs";
+import { commandLine, fail, isMain, loadProject, read, runCli, tempFolder, write } from "./project.mjs";
 
 // GitHub Pages' addresses, for an apex domain: its A and AAAA records.
 const pagesA = ["185.199.108.153", "185.199.109.153", "185.199.110.153", "185.199.111.153"];
 const pagesAAAA = ["2606:50c0:8000::153", "2606:50c0:8001::153", "2606:50c0:8002::153", "2606:50c0:8003::153"];
+// The repo in a command, while the project has none on GitHub yet.
+const someRepo = "<owner>/<repo>";
 
 if (isMain(import.meta.url)) {
     runCli(() => run(process.argv.slice(2)));
@@ -25,7 +26,7 @@ if (isMain(import.meta.url)) {
 function run(args)
 {
     const [command, ...rest] = args;
-    const { options, words } = optionsOf(rest);
+    const { options, words } = commandLine(rest, ["json", "public", "docs", "write"]);
     const { config, say } = loadProject();
     const state = githubState(config);
 
@@ -42,12 +43,12 @@ function run(args)
     } else if (command === "release") {
         console.log(releaseSteps(config, state, say, words[0], options).join("\n"));
     } else {
-        throw new ProjectError(say("githubUsage"));
+        fail(say("githubUsage"));
     }
 }
 
 /** What the project has of git and GitHub, read without changing anything; gh is asked only when it is installed. */
-export function githubState(config)
+function githubState(config)
 {
     const root = config.root;
     const gitVersion = exec(root, "git", ["--version"]);
@@ -239,7 +240,7 @@ function pagesSteps(config, state, say, options)
         options.write ? say("githubWorkflowWritten", { path, folder, branch }) : say("githubWorkflowDraft", { path, folder, branch }),
         ...(options.write ? [] : ["", workflow]),
         say("githubPagesOn"),
-        `  gh api -X POST repos/${state.github ?? "<owner>/<repo>"}/pages -f build_type=workflow`,
+        `  gh api -X POST repos/${state.github ?? someRepo}/pages -f build_type=workflow`,
         `  git add ${path} && git commit -m "Publish the site on GitHub Pages" && git push`,
         "  gh run watch",
         say("githubPagesAddress", { url: state.github ? `https://${state.github.split("/")[0].toLowerCase()}.github.io/${state.github.split("/")[1]}/` : "https://<owner>.github.io/<repo>/" }),
@@ -296,10 +297,11 @@ export function pagesYaml(folder, build, branch = "main", hasLock = false)
 function domainSteps(state, say, domain)
 {
     if (!domain || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) {
-        throw new ProjectError(say("githubBadDomain", { value: domain ?? "" }));
+        fail(say("githubBadDomain", { value: domain ?? "" }));
     }
 
-    const owner = (state.github ?? "<owner>/<repo>").split("/")[0].toLowerCase();
+    const repo = state.github ?? someRepo;
+    const owner = repo.split("/")[0].toLowerCase();
     const apex = domain.split(".").length === 2;
     const records = apex
         ? [...pagesA.map((ip) => `  ${domain}  A     ${ip}`), ...pagesAAAA.map((ip) => `  ${domain}  AAAA  ${ip}`), `  www.${domain}  CNAME  ${owner}.github.io`]
@@ -309,11 +311,11 @@ function domainSteps(state, say, domain)
         ...records,
         say("githubDomainVerify"),
         say("githubDomainSet"),
-        `  gh api -X PUT repos/${state.github ?? "<owner>/<repo>"}/pages -f cname=${domain}`,
+        `  gh api -X PUT repos/${repo}/pages -f cname=${domain}`,
         say("githubDomainCheck", { domain }),
         `  nslookup ${domain}`,
         say("githubDomainHttps"),
-        `  gh api -X PUT repos/${state.github ?? "<owner>/<repo>"}/pages -F https_enforced=true`,
+        `  gh api -X PUT repos/${repo}/pages -F https_enforced=true`,
     ];
 }
 
@@ -324,23 +326,22 @@ function releaseSteps(config, state, say, version, options)
     const source = join(config.files.releases, `v${clean}.md`);
 
     if (!clean || !existsSync(source)) {
-        throw new ProjectError(say("githubNoRelease", { version: clean }));
+        fail(say("githubNoRelease", { version: clean }));
     }
 
     const { body } = splitFrontmatter(read(source));
-    const notes = join(tmpdir(), "claude-project", `release-v${clean}.md`).replaceAll("\\", "/");
+    const notes = join(tempFolder, `release-v${clean}.md`).replaceAll("\\", "/");
 
     if (options.write) {
         write(notes, body.replace(/^#[^\n]*\n+/, ""));
     }
 
     // The title, the version alone, as GitHub's releases have it; the summary opens the notes.
-    const title = `v${clean}`;
     return [
         say("githubReleaseSteps", { version: clean }),
         `  git tag -a v${clean} -m "v${clean}"`,
         `  git push origin v${clean}`,
-        `  gh release create v${clean} --title "${title.replaceAll('"', "'")}" --notes-file "${notes}"`,
+        `  gh release create v${clean} --title "v${clean.replaceAll('"', "'")}" --notes-file "${notes}"`,
         ...(options.write ? [] : [say("githubReleaseWrite")]),
         ...(state.github ? [] : [say("githubReleaseNoRemote")]),
     ];
@@ -365,21 +366,4 @@ function safeJson(text)
     } catch {
         return null;
     }
-}
-
-function optionsOf(args)
-{
-    const options = {};
-    const words = [];
-
-    for (let index = 0; index < args.length; index++) {
-        if (args[index].startsWith("--")) {
-            const value = args[index + 1];
-            options[args[index].slice(2)] = value === undefined || value.startsWith("--") || ["json", "public", "docs", "write"].includes(args[index].slice(2)) ? true : (index++, value);
-        } else {
-            words.push(args[index]);
-        }
-    }
-
-    return { options, words };
 }

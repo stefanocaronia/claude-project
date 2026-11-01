@@ -4,10 +4,11 @@ import { dirname } from "node:path";
 import { formatTodo, parseTodo, todoKey } from "../lib/todos.mjs";
 import { git, isMain, loadProject, read, realPath, runCli, shown, today, todoFiles, write } from "./project.mjs";
 
+// The lengths of a task's text its line is known by in git's history, the longer first: a text edited at its end is still found.
 const keyLengths = [48, 24];
 
-/** The files with tasks that have no date, and how many, as shown paths; with write, the dates written from git. */
-export function dateTasks(config, shouldWrite)
+/** The files with tasks that have no date, and how many, as shown paths; with `isWritten`, the dates written from git. */
+export function dateTasks(config, isWritten)
 {
     const dated = [];
 
@@ -23,7 +24,7 @@ export function dateTasks(config, shouldWrite)
 
         dated.push({ file: shown(config, path), count: undated.length });
 
-        if (!shouldWrite) {
+        if (!isWritten) {
             continue;
         }
 
@@ -44,11 +45,11 @@ export function dateTasks(config, shouldWrite)
 if (isMain(import.meta.url)) {
     runCli(() => {
         const { config, say } = loadProject();
-        const shouldWrite = process.argv.includes("--write");
-        const dated = dateTasks(config, shouldWrite);
+        const isWritten = process.argv.includes("--write");
+        const dated = dateTasks(config, isWritten);
         const total = dated.reduce((sum, entry) => sum + entry.count, 0);
         dated.forEach((entry) => console.log(`${entry.file}: ${entry.count}`));
-        console.log(say(shouldWrite ? "dated" : "wouldDate", { count: total }));
+        console.log(say(isWritten ? "dated" : "wouldDate", { count: total }));
     });
 }
 

@@ -1,9 +1,9 @@
 // The project on disk: its root (the folder with .claude/project.yaml, from here up), its configuration, and the backlog, plan and
-// decisions read and written through the pure modules of lib/.
+// decisions read and written through the pure modules of lib/; and what every script shares: git, the command line and its errors.
 import { execFileSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { basename, delimiter, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseBacklog, renderArchive, renderBacklog } from "../lib/backlog.mjs";
 import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
@@ -19,16 +19,28 @@ import { compareVersions, messageSummary, parseRelease } from "../lib/release.mj
 import { contractState, contractValue } from "../lib/contracts.mjs";
 import { firstName, parseTodo } from "../lib/todos.mjs";
 
+// How long a change waits for the backlog's lock, and the age past which a lock left behind is taken over.
 const lockWait = 10_000;
 const lockStale = 30_000;
+// The codes of a file another program holds a moment, on Windows (the page, an editor).
+const busyCodes = ["EPERM", "EBUSY", "EACCES"];
+
+/** The states of a task still to finish. */
+export const openStates = ["doing", "todo", "postponed"];
+
+/** The plugin's folder in the system's temporary one: the chats' holds, gh's readings, the owner's picture, a release's notes. */
+export const tempFolder = join(tmpdir(), "claude-project");
 
 /** The project whose configuration is in this folder or above: its config and the function that speaks its language. */
 export function loadProject(from = process.env.CLAUDE_PROJECT_DIR || process.cwd())
 {
-    // A configuration kept elsewhere, for trying it on a project before it is written there: its `root:` names the project.
+    // A configuration kept elsewhere, for trying it on a project before it is written there: read once for its `root:`, which names the
+    // project, then from that root.
     if (process.env.PROJECT_CONFIG) {
-        const text = read(process.env.PROJECT_CONFIG);
-        const config = configOf(text, configOf(text, dirname(process.env.PROJECT_CONFIG), process.env.PROJECT_CONFIG).rootSetting ?? from, process.env.PROJECT_CONFIG);
+        const file = process.env.PROJECT_CONFIG;
+        const text = read(file);
+        const root = configOf(text, dirname(file), file).rootSetting ?? from;
+        const config = configOf(text, root, file);
         return { config, say: sayer(config.language) };
     }
 
@@ -95,6 +107,30 @@ function deepFreeze(value)
     return Object.freeze(value);
 }
 
+/** The backlog's tasks, to change: refused while a line of it does not read as a task, which writing it again would lose. */
+export function changeableBacklog(config)
+{
+    const { tasks, unread } = readBacklog(config);
+
+    if (unread.length > 0) {
+        fail(sayer(config.language)("unreadFirst", { lines: unread.map((one) => `${shown(config, one.file)}:${one.line}`).join(", ") }));
+    }
+
+    return tasks;
+}
+
+/** Whether a task is closed: done, or archived. */
+export function isClosed(task)
+{
+    return task.state === "done" || task.state === "archived";
+}
+
+/** What taskErrors checks a task against: the project's words, people, types, fields and prefixes, and the goals given, else the plan's. */
+export function taskRules(config, say, goals = readGoals(config).map((goal) => goal.name))
+{
+    return { words: config.words, people: assignees(config), goals, types: Object.keys(config.types), fields: config.fields, prefix: config.prefixes.task, decisionPrefix: config.prefixes.decision, specPrefix: config.prefixes.spec, say };
+}
+
 /** Writes the backlog and the archive back, each task under its state: the archive first, which only gains lines, so that a task the
  * second write fails on is in two files, never in none; each file whole or not at all. */
 export function writeBacklog(config, tasks)
@@ -144,10 +180,10 @@ export function withBacklogLock(config, change)
             }
 
             if (Date.now() - started > lockWait) {
-                throw new ProjectError(sayer(config.language)("locked", { file: shown(config, lock) }));
+                fail(sayer(config.language)("locked", { file: shown(config, lock) }));
             }
 
-            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+            pause(50);
         }
     }
 
@@ -158,11 +194,13 @@ export function withBacklogLock(config, change)
     }
 }
 
+/** The plan's goals, in order, each with its phase and, once closed, its day. */
 export function readGoals(config)
 {
     return planGoals(read(config.files.plan), config.words);
 }
 
+/** The decisions: { decided, open, openLine }, the rows of the table and the points still to decide. */
 export function readDecisions(config)
 {
     return parseDecisions(read(config.files.decisions), config.words);
@@ -269,7 +307,6 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
     const notes = new Set(existsSync(config.files.notes) ? readdirSync(config.files.notes) : []);
     const parts = partsOf(tasks, prefix);
     const byId = new Map(tasks.map((task) => [`${prefix}-${task.id}`, task]));
-    const isClosed = (task) => task.state === "done" || task.state === "archived";
     const decisions = decisionLinks(tasks, readDecisions(config).decided, config.prefixes).byTask;
     const holds = readHolds(config);
     const now = today();
@@ -316,16 +353,15 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
  * the colleague at work, or a chat; by task number. */
 export function readHolds(config)
 {
-    const folder = join(tmpdir(), "claude-project");
     const holds = {};
 
-    if (!existsSync(folder)) {
+    if (!existsSync(tempFolder)) {
         return holds;
     }
 
-    for (const name of readdirSync(folder).filter((one) => /^held-.+\.json$/.test(one))) {
+    for (const name of readdirSync(tempFolder).filter((one) => /^held-.+\.json$/.test(one))) {
         try {
-            const content = JSON.parse(read(join(folder, name)));
+            const content = JSON.parse(read(join(tempFolder, name)));
 
             if (String(content.root).toLowerCase() === config.root.toLowerCase() && Date.now() - content.at < 24 * 3_600_000) {
                 for (const [id, one] of Object.entries(content.tasks ?? {})) {
@@ -391,11 +427,13 @@ export function shown(config, path)
     return relativeTo(config.root, path.replaceAll("\\", "/"));
 }
 
+/** A file's text; "" for a file that is not there. */
 export function read(path)
 {
     return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
+/** A file written, its folder made when missing. */
 export function write(path, text)
 {
     mkdirSync(dirname(path), { recursive: true });
@@ -425,7 +463,7 @@ export function isDoc(config, path)
 
 /** A document's kind, for its frontmatter: the plan, the backlog, its archive, the decisions, the specifications, the index, a task's
  * note, a release's notes, or any other doc. */
-export function docType(config, path)
+function docType(config, path)
 {
     const file = normalized(path);
     const kinds = { plan: config.files.plan, backlog: config.files.tasks, archive: config.files.archive, decisions: config.files.decisions, specs: config.files.specs, index: config.files.index };
@@ -482,12 +520,12 @@ function gitDay(path, which)
     return (which === "first" ? days.at(-1) : days[0]) ?? null;
 }
 
+/** A path for comparing: with "/", lowercased. */
 function normalized(path)
 {
     return String(path).replaceAll("\\", "/").toLowerCase();
 }
 
-/** Where a path really is, past any link on the way; the path itself when it does not exist. */
 /** The project's releases, the oldest version first: { version, day, summary, tasks, text, tagged, tagOnly, source }. The repo's tags
  * make them (v1.2.3 or 1.2.3), each on its tag's day; the notes in <docs>/releases go with their version's tag. Notes not tagged yet
  * (written, the tag still to make) are releases too, `tagged` false; a tag without notes has `tagOnly`, its summary and text from the
@@ -568,7 +606,7 @@ function packageVersion(config)
 export function onPath(name, path = process.env.PATH ?? process.env.Path ?? "", windows = process.platform === "win32")
 {
     const names = windows ? [`${name}.exe`, `${name}.cmd`, name] : [name];
-    return path.split(windows ? ";" : delimiter).filter(Boolean).some((folder) => names.some((one) => existsSync(join(folder, one))));
+    return pathFolders(path, windows).some((folder) => names.some((one) => existsSync(join(folder, one))));
 }
 
 /** Whether `project`, the plugin's own command (npm link in its folder), is on the path: a link to its scripts/cli.mjs, or npm's
@@ -577,7 +615,7 @@ export function projectCommandOnPath(path = process.env.PATH ?? process.env.Path
 {
     const names = windows ? ["project.cmd", "project"] : ["project"];
 
-    for (const folder of path.split(windows ? ";" : delimiter).filter(Boolean)) {
+    for (const folder of pathFolders(path, windows)) {
         for (const name of names.map((one) => join(folder, one)).filter((one) => existsSync(one))) {
             try {
                 if (realPath(name).replaceAll("\\", "/").endsWith("/scripts/cli.mjs") || /claude-project[\\/]+scripts[\\/]+cli\.mjs/.test(readFileSync(name, "utf8").slice(0, 4000))) {
@@ -592,6 +630,12 @@ export function projectCommandOnPath(path = process.env.PATH ?? process.env.Path
     return false;
 }
 
+function pathFolders(path, windows)
+{
+    return path.split(windows ? ";" : delimiter).filter(Boolean);
+}
+
+/** Where a path really is, past any link on the way; the path itself when it does not exist. */
 export function realPath(path)
 {
     try {
@@ -604,6 +648,17 @@ export function realPath(path)
 // The top of the repo each folder is in, by folder.
 const tops = new Map();
 
+/** The top of the git repo a folder is in, lowercased, for comparing; "" outside git. A folder in a repo stays in it while a script or
+ * the page runs: git is asked once; a folder in none, again, until it is. */
+export function repoTop(folder)
+{
+    if (!tops.get(folder)) {
+        tops.set(folder, git(folder, ["rev-parse", "--show-toplevel"]).trim().toLowerCase());
+    }
+
+    return tops.get(folder);
+}
+
 /** The project's repos: the configured ones, else the project's and, when the docs are a repo of their own, theirs. */
 export function projectRepos(config)
 {
@@ -611,17 +666,25 @@ export function projectRepos(config)
         return config.repos;
     }
 
-    const top = (folder) => {
-        // A folder in a repo stays in it while a script or the page runs: git is asked once; a folder in none, again, until it is.
-        if (!tops.get(folder)) {
-            tops.set(folder, git(folder, ["rev-parse", "--show-toplevel"]).trim().toLowerCase());
-        }
-
-        return tops.get(folder);
-    };
-    const project = top(config.root);
-    const docs = existsSync(config.docs) ? top(realPath(config.docs)) : "";
+    const project = repoTop(config.root);
+    const docs = existsSync(config.docs) ? repoTop(realPath(config.docs)) : "";
     return [{ name: config.words.repoProject, path: config.root }, ...(docs && docs !== project ? [{ name: config.words.repoDocs, path: realPath(config.docs) }] : [])];
+}
+
+/** A file or folder moved to its new path, with `git mv` where git tracks it, so that its history follows; renamed where git does not. */
+export function moveFile(from, to)
+{
+    const folder = dirname(from);
+    mkdirSync(dirname(to), { recursive: true });
+
+    if (git(folder, ["ls-files", "--error-unmatch", "--", basename(from)]) !== "") {
+        git(folder, ["mv", "--", basename(from), relative(folder, to).replaceAll("\\", "/")]);
+    }
+
+    // git mv says nothing either way: a file still in its place is one it did not move.
+    if (existsSync(from)) {
+        renameSync(from, to);
+    }
 }
 
 /** A git command in a folder, its output; empty when git fails or is missing. */
@@ -651,6 +714,18 @@ export class ProjectError extends Error
 {
 }
 
+/** Stops a command with a message for the user: a ProjectError, which runCli prints. */
+export function fail(message)
+{
+    throw new ProjectError(message);
+}
+
+/** The first line of an error's message: what a message for the user takes of it. */
+export function firstLine(error)
+{
+    return String(error?.message ?? error).split("\n")[0];
+}
+
 /** Runs a command line: a ProjectError is printed and exits 1, anything else is a bug and throws. */
 export async function runCli(main)
 {
@@ -667,14 +742,43 @@ export async function runCli(main)
     }
 }
 
-/** The configuration, or a message that says which line of the file is wrong. */
+/** The options and the words of a command line: the options named in `flags` take no value, the others the word after them, or the one
+ * after their = (--text=…), which may start with -- too; one with no word after it is true. After a lone --, every word is text, so that
+ * a text never reads as an option. */
+export function commandLine(args, flags = [])
+{
+    const options = {};
+    const words = [];
+
+    for (let index = 0; index < args.length; index++) {
+        const arg = args[index];
+
+        if (arg === "--") {
+            words.push(...args.slice(index + 1));
+            break;
+        } else if (/^--[^=]+=/.test(arg)) {
+            options[arg.slice(2, arg.indexOf("="))] = arg.slice(arg.indexOf("=") + 1);
+        } else if (arg.startsWith("--")) {
+            const name = arg.slice(2);
+            const value = args[index + 1];
+            options[name] = flags.includes(name) || value === undefined || value.startsWith("--") ? true : (index++, value);
+        } else {
+            words.push(arg);
+        }
+    }
+
+    return { options, words };
+}
+
+/** The configuration, or a message that says which line of the file is wrong; in English, since the language is in the file that does
+ * not read. */
 function configOf(text, root, file)
 {
     try {
         return withLegacyNames(readConfig(text, root));
     } catch (error) {
         const line = error?.linePos?.[0]?.line;
-        throw new ProjectError(`${file}${line ? `, line ${line}` : ""}: ${String(error?.message ?? error).split("\n")[0]} Fix it, or run /project:init again.`);
+        throw new ProjectError(`${file}${line ? `, line ${line}` : ""}: ${firstLine(error)} Fix it, or run /project:init again.`);
     }
 }
 
@@ -752,8 +856,8 @@ export function englishFormat(config)
     return changed;
 }
 
-/** A file put in place of another; on Windows a reader that holds the old one (the page, an editor) refuses it for a moment: tried
- * again for a second before giving up. */
+/** A file put in place of another; on Windows a reader that holds the old one refuses it for a moment: tried again for a second before
+ * giving up. */
 function replace(from, to)
 {
     for (let tries = 0; ; tries++) {
@@ -761,11 +865,11 @@ function replace(from, to)
             renameSync(from, to);
             return;
         } catch (error) {
-            if (!["EPERM", "EBUSY", "EACCES"].includes(error.code) || tries >= 20) {
+            if (!busyCodes.includes(error.code) || tries >= 20) {
                 throw error;
             }
 
-            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+            pause(50);
         }
     }
 }
@@ -785,14 +889,21 @@ function writeWhole(path, text, say)
             // nothing was written
         }
 
-        if (["EPERM", "EBUSY", "EACCES"].includes(error.code)) {
-            throw new ProjectError(say("cannotWrite", { file: path, code: error.code }));
+        if (busyCodes.includes(error.code)) {
+            fail(say("cannotWrite", { file: path, code: error.code }));
         }
 
         throw error;
     }
 }
 
+/** Waits a few milliseconds: the scripts run synchronously, a lock or a held file waited for in place. */
+function pause(ms)
+{
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** The paths a configured place stands for, a `*` in a part of it matching any name there; the place itself without one. */
 function expand(pattern)
 {
     const parts = pattern.split("/");

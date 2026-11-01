@@ -8,7 +8,7 @@
 import { join } from "node:path";
 import { joinFrontmatter } from "../lib/frontmatter.mjs";
 import { compareVersions, nextVersion, parseVersion, releaseState, renderRelease } from "../lib/release.mjs";
-import { isMain, loadProject, ProjectError, readBacklog, readContracts, readGoals, readReleases, runCli, showsReleases, shown, today, writeDoc } from "./project.mjs";
+import { commandLine, fail, isMain, loadProject, readBacklog, readContracts, readGoals, readReleases, runCli, showsReleases, shown, today, writeDoc } from "./project.mjs";
 
 if (isMain(import.meta.url)) {
     runCli(() => run(process.argv.slice(2)));
@@ -18,7 +18,7 @@ function run(args)
 {
     const [command, ...rest] = args;
     const { config, say } = loadProject();
-    const { options, words } = optionsOf(rest);
+    const { options, words } = commandLine(rest);
     const prefix = config.prefixes.task;
     const releases = readReleases(config);
     const contracts = readContracts(config, releases);
@@ -26,9 +26,6 @@ function run(args)
     const breaking = typeof options.breaking === "string" ? options.breaking.split(";").map((item) => item.trim()).filter(Boolean) : [];
     const suggested = nextVersion(last?.version, pending, breaking.length > 0, raised.length > 0);
     const names = { breaking: say("releaseBreaking"), contracts: say("releaseContracts"), added: say("releaseAdded"), fixed: say("releaseFixed"), maintenance: say("releaseMaintenance"), other: say("releaseOther") };
-    const fail = (message) => {
-        throw new ProjectError(message);
-    };
 
     if (command === "status") {
         // A project that does not release, a book, is not asked to.
@@ -94,21 +91,4 @@ function run(args)
     }
 
     fail(say("releaseUsage"));
-}
-
-function optionsOf(args)
-{
-    const options = {};
-    const words = [];
-
-    for (let index = 0; index < args.length; index++) {
-        if (args[index].startsWith("--") && args[index + 1] !== undefined && !args[index + 1].startsWith("--")) {
-            options[args[index].slice(2)] = args[index + 1];
-            index++;
-        } else if (!args[index].startsWith("--")) {
-            words.push(args[index]);
-        }
-    }
-
-    return { options, words };
 }

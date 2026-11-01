@@ -15,9 +15,8 @@ import { check } from "./check.mjs";
 import { readCode, readIssues, readLogin, readOwner } from "./code.mjs";
 import { syncStateFile, syncSummary } from "./issues.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
-import { colleagues, findRoot, git, isMain, onPath, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
+import { colleagues, findRoot, git, isClosed, isMain, onPath, loadProject, openStates, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
 
-const openStates = ["doing", "todo", "postponed"];
 // The most a portrait may weigh in the panel's drawing, which the desktop drops past about 100 KB: Crew's small ones are under 2 KB.
 const portraitLimit = 4096;
 
@@ -100,7 +99,7 @@ export async function snapshot(config, say, withHealth = true)
         },
         // The files whose change makes the panel read the project again: the issues' sync state too, where they are in sync.
         watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.specs, config.files.notes, config.files.releases, ...todoFiles(config).map((one) => one.file), ...(config.github?.issues === "sync" ? [syncStateFile(config)].filter(Boolean) : [])],
-        health: findings && { errors: count(findings, "error"), warnings: count(findings, "warning"), notes: count(findings, "note") },
+        health: findings && { errors: severityCount(findings, "error"), warnings: severityCount(findings, "warning"), notes: severityCount(findings, "note") },
         // The core docs the scripts own, which the panel keeps from a direct read or write (lib/guard.mjs).
         guard: guardOf(config, unread),
     };
@@ -133,20 +132,27 @@ if (isMain(import.meta.url)) {
     });
 }
 
-function count(findings, severity)
+function severityCount(findings, severity)
 {
     return findings.filter((finding) => finding.severity === severity).length;
 }
 
-/** The owner as the panel draws them: their picture inline when it is light enough; null without one. */
+/** The owner as the panel draws them: their picture inline when it is light enough, GitHub's being up to four times a portrait's
+ * weight; null without one. */
 function ownerOf(owner)
 {
     if (!owner) {
         return null;
     }
 
-    const portrait = owner.file && statSync(owner.file).size <= portraitLimit * 4 ? `data:image/jpeg;base64,${readFileSync(owner.file).toString("base64")}` : undefined;
+    const portrait = owner.file && statSync(owner.file).size <= portraitLimit * 4 ? inline(owner.file) : undefined;
     return { name: owner.name, fullName: owner.fullName, ...(portrait ? { portrait } : {}) };
+}
+
+/** A JPEG picture inline, as the panel draws it. */
+function inline(path)
+{
+    return `data:image/jpeg;base64,${readFileSync(path).toString("base64")}`;
 }
 
 /** The specifications for the panel: the counts, and those an open task is doing, each with its tasks; null where the project keeps
@@ -164,7 +170,7 @@ function specsOf(config)
         done: count("done"),
         doing: count("doing"),
         open: count("open"),
-        inProgress: state.filter((spec) => spec.state === "doing").map((spec) => ({ id: spec.id, number: spec.number, text: plainMarkdown(spec.text), tasks: spec.tasks.filter((task) => !["done", "archived"].includes(task.state)).map((task) => task.id) })),
+        inProgress: state.filter((spec) => spec.state === "doing").map((spec) => ({ id: spec.id, number: spec.number, text: plainMarkdown(spec.text), tasks: spec.tasks.filter((task) => !isClosed(task)).map((task) => task.id) })),
     };
 }
 
@@ -202,5 +208,5 @@ function portraitOf(config, id)
         return {};
     }
 
-    return { portrait: `data:image/jpeg;base64,${readFileSync(path).toString("base64")}` };
+    return { portrait: inline(path) };
 }

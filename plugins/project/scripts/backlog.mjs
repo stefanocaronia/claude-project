@@ -25,10 +25,10 @@ import { listOf, nestedParts, splitLinks, todoLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { formatTodo, parseTodo } from "../lib/todos.mjs";
 import { effortWord, stateKeys } from "../lib/words.mjs";
-import { closeIssue, gh, readCode, readIssue, readIssues, readLogin } from "./code.mjs";
+import { closeIssue, doneComment, ghLogin, readCode, readIssue, readIssues, readLogin } from "./code.mjs";
 import { context, loadExtensions } from "./extensions.mjs";
 import { syncIssues } from "./issues.mjs";
-import { assignees, isMain, loadProject, notePath, ProjectError, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
+import { assignees, changeableBacklog, commandLine, fail, firstLine, isClosed, isMain, loadProject, notePath, openStates, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, taskRules, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
 const changes = ["add", "start", "done", "postpone", "todo", "archive", "set", "import", "take"];
@@ -42,8 +42,7 @@ export function backlogProblems(config, say)
     const { tasks, unread } = readBacklog(config);
     const prefix = config.prefixes.task;
     const problems = unread.map((one) => ({ file: one.file, line: one.line, message: say("unreadLine", { text: one.text.slice(0, 80) }) }));
-    const people = assignees(config);
-    const goals = readGoals(config).map((goal) => goal.name);
+    const rules = taskRules(config, say);
     const seen = new Map();
     const known = new Set(tasks.map((task) => `${prefix}-${task.id}`));
 
@@ -57,9 +56,9 @@ export function backlogProblems(config, say)
 
         seen.set(task.id, task.line);
         // An archived task keeps the goal it had, even one the plan no longer holds.
-        const archivedGoals = task.state === "archived" ? [...goals, task.goal] : goals;
+        const goals = task.state === "archived" ? [...rules.goals, task.goal] : rules.goals;
 
-        for (const error of taskErrors(task, { words: config.words, people, goals: archivedGoals, types: Object.keys(config.types), fields: config.fields, prefix, decisionPrefix: config.prefixes.decision, specPrefix: config.prefixes.spec, say })) {
+        for (const error of taskErrors(task, { ...rules, goals })) {
             problems.push({ ...at, message: `${id}: ${error}` });
         }
 
@@ -88,7 +87,7 @@ if (isMain(import.meta.url)) {
 async function run(args)
 {
     const [command, ...rest] = args;
-    const { options, words } = optionsOf(rest);
+    const { options, words } = commandLine(rest, flags);
     const { config, say } = loadProject();
 
     // Export and import read the extensions' formats first; an import's tasks are read before the lock, and added under it.
@@ -112,39 +111,34 @@ async function run(args)
     return result;
 }
 
-/** The formats the backlog is written in and read from: json and csv, and those of the extensions, by name. */
-async function formatsOf(config, kind)
+/** A format the backlog is written in or read from, by name: json and csv, the plugin's own (true), or an extension's, { convert,
+ * extension }; refused when neither has it. */
+async function formatOf(config, say, kind, name)
 {
-    const own = { json: true, csv: true };
+    const formats = { json: true, csv: true };
 
     for (const extension of await loadExtensions(config)) {
-        for (const [name, convert] of Object.entries(extension[kind] ?? {})) {
-            own[name] = { convert, extension };
+        for (const [one, convert] of Object.entries(extension[kind] ?? {})) {
+            formats[one] = { convert, extension };
         }
     }
 
-    return own;
+    return Object.hasOwn(formats, name) ? formats[name] : fail(say("unknownFormat", { format: name, list: Object.keys(formats).join(", ") }));
 }
 
 /** The open tasks, or those of a state, or all of them, in a format, on stdout: each with its number, its suffixes read apart. */
 async function exportTasks(config, say, options)
 {
     const prefix = config.prefixes.task;
-    const formats = await formatsOf(config, "exporters");
     const format = typeof options.format === "string" ? options.format : "json";
-    const open = ["doing", "todo", "postponed"];
+    const exporter = await formatOf(config, say, "exporters", format);
     const tasks = readBacklog(config).tasks
-        .filter((task) => (typeof options.state === "string" ? task.state === options.state : options.all === true || open.includes(task.state)))
+        .filter((task) => (typeof options.state === "string" ? task.state === options.state : options.all === true || openStates.includes(task.state)))
         .map(({ file, line, ...task }) => ({ ...task, id: `${prefix}-${task.id}` }));
-
-    if (!(format in formats)) {
-        throw new ProjectError(say("unknownFormat", { format, list: Object.keys(formats).join(", ") }));
-    }
-
     const fields = Object.keys(config.fields);
     const text = format === "json" ? JSON.stringify(tasks, null, 2)
         : format === "csv" ? toCsv(tasks.map((task) => ({ ...task, ...task.fields })), [...csvColumns, ...fields]).trimEnd()
-        : String(await formats[format].convert(tasks, context(config, say)));
+        : String(await exporter.convert(tasks, context(config, say)));
     console.log(text);
 }
 
@@ -152,29 +146,24 @@ async function exportTasks(config, say, options)
 async function importedTasks(config, say, file, options)
 {
     if (!file || !existsSync(file)) {
-        throw new ProjectError(say("importNoFile", { file: file ?? "" }));
+        fail(say("importNoFile", { file: file ?? "" }));
     }
 
-    const formats = await formatsOf(config, "importers");
     const format = typeof options.format === "string" ? options.format : file.toLowerCase().endsWith(".csv") ? "csv" : "json";
-
-    if (!(format in formats)) {
-        throw new ProjectError(say("unknownFormat", { format, list: Object.keys(formats).join(", ") }));
-    }
-
+    const importer = await formatOf(config, say, "importers", format);
     const text = readFileSync(file, "utf8");
     let items;
 
     try {
-        items = format === "json" ? JSON.parse(text) : format === "csv" ? parseCsv(text) : await formats[format].convert(text, context(config, say));
+        items = format === "json" ? JSON.parse(text) : format === "csv" ? parseCsv(text) : await importer.convert(text, context(config, say));
     } catch (error) {
-        throw new ProjectError(say("importUnread", { file, error: String(error?.message ?? error).split("\n")[0] }));
+        fail(say("importUnread", { file, format, error: firstLine(error) }));
     }
 
     const list = Array.isArray(items) ? items : Array.isArray(items?.tasks) ? items.tasks : null;
 
     if (!list || list.length === 0) {
-        throw new ProjectError(say("importEmpty", { file }));
+        fail(say("importEmpty", { file }));
     }
 
     // A CSV row carries the project's fields as columns of their own.
@@ -183,25 +172,21 @@ async function importedTasks(config, say, file, options)
 
 function execute(command, options, words, config, say)
 {
-    const { tasks, unread } = readBacklog(config);
+    const tasks = changes.includes(command) ? changeableBacklog(config) : readBacklog(config).tasks;
     const prefix = config.prefixes.task;
     const stateName = (task) => (task.state === "archived" ? config.labels.archivedMarker : task.state === "done" ? config.labels.doneMarker : config.labels.states[task.state]);
     const line = (task) => formatLine(task, config.words, prefix);
-    const fail = (message) => {
-        throw new ProjectError(message);
-    };
-
-    if (unread.length > 0 && changes.includes(command)) {
-        fail(say("unreadFirst", { lines: unread.map((one) => `${shown(config, one.file)}:${one.line}`).join(", ") }));
-    }
 
     if (options.state !== undefined && ![...stateKeys, "archived"].includes(options.state)) {
         fail(say("badState", { value: options.state, list: [...stateKeys, "archived"].join(", ") }));
     }
 
     const find = (given) => tasks.find((task) => task.id === Number(String(given).replace(new RegExp(`^${escapeRegex(prefix)}-`, "i"), ""))) ?? fail(say("notFound", { id: given }));
+    // What a task is checked against, read at the first task checked.
+    let rules = null;
     // A task as it will be written, among all the others: right in itself, its links to tasks and decisions that exist, no cycle of waits.
     const checked = (task) => {
+        rules ??= taskRules(config, say);
         const all = [...tasks.filter((one) => one.id !== task.id), task];
         // A goal given now must be open; a task keeps the goal it had, closed or not.
         const closed = typeof options.goal === "string" ? readGoals(config).find((goal) => goal.name === options.goal && goal.closed) : undefined;
@@ -210,11 +195,15 @@ function execute(command, options, words, config, say)
         const errors = [
             ...(closed ? [say("goalIsClosed", { value: closed.name, day: closed.closed })] : []),
             ...(taken ? [say("issueTaken", { issue: task.issue, id: `${prefix}-${taken.id}` })] : []),
-            ...taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), types: Object.keys(config.types), fields: config.fields, prefix, decisionPrefix: config.prefixes.decision, specPrefix: config.prefixes.spec, say }),
+            ...taskErrors(task, rules),
             ...linkErrors(task, all, config, say),
         ];
         return errors.length > 0 ? fail(errors.join("\n")) : task;
     };
+    // A type by its key or by its name in the project's language: --type funzione is feature.
+    const typeKey = (value) => Object.entries(config.types).find(([key, name]) => [key, name.toLowerCase()].includes(value.toLowerCase()))?.[0] ?? value.toLowerCase();
+    // Who created a new task, unless it says: Claude, who runs the command, when Claude is one of the project.
+    const byClaude = () => (assignees(config).includes("Claude") ? "Claude" : null);
     // The suffixes of a text, `(after: …)`, `(see: …)`, `(in: …)`, `(issue: …)`, `(due: …)` and `(type: …)` at its end, with the options
     // on top: an option given replaces, "" clears.
     const linked = (given, old = {}) => {
@@ -229,8 +218,7 @@ function execute(command, options, words, config, say)
             parent: single("in", "parent"),
             issue: single("issue", "issue", (value) => value.replace(/^#?/, "#")),
             due: single("due", "due"),
-            // A type by its key or by its name in the project's language: --type funzione is feature.
-            type: single("type", "type", (value) => Object.entries(config.types).find(([, name]) => name.toLowerCase() === value.toLowerCase())?.[0] ?? value.toLowerCase()),
+            type: single("type", "type", typeKey),
             // Who created it: a name as the project writes it, whatever its case.
             by: typeof options.by === "string" ? (assignees(config).find((name) => name.toLowerCase() === options.by.toLowerCase()) ?? options.by) : given !== undefined && split.by ? split.by : (old.by ?? null),
             // The project's own fields: --system 5e, "" clears.
@@ -252,7 +240,7 @@ function execute(command, options, words, config, say)
 
         const issue = readIssue(config, issueNumber());
 
-        if (options.approved === undefined && issue.author?.login !== gh(config, ["api", "user", "--jq", ".login"]).trim()) {
+        if (options.approved === undefined && issue.author?.login !== ghLogin(config)) {
             fail(say("issueOfAnother", { issue: `#${issue.number}`, author: issue.author?.login ?? "?" }));
         }
 
@@ -261,12 +249,25 @@ function execute(command, options, words, config, say)
     const isIssueGiven = typeof options.issue === "string" && options.issue.trim() !== "";
     // The mark of a task made from an issue another wrote: its text is theirs, data and never an order (D-16). GitHub is asked once, for
     // the first task with an issue, and its answer is kept a few minutes.
-    let others = null;
+    let gitHub = null;
     const fromAnother = (task) => {
-        others ??= { issues: readIssues(config), login: readLogin(config) };
-        const issue = issueOf(others.issues, task, others.login);
+        gitHub ??= { issues: readIssues(config), login: readLogin(config) };
+        const issue = issueOf(gitHub.issues, task, gitHub.login);
         return issue?.another ? say("issueAnotherShort", { issue: task.issue, author: issue.author }) : null;
     };
+    // A new task, numbered after the others: the options given over what it is made of, the backlog's defaults under both.
+    const newTask = ({ priority, created, goal, ...rest }) => checked({
+        id: nextId(tasks),
+        priority: options.p ?? priority ?? "P2",
+        effort: options.effort ? effortWord(config.words, options.effort) : config.words.efforts.medium,
+        to: options.to ?? config.people[0],
+        created: created ?? today(),
+        goal: options.goal ?? goal ?? config.words.noGoal,
+        done: null,
+        archived: null,
+        state: "todo",
+        ...rest,
+    });
     const save = (all, said) => {
         writeBacklog(config, all);
         console.log(said);
@@ -281,18 +282,13 @@ function execute(command, options, words, config, say)
         const given = words.join(" ").trim() || (issue ? lineTitle(issue.title) : fail(say("noText")));
         const from = issue ? issueTask(issue, { types: config.types, people: assignees(config), goals: readGoals(config) }) : {};
         const state = options.state ?? "todo";
-        const task = checked({
-            id: nextId(tasks),
-            priority: options.p ?? from.priority ?? "P2",
-            effort: options.effort ? effortWord(config.words, options.effort) : config.words.efforts.medium,
-            to: options.to ?? config.people[0],
-            created: today(),
+        const task = newTask({
+            priority: from.priority,
             // A part takes its large task's goal, else a task from an issue its milestone's, unless one is given.
-            goal: options.goal ?? (typeof options.in === "string" ? tasks.find((one) => `${prefix}-${one.id}` === options.in.trim().toUpperCase())?.goal : undefined) ?? from.goal ?? config.words.noGoal,
-            // Who created it: --by; for a task from an issue who wrote it, when they are a person of the project, as the sync has it; else Claude, who runs the command.
-            ...linked(given, { type: from.type ?? null, by: issue ? from.by : (config.people.includes("Claude") || assignees(config).includes("Claude") ? "Claude" : null) }),
+            goal: (typeof options.in === "string" ? tasks.find((one) => `${prefix}-${one.id}` === options.in.trim().toUpperCase())?.goal : undefined) ?? from.goal,
+            // Who created it: --by; for a task from an issue who wrote it, when they are a person of the project, as the sync has it; else Claude.
+            ...linked(given, { type: from.type ?? null, by: issue ? from.by : byClaude() }),
             done: state === "done" ? today() : null,
-            archived: null,
             state,
         });
         save([...tasks, task], say("added", { id: `${prefix}-${task.id}`, line: line(task) }));
@@ -312,9 +308,8 @@ function execute(command, options, words, config, say)
                 console.log(say("issueAskClose", { id: `${prefix}-${task.id}`, issue: task.issue }));
             }
         }
-        // A large task whose parts are now all closed: done is still to say, as for any task.
-        const isClosed = (task) => task.state === "done" || task.state === "archived";
 
+        // A large task whose parts are now all closed: done is still to say, as for any task.
         for (const parent of new Set(ids.map((id) => moved.find((task) => task.id === id).parent).filter(Boolean))) {
             if (moved.filter((task) => task.parent === parent).every(isClosed) && !isClosed(find(parent))) {
                 console.log(say("partsAllDone", { id: parent }));
@@ -339,8 +334,7 @@ function execute(command, options, words, config, say)
     } else if (command === "issue-close") {
         const task = find(words[0]);
         const number = Number(String(task.issue ?? fail(say("noIssue", { id: `${prefix}-${task.id}` }))).slice(1));
-        const commits = readCode(config).get(task.id)?.commits ?? [];
-        closeIssue(config, number, say("issueComment", { id: `${prefix}-${task.id}`, project: config.name ? ` (${config.name})` : "", commits: commits.length > 0 ? say("issueCommits", { list: commits.slice(0, 10).map((commit) => commit.hash).join(", ") }) : "" }).trim());
+        closeIssue(config, number, doneComment(config, say, task.id));
         console.log(say("issueClosed", { issue: task.issue, id: `${prefix}-${task.id}` }));
     } else if (command === "note") {
         const task = find(words[0]);
@@ -390,8 +384,7 @@ function execute(command, options, words, config, say)
     } else if (command === "import") {
         // Each a new task, numbered after the others; a wrong one stops them all, so that nothing is half imported.
         const added = [];
-        const typeKey = (value) => (value ? Object.entries(config.types).find(([key, name]) => key === String(value).toLowerCase() || name.toLowerCase() === String(value).toLowerCase())?.[0] ?? String(value).toLowerCase() : null);
-        const creator = typeof options.by === "string" ? options.by : config.people.includes("Claude") || assignees(config).includes("Claude") ? "Claude" : null;
+        const creator = typeof options.by === "string" ? options.by : byClaude();
 
         for (const item of options.incoming) {
             const split = splitLinks(String(item.text ?? "").replace(/\s+/g, " ").replaceAll(" · ", " - ").trim(), config.words.fields);
@@ -411,7 +404,7 @@ function execute(command, options, words, config, say)
                 parent: item.parent || split.parent,
                 issue: split.issue,
                 due: item.due || split.due,
-                type: typeKey(item.type) ?? split.type,
+                type: item.type ? typeKey(String(item.type)) : split.type,
                 by: item.by || creator,
                 fields: { ...split.fields, ...item.fields },
                 started: null,
@@ -436,18 +429,11 @@ function execute(command, options, words, config, say)
         // A colleague's todo line that is work for the project made a task of the backlog, created by the colleague. The line then cites
         // it where Crew puts its id: ticked, handed over; open with --keep, when the colleague keeps a part of their own (a retest).
         const todo = openTodos(config).find((one) => one.ref === words[0]) ?? fail(say("todoNotFound", { ref: words[0] ?? "" }));
-        const task = checked({
-            id: nextId(tasks),
-            priority: options.p ?? todo.priority ?? "P2",
-            effort: options.effort ? effortWord(config.words, options.effort) : config.words.efforts.medium,
-            to: options.to ?? config.people[0],
+        const task = newTask({
+            priority: todo.priority,
             // Raised the day the line was written, not the day it moved.
-            created: todo.created ?? today(),
-            goal: options.goal ?? config.words.noGoal,
+            created: todo.created,
             ...linked(typeof options.text === "string" ? options.text : todo.text.replaceAll(" · ", " - "), { by: todo.name }),
-            done: null,
-            archived: null,
-            state: "todo",
         });
         const id = `${prefix}-${task.id}`;
         // The line's own id, when it had one, becomes the task's in every wait that named it, in the todos and in the backlog.
@@ -551,7 +537,7 @@ function linksOf(tasks, config, say, stateName)
 }
 
 /** A due day said from today: late by some days, today, or in some days. */
-export function dueText(dueInfo, say)
+function dueText(dueInfo, say)
 {
     return dueInfo.isLate ? say("dueLate", { days: -dueInfo.days }) : dueInfo.days === 0 ? say("dueToday") : say("dueIn", { days: dueInfo.days });
 }
@@ -567,6 +553,7 @@ function codeLines(cited, say)
     ].filter(Boolean);
 }
 
+/** Tasks on stdout, a line each and the footer after them, or as JSON with --json. */
 function print(tasks, json, line, footer)
 {
     if (json === true) {
@@ -580,31 +567,3 @@ function print(tasks, json, line, footer)
         console.log(footer);
     }
 }
-
-/** The options and the words of a command line: --json and --done take no value, the others the word after them, or the one after
- * their = (--text=…), which may start with -- too; after a lone --, every word is text, so that a text never reads as an option. */
-function optionsOf(args)
-{
-    const options = {};
-    const words = [];
-
-    for (let index = 0; index < args.length; index++) {
-        const arg = args[index];
-
-        if (arg === "--") {
-            words.push(...args.slice(index + 1));
-            break;
-        } else if (/^--[^=]+=/.test(arg)) {
-            options[arg.slice(2, arg.indexOf("="))] = arg.slice(arg.indexOf("=") + 1);
-        } else if (arg.startsWith("--")) {
-            const name = arg.slice(2);
-            const value = args[index + 1];
-            options[name] = flags.includes(name) || value === undefined || value.startsWith("--") ? true : (index++, value);
-        } else {
-            words.push(arg);
-        }
-    }
-
-    return { options, words };
-}
-

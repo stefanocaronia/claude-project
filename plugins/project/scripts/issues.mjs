@@ -12,8 +12,8 @@ import { closeSync, existsSync, openSync, readFileSync, statSync, unlinkSync, wr
 import { isAbsolute, join } from "node:path";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
 import { issueTask, labelFor, labelsSaying, lineTitle, parseSyncIssues, planFields, planSync, taskFields, taskSide } from "../lib/issues.mjs";
-import { forgetGh, gh, readCode } from "./code.mjs";
-import { assignees, git, isMain, loadProject, ProjectError, readBacklog, readGoals, runCli, today, withBacklogLock, writeBacklog } from "./project.mjs";
+import { doneComment, forgetGh, gh, ghLogin, readCode } from "./code.mjs";
+import { assignees, fail, git, isMain, loadProject, readBacklog, readGoals, runCli, taskRules, today, withBacklogLock, writeBacklog } from "./project.mjs";
 
 // A sync left running longer than this died: the next one goes ahead.
 const syncStale = 120_000;
@@ -33,12 +33,12 @@ if (isMain(import.meta.url)) {
             const { lines, kept } = syncIssues(config, say, { keepTitle: rest[0].replace(/^#/, "") });
 
             if (!kept) {
-                throw new ProjectError(lines.join("\n"));
+                fail(lines.join("\n"));
             }
 
             console.log(lines.join("\n"));
         } else {
-            throw new ProjectError(say("issuesUsage"));
+            fail(say("issuesUsage"));
         }
     });
 }
@@ -70,11 +70,11 @@ export function syncIssues(config, say, { dry = false, keepTitle = null } = {})
     }
 }
 
+/** The sync itself, under its lock: what it would do with `dry`, else GitHub changed first and the backlog after. */
 function sync(config, say, dry, keepTitle)
 {
     const prefix = config.prefixes.task;
     const state = readState(config);
-    let me;
 
     // The title another gave an issue, which the user refuses: taken as seen, so that the task's own, now the side that changed, goes
     // back on the issue.
@@ -86,10 +86,11 @@ function sync(config, say, dry, keepTitle)
 
     const base = keepTitle === null ? state.base : { ...state.base, [keepTitle]: { ...state.base[keepTitle], fields: { ...state.base[keepTitle].fields, title: refused }, held: undefined } };
 
+    let me;
     let issues;
 
     try {
-        me = gh(config, ["api", "user", "--jq", ".login"]).trim();
+        me = ghLogin(config);
         issues = parseSyncIssues(gh(config, ["issue", "list", "--state", "all", "--limit", "1000", "--json", "number,title,state,stateReason,assignees,author,labels,milestone,url,closedAt"]));
     } catch (error) {
         const lines = [say("issuesUnread", { error: error.message })];
@@ -109,26 +110,26 @@ function sync(config, say, dry, keepTitle)
     const pushes = fields.filter((one) => Object.keys(one.push).length > 0);
     const takes = fields.filter((one) => one.taken.length > 0);
     const id = (task) => `${prefix}-${task}`;
-    const issueOf = (number) => `#${number}`;
+    const issueId = (number) => `#${number}`;
     const named = (keys) => keys.map((key) => say(`issuesField_${key}`)).join(", ");
     // The open tasks whose issue is gone: deleted, or moved to another repo.
-    const numbers = new Set(issues.map((issue) => issueOf(issue.number)));
+    const numbers = new Set(issues.map((issue) => issueId(issue.number)));
     const missing = tasks.filter((task) => task.issue && taskSide(task) === "open" && !numbers.has(task.issue)).map((task) => ({ id: id(task.id), issue: task.issue }));
     // The titles others gave their issues on GitHub, waiting for the user's yes in the panel or the page. The lines that say so carry
     // no title, which stays out of the chat; they say it once, when the title first waits.
-    const held = fields.filter((one) => one.held.title !== undefined).map((one) => ({ id: id(one.task.id), issue: issueOf(one.issue.number), number: String(one.issue.number), title: one.held.title }));
+    const held = fields.filter((one) => one.held.title !== undefined).map((one) => ({ id: id(one.task.id), issue: issueId(one.issue.number), number: String(one.issue.number), title: one.held.title }));
     const newlyHeld = held.filter((one) => base[one.number]?.held !== one.title);
 
     if (dry) {
         const lines = [
-            ...plan.incoming.map((issue) => say("issuesWouldCome", { issue: issueOf(issue.number), text: issue.title })),
-            ...plan.assign.map((number) => say("issuesWouldAssign", { issue: issueOf(number), me })),
-            ...plan.closeIssues.map((one) => say(`issuesWouldClose_${one.reason === "completed" ? "done" : "archived"}`, { issue: issueOf(one.number), id: id(one.id) })),
-            ...plan.reopenIssues.map((one) => say("issuesWouldReopen", { issue: issueOf(one.number), id: id(one.id) })),
-            ...plan.closeTasks.map((one) => say(`issuesWouldCloseTask_${one.state}`, { issue: issueOf(one.number), id: id(one.id) })),
-            ...plan.reopenTasks.map((one) => say("issuesWouldReopenTask", { issue: issueOf(one.number), id: id(one.id) })),
-            ...pushes.map((one) => say("issuesWouldPush", { issue: issueOf(one.issue.number), id: id(one.task.id), list: named(Object.keys(one.push)) })),
-            ...takes.map((one) => say("issuesWouldTake", { issue: issueOf(one.issue.number), id: id(one.task.id), list: named(one.taken) })),
+            ...plan.incoming.map((issue) => say("issuesWouldCome", { issue: issueId(issue.number), text: issue.title })),
+            ...plan.assign.map((number) => say("issuesWouldAssign", { issue: issueId(number), me })),
+            ...plan.closeIssues.map((one) => say(`issuesWouldClose_${one.reason === "completed" ? "done" : "archived"}`, { issue: issueId(one.number), id: id(one.id) })),
+            ...plan.reopenIssues.map((one) => say("issuesWouldReopen", { issue: issueId(one.number), id: id(one.id) })),
+            ...plan.closeTasks.map((one) => say(`issuesWouldCloseTask_${one.state}`, { issue: issueId(one.number), id: id(one.id) })),
+            ...plan.reopenTasks.map((one) => say("issuesWouldReopenTask", { issue: issueId(one.number), id: id(one.id) })),
+            ...pushes.map((one) => say("issuesWouldPush", { issue: issueId(one.issue.number), id: id(one.task.id), list: named(Object.keys(one.push)) })),
+            ...takes.map((one) => say("issuesWouldTake", { issue: issueId(one.issue.number), id: id(one.task.id), list: named(one.taken) })),
             ...held.map((one) => say("issuesWouldHold", one)),
         ];
         return { lines: lines.length > 0 ? lines : [say("issuesInSync")], changed: false };
@@ -147,28 +148,25 @@ function sync(config, say, dry, keepTitle)
             lines.push(said);
             return true;
         } catch (error) {
-            failed.push(say("issuesFailed", { issue: issueOf(number), error: error.message }));
+            failed.push(say("issuesFailed", { issue: issueId(number), error: error.message }));
             plan.base[String(number)] = base[String(number)];
             return false;
         }
     };
 
     for (const number of plan.assign) {
-        onGitHub(number, ["issue", "edit", String(number), "--add-assignee", "@me"], say("issuesAssigned", { issue: issueOf(number), me }));
+        onGitHub(number, ["issue", "edit", String(number), "--add-assignee", "@me"], say("issuesAssigned", { issue: issueId(number), me }));
     }
 
     const code = plan.closeIssues.length > 0 ? readCode(config) : new Map();
 
     for (const one of plan.closeIssues) {
-        const commits = code.get(one.id)?.commits ?? [];
-        const comment = one.reason === "completed"
-            ? say("issueComment", { id: id(one.id), project, commits: commits.length > 0 ? say("issueCommits", { list: commits.slice(0, 10).map((commit) => commit.hash).join(", ") }) : "" }).trim()
-            : say("issueArchivedComment", { id: id(one.id), project });
-        onGitHub(one.number, ["issue", "close", String(one.number), "--reason", one.reason, "--comment", comment], say(`issuesClosed_${one.reason === "completed" ? "done" : "archived"}`, { issue: issueOf(one.number), id: id(one.id) }));
+        const comment = one.reason === "completed" ? doneComment(config, say, one.id, code) : say("issueArchivedComment", { id: id(one.id), project });
+        onGitHub(one.number, ["issue", "close", String(one.number), "--reason", one.reason, "--comment", comment], say(`issuesClosed_${one.reason === "completed" ? "done" : "archived"}`, { issue: issueId(one.number), id: id(one.id) }));
     }
 
     for (const one of plan.reopenIssues) {
-        onGitHub(one.number, ["issue", "reopen", String(one.number), "--comment", say("issueReopenComment", { id: id(one.id), project })], say("issuesReopened", { issue: issueOf(one.number), id: id(one.id) }));
+        onGitHub(one.number, ["issue", "reopen", String(one.number), "--comment", say("issueReopenComment", { id: id(one.id), project })], say("issuesReopened", { issue: issueId(one.number), id: id(one.id) }));
     }
 
     // The fields the backlog changed, written on the issue in one edit, the labels and the milestone it needs made first; agreed only
@@ -176,7 +174,7 @@ function sync(config, say, dry, keepTitle)
     const edit = editor(config);
 
     for (const one of fields) {
-        one.isAgreed = !pushes.includes(one) || onGitHub(one.issue.number, () => edit(one.issue, one.push), say("issuesPushed", { issue: issueOf(one.issue.number), id: id(one.task.id), list: named(Object.keys(one.push)) }));
+        one.isAgreed = !pushes.includes(one) || onGitHub(one.issue.number, () => edit(one.issue, one.push), say("issuesPushed", { issue: issueId(one.issue.number), id: id(one.task.id), list: named(Object.keys(one.push)) }));
     }
 
     // Then the backlog, under its lock, read again: a change made meanwhile stays.
@@ -189,44 +187,46 @@ function sync(config, say, dry, keepTitle)
 
             for (const one of plan.closeTasks) {
                 all = one.state === "done" ? moveTasks(all, [one.id], "done", day).tasks : all.map((task) => (task.id === one.id ? { ...task, state: "archived", archived: day } : task));
-                lines.push(say(`issuesClosedTask_${one.state}`, { issue: issueOf(one.number), id: id(one.id) }));
+                lines.push(say(`issuesClosedTask_${one.state}`, { issue: issueId(one.number), id: id(one.id) }));
             }
 
             for (const one of plan.reopenTasks) {
                 all = moveTasks(all, [one.id], "todo", day).tasks;
-                lines.push(say("issuesReopenedTask", { issue: issueOf(one.number), id: id(one.id) }));
+                lines.push(say("issuesReopenedTask", { issue: issueId(one.number), id: id(one.id) }));
             }
 
             for (const one of takes) {
                 all = all.map((task) => (task.id === one.task.id ? { ...task, ...one.change } : task));
-                lines.push(say("issuesTook", { issue: issueOf(one.issue.number), id: id(one.task.id), list: named(one.taken) }));
+                lines.push(say("issuesTook", { issue: issueId(one.issue.number), id: id(one.task.id), list: named(one.taken) }));
             }
+
+            const rules = taskRules(config, say);
 
             for (const issue of plan.incoming) {
                 // An issue another command took meanwhile is not taken twice.
-                if (all.some((task) => task.issue === issueOf(issue.number))) {
+                if (all.some((task) => task.issue === issueId(issue.number))) {
                     continue;
                 }
 
                 const task = incomingTask(config, issue, all);
-                const errors = taskErrors(task, { words: config.words, people: assignees(config), goals: readGoals(config).map((goal) => goal.name), types: Object.keys(config.types), fields: config.fields, prefix, decisionPrefix: config.prefixes.decision, specPrefix: config.prefixes.spec, say });
+                const errors = taskErrors(task, rules);
 
                 if (errors.length > 0) {
-                    failed.push(say("issuesNotTaken", { issue: issueOf(issue.number), error: errors.join("; ") }));
+                    failed.push(say("issuesNotTaken", { issue: issueId(issue.number), error: errors.join("; ") }));
                     continue;
                 }
 
                 all = [...all, task];
                 // Its fields as the task holds them: what it could not take of the issue stays on GitHub as it is, untouched.
                 plan.base[String(issue.number)] = { issue: "open", task: "open", id: task.id, fields: taskFields(task, { me, loginOf: accounts.loginOf, noGoal: config.words.noGoal }) };
-                lines.push(say("issuesCame", { issue: issueOf(issue.number), id: id(task.id), line: formatLine(task, config.words, prefix) }));
+                lines.push(say("issuesCame", { issue: issueId(issue.number), id: id(task.id), line: formatLine(task, config.words, prefix) }));
             }
 
             writeBacklog(config, all);
         });
     }
 
-    for (const one of fields.filter((plan) => plan.isAgreed)) {
+    for (const one of fields.filter((field) => field.isAgreed)) {
         plan.base[String(one.issue.number)] = { ...plan.base[String(one.issue.number)], fields: one.agreed };
     }
 
@@ -392,6 +392,7 @@ export function syncSummary(config)
     return { at: last?.at ? localTime(last.at) : null, error: last?.error ?? null, missing: last?.missing ?? [], held: last?.held ?? [] };
 }
 
+/** The sync's state written, where the repo's git folder is. */
 function writeState(config, state)
 {
     const file = syncStateFile(config);
@@ -406,6 +407,8 @@ function localTime(iso)
     return `${moment.getFullYear()}-${two(moment.getMonth() + 1)}-${two(moment.getDate())} ${two(moment.getHours())}:${two(moment.getMinutes())}`;
 }
 
+/** Whether the sync's lock is taken now, without waiting: a sync already running goes on alone; one left by a sync that died is taken
+ * over. */
 function takeLock(lock)
 {
     try {

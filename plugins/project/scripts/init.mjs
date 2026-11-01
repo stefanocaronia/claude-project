@@ -4,16 +4,18 @@
 // node init.mjs rename [--write]: a project made before the core went English gets its core files' English names (DECISIONS.md,
 // archive/TASKS-archive.md, tasks/), with git when they are in a repo, and their format's English words (## In progress, · done,
 // ## Goals, ## To decide); the links of its docs follow. Without --write, what would change.
+// node init.mjs adopt [--language it] [--people "Claude,Ann"] [--name "My app"] [--write] | adopt --steps | adopt --decisions <file>
+// "<heading>": a project that already keeps a plan, tasks or decisions, moved onto the plugin (adopt.mjs).
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync } from "node:fs";
-import { basename, dirname, join, relative } from "node:path";
+import { existsSync, readdirSync, rmdirSync, statSync } from "node:fs";
+import { basename, join } from "node:path";
 import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { quoted } from "../lib/text.mjs";
 import { coreFiles, legacyFiles, presets } from "../lib/words.mjs";
 import { markdownFiles } from "./check.mjs";
 import { moveDecisions, moveSteps, survey, writeSettings } from "./adopt.mjs";
-import { englishFormat, git, isMain, legacyFormat, loadProject, ProjectError, read, readmeTitle, runCli, shown, today, write, writeDoc } from "./project.mjs";
+import { englishFormat, fail, git, isMain, legacyFormat, loadProject, moveFile, read, readmeTitle, runCli, shown, today, write, writeDoc } from "./project.mjs";
 
 const examples = { language: "--language it", docs: "--docs project", people: '--people "Claude,Ann"', private: "--private private", name: '--name "My app"' };
 
@@ -37,7 +39,7 @@ const templates = {
 /** Writes what a project lacks of the configuration and the docs; returns the files written and those already there, as shown paths. */
 export function init(root, options = {})
 {
-    const language = languageOf(options.language ?? "en");
+    const language = knownLanguage(options.language ?? "en");
     const name = options.name ?? readmeTitle(root) ?? basename(root);
     const docs = options.docs ?? (options.private ? `${options.private}/project` : "project");
     const people = options.people ?? ["Claude"];
@@ -94,11 +96,11 @@ if (isMain(import.meta.url)) {
     });
 }
 
-/** A language the plugin has words for, as given; any other is refused before a file is written. */
-function languageOf(language)
+/** A language the plugin has words for, as given; any other is refused, in the language of `say`, before a file is written. */
+function knownLanguage(language, say = sayer("en"))
 {
     if (!presets[language]) {
-        throw new ProjectError(`The language is one of ${Object.keys(presets).join(", ")}, not ${language}; another language: pick one and override its words under words: in ${configFile}.`);
+        fail(say("badLanguage", { list: Object.keys(presets).join(", "), value: language, file: configFile }));
     }
 
     return language;
@@ -115,7 +117,7 @@ function optionsOf(args, flags = [])
         const value = rest[index + 1];
 
         if (value === undefined || value.startsWith("--")) {
-            throw new ProjectError(sayer(options.language ?? "en")("noValue", { name: key, example: examples[key] ?? `--${key} <value>` }));
+            fail(sayer(options.language ?? "en")("noValue", { name: key, example: examples[key] ?? `--${key} <value>` }));
         }
 
         options[key] = key === "people" ? value.split(",").map((one) => one.trim()).filter(Boolean) : value;
@@ -177,18 +179,10 @@ export function renameCore(root, isWritten)
     // The old names as the docs write them, and the new ones.
     const names = [["archivio/TASKS-archivio.md", "archive/TASKS-archive.md"], ["TASKS-archivio.md", "TASKS-archive.md"], ["DECISIONI.md", "DECISIONS.md"], ["](archivio/", "](archive/"], ["](compiti/", "](tasks/"], ["compiti/T-", "tasks/T-"]];
 
-    // One after the other: the archive's file is in its new folder only once the folder has moved.
+    // One after the other, each looked at once the one before has moved: the archive's file is in its new folder only once the folder is.
     for (const step of steps) {
-        if (!existsSync(step.from) || existsSync(step.to)) {
-            continue;
-        }
-
-        mkdirSync(dirname(step.to), { recursive: true });
-        const folder = dirname(step.from);
-        const tracked = git(folder, ["ls-files", "--error-unmatch", "--", relative(folder, step.from)]) !== "";
-
-        if (!tracked || git(folder, ["mv", "--", relative(folder, step.from), relative(folder, step.to)]) === "" && existsSync(step.from)) {
-            renameSync(step.from, step.to);
+        if (existsSync(step.from) && !existsSync(step.to)) {
+            moveFile(step.from, step.to);
         }
     }
 
@@ -207,7 +201,10 @@ export function renameCore(root, isWritten)
 
         if (next !== text) {
             writeDoc(fresh, file, next);
-            changed.push(...(changed.includes(shown(fresh, file)) ? [] : [shown(fresh, file)]));
+
+            if (!changed.includes(shown(fresh, file))) {
+                changed.push(shown(fresh, file));
+            }
         }
     }
 
@@ -226,15 +223,15 @@ function adoptCommand(root, args)
     const unknown = Object.keys(given).find((key) => !["language", "people", "name"].includes(key));
 
     if (unknown) {
-        throw new ProjectError(sayer(seen.language)("adoptOption", { name: unknown }));
+        fail(sayer(seen.language)("adoptOption", { name: unknown }));
     }
 
-    const settings = { ...seen, ...given, language: languageOf(given.language ?? seen.language) };
+    const settings = { ...seen, ...given, language: knownLanguage(given.language ?? seen.language, sayer(seen.language)) };
     const say = sayer(settings.language);
 
     if (args[0] === "--decisions") {
         if (!args[1] || !args[2]) {
-            throw new ProjectError(say("noValue", { name: "decisions", example: 'adopt --decisions design/flow.md "Decisions taken"' }));
+            fail(say("noValue", { name: "decisions", example: 'adopt --decisions design/flow.md "Decisions taken"' }));
         }
 
         console.log(say("decisionsMovedCount", moveDecisions(root, args[1], args[2])));
@@ -258,12 +255,13 @@ function adoptCommand(root, args)
     }
 
     if (!writeSettings(root, settings)) {
-        throw new ProjectError(say("adoptExists", { file: configFile }));
+        fail(say("adoptExists", { file: configFile }));
     }
 
     printWritten(init(root, { language: settings.language, docs: settings.docs, name: settings.name, people: settings.people }), say);
 }
 
+/** The files init wrote, each with a +, and those it found already there. */
 function printWritten({ written, kept }, say)
 {
     written.forEach((file) => console.log(say("written", { file })));

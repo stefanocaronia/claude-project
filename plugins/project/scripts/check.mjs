@@ -1,7 +1,7 @@
 // The health of the project docs: node check.mjs [--fix] [--json]. Read-only without --fix, which fixes whitespace and the docs' frontmatter.
-import { existsSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { parseBacklog, citedTasks } from "../lib/backlog.mjs";
+import { existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { citedTasks } from "../lib/backlog.mjs";
 import { citedDecisions, dayOf, numbering } from "../lib/decisions.mjs";
 import { planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
@@ -15,7 +15,10 @@ import { backlogProblems } from "./backlog.mjs";
 import { extensionChecks, loadExtensions } from "./extensions.mjs";
 import { readable } from "../lib/words.mjs";
 import { betterDescription, joinFrontmatter, splitFrontmatter } from "../lib/frontmatter.mjs";
-import { citingFiles, docFiles, isMain, legacyFormat, stampDoc, loadProject, read, readBacklog, readDecisions, readContracts, readDependencies, readGoals, readSpecs, readTodos, runCli, shown, specCitations, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
+import { citingFiles, docFiles, isClosed, isMain, legacyFormat, stampDoc, loadProject, openStates, read, readBacklog, readDecisions, readContracts, readDependencies, readGoals, readSpecs, readTodos, realPath, runCli, shown, specCitations, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
+
+// The keys of a document's frontmatter.
+const frontmatterKeys = ["title", "description", "type", "created", "updated"];
 
 /** Every finding about the docs, from errors that must be fixed to notes for the cleanup: { severity, kind, file, line, message }. `code`,
  * the commits and pull requests by task when the caller has read them already. */
@@ -47,8 +50,8 @@ export function check(config, say, { code } = {})
     return findings;
 }
 
-/** The docs with trailing spaces or runs of blank lines, as shown paths; with write, those fixed. */
-export function fixWhitespace(config, write = true)
+/** The docs with trailing spaces or runs of blank lines, as shown paths; without `isWritten`, only found. */
+export function fixWhitespace(config, isWritten = true)
 {
     const changed = [];
 
@@ -58,7 +61,7 @@ export function fixWhitespace(config, write = true)
         const fixed = text.split(/\r?\n/).map((line) => line.replace(/[ \t]+$/, "")).join(newline).replace(new RegExp(`(${newline}){3,}`, "g"), newline + newline);
 
         if (fixed !== text) {
-            if (write) {
+            if (isWritten) {
                 writeFileSync(path, fixed);
             }
 
@@ -105,6 +108,7 @@ if (isMain(import.meta.url)) {
     });
 }
 
+/** The decisions' numbers: one given twice, one skipped. */
 function checkNumbering(config, say, decisions, add)
 {
     const prefix = config.prefixes.decision;
@@ -211,7 +215,7 @@ function checkRevisions(config, say, decisions, add)
 function checkTodos(config, say, add)
 {
     const prefix = config.prefixes.task;
-    const backlog = new Map([...parseBacklog(read(config.files.tasks), config.words, prefix).tasks, ...parseBacklog(read(config.files.archive), config.words, prefix, true).tasks].map((task) => [task.id, task]));
+    const backlog = new Map(readBacklog(config).tasks.map((task) => [task.id, task]));
 
     for (const { file } of todoFiles(config)) {
         let open = 0;
@@ -247,7 +251,7 @@ function checkTodos(config, say, add)
 
                 if (!cited) {
                     add("warning", "tasks", file, index + 1, say("todoCitesUnknown", { id: `${prefix}-${id}` }));
-                } else if (cited.state === "done" || cited.state === "archived") {
+                } else if (isClosed(cited)) {
                     add("note", "tasks", file, index + 1, say("todoCitesClosed", { id: `${prefix}-${id}`, state: cited.state === "done" ? config.labels.doneMarker : config.labels.archivedMarker }));
                 }
             }
@@ -259,6 +263,7 @@ function checkTodos(config, say, add)
     }
 }
 
+/** The backlog's own problems, all errors: a line that does not read, a task wrong in itself, a link to a task that is not there. */
 function checkBacklog(config, say, add)
 {
     for (const problem of backlogProblems(config, say)) {
@@ -266,7 +271,8 @@ function checkBacklog(config, say, add)
     }
 }
 
-/** The waits of the backlog and the todos read together: a cycle, a todo id nobody gave, a note of a task that is not there. */
+/** The links of the backlog and the todos read together: a cycle of waits, a todo id nobody gave, a large task out of step with its parts,
+ * a note of a task that is not there. */
 function checkLinks(config, say, add)
 {
     const prefix = config.prefixes.task;
@@ -288,8 +294,6 @@ function checkLinks(config, say, add)
     }
 
     // A large task follows its parts: closed while some are open, or open once all are closed.
-    const isClosed = (task) => task.state === "done" || task.state === "archived";
-
     const parts = partsOf(tasks, prefix);
     const byId = new Map(tasks.map((task) => [`${prefix}-${task.id}`, task]));
 
@@ -321,8 +325,9 @@ function checkCode(config, say, add, given)
 {
     const prefix = config.prefixes.task;
     const code = given ?? readCode(config);
+    const { tasks } = readBacklog(config);
 
-    for (const task of readBacklog(config).tasks.filter((one) => ["doing", "todo", "postponed"].includes(one.state))) {
+    for (const task of tasks.filter((one) => openStates.includes(one.state))) {
         const merged = codeView(code.get(task.id)).mergedPull;
 
         if (merged) {
@@ -333,13 +338,12 @@ function checkCode(config, say, add, given)
     // A task and its GitHub issue that no longer agree: one closed, the other open; where the issues are in sync, the next sync settles it.
     const issues = config.github?.issues === "sync" ? [] : readIssues(config);
 
-    for (const task of readBacklog(config).tasks.filter((one) => one.issue)) {
+    for (const task of tasks.filter((one) => one.issue)) {
         const issue = issueOf(issues, task);
-        const isClosed = task.state === "done" || task.state === "archived";
 
-        if (issue?.state === "open" && isClosed) {
+        if (issue?.state === "open" && isClosed(task)) {
             add("note", "code", task.file, task.line, say("issueDoneOpen", { id: `${prefix}-${task.id}`, issue: task.issue }));
-        } else if (issue?.state === "closed" && !isClosed) {
+        } else if (issue?.state === "closed" && !isClosed(task)) {
             add("note", "code", task.file, task.line, say("issueClosedTaskOpen", { id: `${prefix}-${task.id}`, issue: task.issue, day: issue.closed ?? "?" }));
         }
     }
@@ -388,6 +392,8 @@ function checkTime(config, say, add)
     }
 }
 
+/** The plan: a goal closed while some of its tasks are still open, an «updated» day older than the file's last change by more than the
+ * limit. */
 function checkPlan(config, say, add)
 {
     const path = config.files.plan;
@@ -396,12 +402,11 @@ function checkPlan(config, say, add)
         return;
     }
 
-    // A goal closed while some of its tasks are still open.
     const { tasks } = readBacklog(config);
     const prefix = config.prefixes.task;
 
     for (const goal of readGoals(config).filter((one) => one.closed)) {
-        const open = tasks.filter((task) => task.goal === goal.name && ["doing", "todo", "postponed"].includes(task.state));
+        const open = tasks.filter((task) => task.goal === goal.name && openStates.includes(task.state));
 
         if (open.length > 0) {
             add("warning", "plan", path, null, say("closedGoalOpen", { goal: goal.name, day: goal.closed, list: open.map((task) => `${prefix}-${task.id}`).join(", ") }));
@@ -439,6 +444,7 @@ function checkOpen(config, say, add)
     }
 }
 
+/** The markdown the check looks after: mixed line endings, double blank lines, trailing spaces, links that lead nowhere. */
 function checkMarkdown(config, say, add)
 {
     for (const path of markdownFiles(config)) {
@@ -469,6 +475,7 @@ function checkMarkdown(config, say, add)
     }
 }
 
+/** A relative link of a markdown file: to a file that is not there, or to a heading its file does not have. */
 function checkLink(say, file, line, target, add)
 {
     if (/^[a-z]+:/i.test(target)) {
@@ -477,7 +484,7 @@ function checkLink(say, file, line, target, add)
 
     const [pathPart, anchor] = target.split("#");
     // A link is relative to where the file really is, past any link to its folder (.claude into a private repo).
-    const linked = pathPart ? resolve(dirname(realpathSync.native(file)), safeDecode(pathPart)) : file;
+    const linked = pathPart ? resolve(dirname(realPath(file)), safeDecode(pathPart)) : file;
 
     if (!existsSync(linked)) {
         add("error", "link", file, line, say("brokenLink", { target: pathPart }));
@@ -514,10 +521,10 @@ function checkFrontmatter(config, say, add)
 {
     for (const file of docFiles(config)) {
         const { data, body } = splitFrontmatter(read(file));
-        const missing = ["title", "description", "type", "created", "updated"].filter((key) => !data[key]);
+        const missing = frontmatterKeys.filter((key) => !data[key]);
 
         if (missing.length > 0) {
-            add("note", "frontmatter", file, 1, say(missing.length === 5 ? "frontmatterNone" : "frontmatterMissing", { list: missing.join(", ") }));
+            add("note", "frontmatter", file, 1, say(missing.length === frontmatterKeys.length ? "frontmatterNone" : "frontmatterMissing", { list: missing.join(", ") }));
         } else if (data.type === "doc" && betterDescription(data.description, body)) {
             add("note", "frontmatter", file, 1, say("frontmatterWeak", { text: data.description }));
         }
@@ -533,9 +540,8 @@ export function fixFrontmatter(config, isWritten = true)
     for (const file of docFiles(config)) {
         const text = read(file);
         const { data, body } = splitFrontmatter(text);
-        const keys = ["title", "description", "type", "created", "updated"];
 
-        if (keys.every((key) => data[key])) {
+        if (frontmatterKeys.every((key) => data[key])) {
             // A description an older version made from a code line or a label is written again from the first paragraph; the days stay.
             const better = data.type === "doc" ? betterDescription(data.description, body) : "";
 
@@ -552,7 +558,7 @@ export function fixFrontmatter(config, isWritten = true)
 
         const stamped = stampDoc(config, file, text);
 
-        if (stamped !== text && Object.keys(splitFrontmatter(text).data).length < Object.keys(splitFrontmatter(stamped).data).length) {
+        if (stamped !== text && Object.keys(data).length < Object.keys(splitFrontmatter(stamped).data).length) {
             if (isWritten) {
                 writeFileSync(file, stamped);
             }
@@ -576,6 +582,7 @@ function checkNames(config, say, add)
     }
 }
 
+/** A doc of the docs folder too heavy to read whole: past the limit of tokens, counted as 3.5 characters each. */
 function checkWeight(config, say, add)
 {
     for (const path of markdownFiles(config).filter((file) => file.startsWith(`${config.docs}/`))) {

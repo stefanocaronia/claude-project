@@ -6,7 +6,7 @@
 // `exporters` ({ name: (tasks, context) => text }) and `importers` ({ name: (text, context) => [{ text, priority, … }] }).
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { git, read, shown } from "./project.mjs";
+import { firstLine, git, read, shown } from "./project.mjs";
 
 /** The extensions of the configuration, each with its id and folder; one that does not load keeps its error, and the rest go on. */
 export async function loadExtensions(config)
@@ -21,7 +21,7 @@ export async function loadExtensions(config)
             const id = String(module.id ?? fallback).replace(/[^\w-]/g, "");
             loaded.push({ id, collect: module.collect, route: module.route, panel: module.panel, check: module.check, exporters: module.exporters ?? {}, importers: module.importers ?? {}, script: module.script ? resolve(dirname(path), module.script) : null, folder: dirname(path) });
         } catch (error) {
-            loaded.push({ id: fallback, error: `${shown(config, path)}: ${String(error?.message ?? error).split("\n")[0]}`, folder: dirname(path) });
+            loaded.push({ id: fallback, error: `${shown(config, path)}: ${firstLine(error)}`, folder: dirname(path) });
         }
     }
 
@@ -71,7 +71,7 @@ export async function extensionChecks(config, say, extensions)
                 });
             }
         } catch (error) {
-            findings.push({ severity: "warning", kind: extension.id, file: null, line: null, message: say("extensionCheckFailed", { id: extension.id, error: String(error?.message ?? error).split("\n")[0] }) });
+            findings.push({ severity: "warning", kind: extension.id, file: null, line: null, message: say("extensionCheckFailed", { id: extension.id, error: firstLine(error) }) });
         }
     }
 

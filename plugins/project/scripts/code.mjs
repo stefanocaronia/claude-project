@@ -3,11 +3,11 @@
 // there are no pull requests and no issues.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { citationsOf, parseIssues, parseLog, parsePulls, repoUrl } from "../lib/code.mjs";
 import { parseSyncIssues } from "../lib/issues.mjs";
-import { git, projectRepos, ProjectError } from "./project.mjs";
+import { sayer } from "../lib/messages.mjs";
+import { fail, git, projectRepos, tempFolder } from "./project.mjs";
 
 // How many commits of each repo are read, the newest; how long a reading of gh holds.
 const commitLimit = 3000;
@@ -36,11 +36,14 @@ export function readIssues(config)
 /** The login this machine's gh is signed in as, from the reading readOwner makes; null without gh. */
 export function readLogin(config)
 {
-    try {
-        return JSON.parse(ghCached(config, "user", userArgs))?.login ?? null;
-    } catch {
-        return null;
-    }
+    return readUser(config)?.login ?? null;
+}
+
+/** The login gh is signed in as, asked now, for a choice that cannot rest on a reading kept a few minutes; a ProjectError when gh cannot
+ * say. */
+export function ghLogin(config)
+{
+    return gh(config, ["api", "user", "--jq", ".login"]).trim();
 }
 
 /** One issue as GitHub has it now, as the sync reads it (parseSyncIssues): its labels, milestone and author fill the task made from it; a
@@ -54,7 +57,14 @@ export function readIssue(config, number)
 export function closeIssue(config, number, comment)
 {
     gh(config, ["issue", "close", String(number), "--comment", comment]);
-    writeFileSync(cacheFile(config, "issues"), "");
+    forgetGh(config, "issues");
+}
+
+/** The comment that closes the issue of a task done: the task, the project, and the commits that cite it, the latest ten. */
+export function doneComment(config, say, id, code = readCode(config))
+{
+    const hashes = (code.get(id)?.commits ?? []).slice(0, 10).map((commit) => commit.hash);
+    return say("issueComment", { id: `${config.prefixes.task}-${id}`, project: config.name ? ` (${config.name})` : "", commits: hashes.length > 0 ? say("issueCommits", { list: hashes.join(", ") }) : "" }).trim();
 }
 
 /** The person of the project this machine's gh is signed in as, by their name or login, with their GitHub picture kept small in the
@@ -62,14 +72,7 @@ export function closeIssue(config, number, comment)
  * them. Claude Code gives a plugin no picture of its own account: GitHub's is the one the person already shows. */
 export async function readOwner(config)
 {
-    let user = null;
-
-    try {
-        user = JSON.parse(ghCached(config, "user", userArgs));
-    } catch {
-        return null;
-    }
-
+    const user = readUser(config);
     const first = String(user?.name ?? "").split(/\s+/)[0].toLowerCase();
     const name = config.people.find((person) => [first, String(user?.login ?? "").toLowerCase()].includes(person.toLowerCase()));
 
@@ -77,7 +80,7 @@ export async function readOwner(config)
         return null;
     }
 
-    const file = join(tmpdir(), "claude-project", `avatar-${String(user.login).replace(/[^\w-]/g, "_")}.jpg`);
+    const file = join(tempFolder, `avatar-${String(user.login).replace(/[^\w-]/g, "_")}.jpg`);
 
     if (!existsSync(file)) {
         try {
@@ -94,8 +97,18 @@ export async function readOwner(config)
     return { name, fullName: user.name || name, file: existsSync(file) ? file : null };
 }
 
+/** The user gh is signed in as, { name, login, avatar }, from a reading kept a few minutes; null without gh. */
+function readUser(config)
+{
+    try {
+        return JSON.parse(ghCached(config, "user", userArgs));
+    } catch {
+        return null;
+    }
+}
+
 /** What gh answers, the last reading when it is recent; "[]" when gh is missing or fails, or PROJECT_NO_GH is set. */
-export function ghCached(config, name, args)
+function ghCached(config, name, args)
 {
     if (process.env.PROJECT_NO_GH) {
         return "[]";
@@ -122,8 +135,10 @@ export function ghCached(config, name, args)
 /** A gh command in the project's folder, its output; a ProjectError that says how to fix it when gh fails. */
 export function gh(config, args)
 {
+    const say = sayer(config.language);
+
     if (process.env.PROJECT_NO_GH) {
-        throw new ProjectError("gh is turned off here (PROJECT_NO_GH).");
+        fail(say("ghOff"));
     }
 
     try {
@@ -131,7 +146,7 @@ export function gh(config, args)
         const [program, given] = process.env.PROJECT_FAKE_GH ? [process.execPath, [process.env.PROJECT_FAKE_GH, ...args]] : ["gh", args];
         return execFileSync(program, given, { cwd: config.root, encoding: "utf8", timeout: 15_000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, GH_PROMPT_DISABLED: "1" } });
     } catch (error) {
-        throw new ProjectError(`gh ${args.slice(0, 2).join(" ")} failed: ${String(error.stderr ?? error.message).trim().split("\n")[0]} Install gh and run gh auth login, in a repo whose remote is on GitHub.`);
+        return fail(say("ghFailed", { command: args.slice(0, 2).join(" "), error: String(error.stderr ?? error.message).trim().split("\n")[0].replace(/[.\s]+$/, "") }));
     }
 }
 
@@ -141,9 +156,9 @@ export function forgetGh(config, name)
     writeFileSync(cacheFile(config, name), "");
 }
 
+/** Where the last reading of gh by its name is kept, for this project. */
 function cacheFile(config, name)
 {
-    const folder = join(tmpdir(), "claude-project");
-    mkdirSync(folder, { recursive: true });
-    return join(folder, `${name}-${config.root.replace(/[^\w-]/g, "_")}.json`);
+    mkdirSync(tempFolder, { recursive: true });
+    return join(tempFolder, `${name}-${config.root.replace(/[^\w-]/g, "_")}.json`);
 }

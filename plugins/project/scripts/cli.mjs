@@ -25,9 +25,10 @@ const commands = {
 };
 const [command, ...args] = process.argv.slice(2);
 
-if (!command || !(command in commands)) {
-    // The help in the project's language, English outside a project.
+if (!Object.hasOwn(commands, command ?? "")) {
+    // The help in the project's language, English outside a project; on stderr, and an error, for a command that is not one.
     const from = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+    const isHelp = !command || ["help", "--help", "-h"].includes(command);
     let language = "en";
 
     try {
@@ -36,9 +37,8 @@ if (!command || !(command in commands)) {
         // a configuration that does not read: the help in English
     }
 
-    const say = sayer(language);
-    (command && !["help", "--help", "-h"].includes(command) ? console.error : console.log)(say("cliUsage", { command: command ?? "" }));
-    process.exitCode = command && !["help", "--help", "-h"].includes(command) ? 1 : 0;
+    (isHelp ? console.log : console.error)(sayer(language)("cliUsage", { command: command ?? "" }));
+    process.exitCode = isHelp ? 0 : 1;
 } else {
     const run = spawnSync(process.execPath, [commands[command], ...args], { stdio: command === "page" ? ["inherit", "pipe", "inherit"] : "inherit", encoding: "utf8" });
 

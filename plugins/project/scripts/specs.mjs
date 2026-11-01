@@ -7,13 +7,13 @@
 //   node specs.mjs cites S-12
 //   node specs.mjs adopt <file> [--write]   (a specifications' document the project already has becomes SPECS.md: moved with git, each
 //                                            list line given its number, its text as it was, the docs' links and the configuration following)
-import { existsSync, mkdirSync, renameSync } from "node:fs";
-import { basename, dirname, relative, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { basename, resolve } from "node:path";
 import { joinFrontmatter, splitFrontmatter } from "../lib/frontmatter.mjs";
 import { coverage, nextSpec, numberSpecs } from "../lib/specs.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { configFile } from "../lib/config.mjs";
-import { docFiles, git, isMain, loadProject, ProjectError, projectName, read, readBacklog, readDecisions, readSpecs, runCli, shown, specCitations, write, writeDoc } from "./project.mjs";
+import { commandLine, docFiles, fail, git, isMain, loadProject, moveFile, projectName, read, readBacklog, readDecisions, readSpecs, runCli, shown, specCitations, write, writeDoc } from "./project.mjs";
 
 if (isMain(import.meta.url)) {
     runCli(() => run(process.argv.slice(2)));
@@ -30,14 +30,11 @@ function run(args)
 {
     const [command, ...rest] = args;
     const { config, say } = loadProject();
-    const { options, words } = optionsOf(rest);
+    const { options, words } = commandLine(rest, ["json", "write"]);
     const prefix = config.prefixes.spec;
     const id = (number) => `${prefix}-${number}`;
     const numberOf = (word) => Number(String(word).replace(new RegExp(`^${escapeRegex(prefix)}-`, "i"), ""));
     const { specs } = readSpecs(config);
-    const fail = (message) => {
-        throw new ProjectError(message);
-    };
 
     if (command === "adopt") {
         adopt(config, say, words[0], options.write === true);
@@ -163,7 +160,6 @@ function addSpec(config, say, line, section)
         }
     }
 
-    mkdirSync(dirname(file), { recursive: true });
     writeDoc(config, file, Object.keys(data).length > 0 ? joinFrontmatter(data, `${lines.join("\n")}\n`) : `${lines.join("\n")}\n`);
 }
 
@@ -173,18 +169,18 @@ function adopt(config, say, given, isWritten)
     const target = config.files.specs;
 
     if (!given) {
-        throw new ProjectError(say("specsUsage"));
+        fail(say("specsUsage"));
     }
 
     const source = [given, `${config.root}/${given}`, `${config.docs}/${given}`].map((path) => resolve(path).replaceAll("\\", "/")).find((path) => existsSync(path));
 
     if (!source) {
-        throw new ProjectError(say("specsAdoptMissing", { file: given }));
+        fail(say("specsAdoptMissing", { file: given }));
     }
 
     // A SPECS.md written by hand, without numbers yet, is numbered where it is; one that keeps specs already takes them one by one.
     if (existsSync(target) && (source.toLowerCase() !== target.toLowerCase() || readSpecs(config).specs.length > 0)) {
-        throw new ProjectError(say("specsAdoptExists", { file: shown(config, target) }));
+        fail(say("specsAdoptExists", { file: shown(config, target) }));
     }
 
     const { data, body } = splitFrontmatter(read(source));
@@ -209,13 +205,7 @@ function adopt(config, say, given, isWritten)
 
     // Moved with git where it tracks the file, so that its history follows; then numbered, the docs' links and the configuration after it.
     if (source.toLowerCase() !== target.toLowerCase()) {
-        const folder = dirname(source);
-        const tracked = git(folder, ["ls-files", "--error-unmatch", "--", basename(source)]) !== "";
-        mkdirSync(dirname(target), { recursive: true });
-
-        if (!tracked || git(folder, ["mv", "--", basename(source), relative(folder, target).replaceAll("\\", "/")]) === "" && existsSync(source)) {
-            renameSync(source, target);
-        }
+        moveFile(source, target);
     }
 
     writeDoc(config, target, joinFrontmatter({ ...data, type: "specs" }, text));
@@ -246,23 +236,4 @@ function adopt(config, say, given, isWritten)
     if (others.length > 0) {
         console.log(say("specsAdoptOthers", { name, list: others.join(", ") }));
     }
-}
-
-function optionsOf(args)
-{
-    const options = {};
-    const words = [];
-
-    for (let index = 0; index < args.length; index++) {
-        if (args[index] === "--json" || args[index] === "--write") {
-            options[args[index].slice(2)] = true;
-        } else if (args[index].startsWith("--") && args[index + 1] !== undefined) {
-            options[args[index].slice(2)] = args[index + 1];
-            index++;
-        } else {
-            words.push(args[index]);
-        }
-    }
-
-    return { options, words };
 }
