@@ -22,7 +22,7 @@ let newText = "";
 
 export function taskLists($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, limited, isStarting, age, dueWords, rowText, opener, card, section, more, tip, face, priorityIcon } = p;
+    const { Box, Text, Button, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, limited, isStarting, age, dueWords, rowText, opener, card, section, more, tip, face, priorityIcon, isWorking } = p;
     const details = taskDetails($, p);
     const indent = isDesktop ? 4 : 2;
     // A part shows under its large task, whatever its state; on its own only when its large task is not open.
@@ -88,9 +88,10 @@ export function taskLists($: EngineInterface, p: Panel)
         const mark = <Box key={`type-${task.id}`} flexShrink={0}>{Svg ? <Svg source={typeSvg(task.type, typeColor(task.type))} alt={name} width={14} height={14} /> : <Text color={typeColor(task.type)}>■</Text>}</Box>;
         return tip(`type-${task.id}`, name, mark);
     };
-    const play = (task: Task, onPress: () => Promise<void>) => <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={onPress} />;
     // A ▶ that cannot be pressed now stays in its place, gray, its reason under the pointer.
     const idle = (task: Task, reason: string) => tip(`idle-${task.id}`, reason, <Box key={`idle-${task.id}`} flexShrink={0}><Text color={idleColor}>▶</Text></Box>);
+    // A ▶ writes to this chat: while its turn runs, it waits.
+    const play = (task: Task, onPress: () => Promise<void>) => (isWorking ? idle(task, words("busyTurn")) : <Button key={`start-${task.id}`} plain dimColor label="▶" onPress={onPress} />);
     const start = (task: Task) => {
         const member = byName.get(task.to);
 

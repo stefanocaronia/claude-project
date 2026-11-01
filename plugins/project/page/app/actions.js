@@ -44,6 +44,8 @@ function setupActions()
             openTaskForm(Number(target.dataset.editTask));
         } else if (target.dataset.saveTask) {
             saveTask(target.dataset.saveTask);
+        } else if (target.dataset.commentTask) {
+            commentTask(Number(target.dataset.commentTask));
         } else if (target.hasAttribute("data-cancel-task")) {
             editing = null;
             newTaskSpecs = "";
@@ -174,7 +176,8 @@ function setupActions()
 }
 
 /** A task written in the list, new or one there: its text, goal, priority, type, who holds it, when it is due, the project's own fields,
- * the large task it is a part of and the specs it does; save, cancel and, for one there, archive. */
+ * the large task it is a part of and the specs it does; save, cancel and, for one there, archive; then its comments, with a field for
+ * another. */
 function taskForm(task)
 {
     const id = task ? task.id : "new";
@@ -211,9 +214,40 @@ function taskForm(task)
                     <button type="button" class="action" data-cancel-task>${t("cancelEdit")}</button>
                     ${task ? `<button type="button" class="action" data-archive-task="${task.id}">${t("archiveTask")}</button>` : ""}
                 </div>
+                ${task ? taskComments(task) : ""}
             </div>
             <span></span>
         </li>`;
+}
+
+/** The comments left on a task, the oldest first, each with who wrote it and when: the user's, a colleague's, Claude's; then a field
+ * for the user's own. */
+function taskComments(task)
+{
+    const left = (task.comments ?? []).map((comment) => `<div class="comment"><b>${escape(comment.by)}</b> <span class="comment-day">${escape(formatDay(comment.day))}</span><p>${escape(comment.text)}</p></div>`);
+    return `<div class="task-comments">
+                    ${left.join("")}
+                    <textarea id="form-comment-${task.id}" rows="2" placeholder="${attribute(t("commentHint"))}"></textarea>
+                    <div class="actions"><button type="button" class="action" data-comment-task="${task.id}">${t("commentSend")}</button></div>
+                </div>`;
+}
+
+/** Adds the user's comment to a task through the backlog's command, then opens its form again with the comment in it. */
+async function commentTask(id)
+{
+    const field = document.getElementById(`form-comment-${id}`);
+    const text = field?.value.trim() ?? "";
+
+    if (!text) {
+        field?.focus();
+        return;
+    }
+
+    const name = taskName({ id });
+    editing = null;
+    await changeTask({ command: "comment", id: name, text }, t("commentAdded", name));
+    openTaskForm(id);
+    document.getElementById(`form-comment-${id}`)?.focus();
 }
 
 /** Opens the list's form for a new task ("new") or for one there (its number), its text in focus; the page does not draw itself again

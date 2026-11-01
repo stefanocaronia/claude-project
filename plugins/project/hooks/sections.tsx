@@ -100,7 +100,7 @@ export function askChoice($: EngineInterface, p: Panel, proposal: Proposal): Pro
 /** The points to decide, each with who decides, opened in place and brought to the chat as a choice; the decisions taken are the page's. */
 export function decisionSection($: EngineInterface, p: Panel, proposals: Proposal[])
 {
-    const { Box, Text, Button, Link, Svg, view, snapshot, words, decider, opener, card, section, limited, more, age, face, priorityIcon } = p;
+    const { Box, Text, Link, Svg, view, snapshot, words, decider, opener, card, section, limited, more, age, face, priorityIcon, chatButton } = p;
     const proposalRow = (proposal: Proposal) => {
         const key = `proposal-${proposal.line}`;
         const cut = proposal.text.length > proposalLength ? `${proposal.text.slice(0, proposalLength)}…` : proposal.text;
@@ -119,7 +119,7 @@ export function decisionSection($: EngineInterface, p: Panel, proposals: Proposa
                     <Box key={`proposal-details-${proposal.line}`} flexDirection="column" gap={1} paddingLeft={2}>
                         <Text>{cut}</Text>
                         <Box flexDirection="row" columnGap={2} flexWrap="wrap">
-                            <Button key={`choice-${key}`} plain label={words("asChoice")} onPress={() => askChoice($, p, proposal)} />
+                            {chatButton(`choice-${key}`, words("asChoice"), () => askChoice($, p, proposal), { plain: true })}
                             {cut !== proposal.text ? <Link key={`page-${key}`} href={`${snapshot.page}/#decisions`}>{words("continueInPage")}</Link> : null}
                         </Box>
                     </Box>

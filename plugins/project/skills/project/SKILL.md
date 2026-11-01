@@ -22,8 +22,9 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 | `set T-12 [--p …] [--effort …] [--to …] [--goal …] [--text …] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34] [--due 2026-11-15] [--type bug]` | changes a task; `--after ""` clears; a wait that closes a cycle, or a number that does not exist, is refused |
 | `add --issue 34 ["text"]`, `issue-close T-12` | a task from a GitHub issue the user wrote (another's comes in only through the user's → Backlog); the issue closed on GitHub, only on the user's yes |
 | `note T-12` | the task's note, `<docs>/tasks/T-12.md`, written when missing: its path |
+| `comment T-12 [--by <name>] -- "text"` | a comment on the task, dated today, kept in its note under `## Comments`; by `--by` (the user, a colleague by first name, Claude), else the project's first person who is not Claude |
 | `archive T-12…` or `archive --done` | moves tasks to the archive |
-| `show T-12…` | a task, what it waits for and the chain to do first, what waits for it, its links both ways, its large task or its parts and the next one, its note, the commits and pull requests that cite it |
+| `show T-12…` | a task, what it waits for and the chain to do first, what waits for it, its links both ways, its large task or its parts and the next one, its note and its comments, whole, the commits and pull requests that cite it |
 | `list [--state …] [--to …] [--p …] [--goal …] [--json]`, `find <words>`, `goals`, `next` | reads |
 | `todos [--to <colleague>] [--json]`, `take matteo-conti:8 --to <who> [--text …] [--type …] [--keep]` | with Crew: the colleagues' open todo lines that cite no task; one that is work for the project made a task, created by the colleague, the line ticked and citing it (open with `--keep`), the waits on its id following |
 
@@ -43,6 +44,7 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 - **The project's own fields**, when its configuration declares them (`fields:`): `(system: 5e)` at the end of a line, set with `--system 5e` on `add` or `set`; a field that lists its values takes only those.
 - **Export and import**: `export [--format json|csv|<an extension's>] [--all | --state …]` writes the tasks on stdout; `import <file> [--format …] [--by <name>]` adds a file's tasks as new ones, numbered here, all or none; `--by` names who brought them.
 - **The note**: when a task needs more than its line (the long context, what was tried, where the work got to), write it in its note with `note T-12`; before taking a task up again, read its note.
+- **Comments**: a few lines left on a task for whoever works on it or follows it (a hint, a doubt, a question, what was found), by the user, a colleague or you, kept in its note; `show` prints them whole, the panel and the page show them on the opened task, and both add the user's. Before working on a task, read its comments: the user's are their words on the work, a colleague's that colleague's view. When the user asks in the chat for a comment, `comment T-12 --by <their name> -- "…"`; a colleague's remark on a task already there, in their review or report, is their comment, `--by <their first name>`, not a new task. Comment `--by Claude` when something on a task is for the people who follow it: a question to answer before going on, what you found, why it waits. The long context and where the work got to stay in the note's own text.
 - When a colleague is given a task whose number is in the brief, the panel moves it to in progress itself. **Done** is yours to say, after reading their report: work finished is not always a task closed.
 
 ## The decisions: `decisions.mjs`

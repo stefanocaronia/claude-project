@@ -23,7 +23,7 @@ export async function drawPanel($: EngineInterface, e: RenderInput<"Pane">)
     }
 
     const p = panelOf($, e, board, view, snapshot, await $.clock.now());
-    const { Box, Text, Button, Link, isDesktop, words, idOf, byName, isStarting, idleButton, priorityIcon } = p;
+    const { Box, Text, Link, isDesktop, words, idOf, byName, isStarting, idleButton, isWorking, chatButton, priorityIcon } = p;
     const { doing, rest, postponed, busyWith, nextTask, start, taskSection } = taskLists($, p);
     const proposals = proposalsOf(snapshot);
     const nextProposal = proposals[0];
@@ -59,20 +59,20 @@ export async function drawPanel($: EngineInterface, e: RenderInput<"Pane">)
     const actions = (
         <Box key="actions" flexDirection="row" flexWrap="wrap" gap={1} alignItems="center">
             {busy && !isDesktop ? <Text key="busy" dimColor>{busy}</Text> : null}
-            {nextTask
-                ? isStarting(nextTask.id)
-                    ? idleButton("next-task", words("starting"))
-                    : <Button key="next-task" variant="primary" label={words("nextTask", { id: idOf(nextTask) })} onPress={() => startTask($, snapshot, nextTask, byName.get(nextTask.to))} />
-                : idleButton("next-task-idle", words("nextTaskIdle"), busy ?? words("noneToStart"))}
+            {nextTask && isStarting(nextTask.id)
+                ? idleButton("next-task", words("starting"))
+                : nextTask
+                    ? chatButton("next-task", words("nextTask", { id: idOf(nextTask) }), () => startTask($, snapshot, nextTask, byName.get(nextTask.to)), { variant: "primary" })
+                    : idleButton("next-task-idle", words("nextTaskIdle"), busy ?? (isWorking ? words("busyTurn") : words("noneToStart")))}
             {nextProposal
-                ? <Button key="next-decision" label={words("nextDecision")} onPress={() => askChoice($, p, nextProposal)} />
+                ? chatButton("next-decision", words("nextDecision"), () => askChoice($, p, nextProposal))
                 : idleButton("next-decision-idle", words("nextDecision"), words("noneOpen"))}
-            <Button key="where-we-stand" label={words("whereWeStand")} onPress={() => submit($, words("promptWhereWeStand"))} />
+            {chatButton("where-we-stand", words("whereWeStand"), () => submit($, words("promptWhereWeStand")))}
             {snapshot.github && (!snapshot.github.tools || !snapshot.github.repo)
-                ? <Button key="github" label={words(snapshot.github.tools ? "githubButton" : "githubSetup")} onPress={() => submit($, "/project:github")} />
+                ? chatButton("github", words(snapshot.github.tools ? "githubButton" : "githubSetup"), () => submit($, "/project:github"))
                 : null}
-            <Button key="tidy-backlog" label={words("tidyBacklog")} onPress={() => submit($, words("promptTidyBacklog"))} />
-            <Button key="tidy-docs" label={words("tidyDocs")} onPress={() => submit($, words("promptTidy"))} />
+            {chatButton("tidy-backlog", words("tidyBacklog"), () => submit($, words("promptTidyBacklog")))}
+            {chatButton("tidy-docs", words("tidyDocs"), () => submit($, words("promptTidy")))}
         </Box>
     );
     const [links, documents] = linkSections($, p);
@@ -85,7 +85,7 @@ export async function drawPanel($: EngineInterface, e: RenderInput<"Pane">)
                     <Text dimColor wrap="truncate-end">{` · ${words("projectWord")}`}</Text>
                 </Box>
                 <Box flexDirection="row" flexShrink={0} columnGap={2} alignItems="center">
-                    <Button key="reload-plugins" plain dimColor label={words("reloadPlugins")} onPress={() => reloadPlugins($)} />
+                    {chatButton("reload-plugins", words("reloadPlugins"), () => reloadPlugins($), { plain: true, dimColor: true })}
                     <Link href={snapshot.page}>{words("openPage")}</Link>
                 </Box>
             </Box>

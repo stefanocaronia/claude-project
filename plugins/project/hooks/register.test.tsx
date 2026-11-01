@@ -556,6 +556,58 @@ test("a task added from the list to do, with its priority, type and large task, 
     await ui.unmount();
 });
 
+test("an open task shows its comments, each with who wrote it and when, and the user's own is added through the backlog's command", async ($, on) => {
+    const comments = [{ day: "2026-11-01", by: "Stefano", text: "Prima i dadi.\nPoi la mappa." }, { day: "2026-11-02", by: "Claude", text: "Fatto: vedi [la guida](https://a.io/g)." }];
+    const commented = { ...snapshot, tasks: snapshot.tasks.map((task) => (task.id === 80 ? { ...task, comments } : task)) };
+    const { runs } = world(on, [{ ...good, stdout: JSON.stringify(commented) }]);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    await ui.press({ key: "open-80" });
+    expect(await ui.find({ type: "Text", text: "Stefano · 2026-11-01" })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: "Claude · 2026-11-02" })).toBeDefined();
+    expect((await ui.find({ type: "Link", text: "la guida" }))?.props.href).toBe("https://a.io/g");
+    runs.length = 0;
+    await ui.input({ key: "comment-field-80-2", text: "  Anche il diario.\n" });
+    await ui.input({ key: "comment-field-80-2", text: "   " });
+    expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "comment", "T-80", "--by", "Stefano", "--", "Anche il diario."]]);
+    await ui.unmount();
+});
+
+test("while this chat's turn runs, the buttons that write to it wait, low and gray, with why; a colleague's turn leaves them; they come back when it ends", async ($, on) => {
+    const { prompts } = world(on);
+    // The engine beneath the turns: a start hands back its id, an end its answer.
+    on("turn.start", (_, e) => ({ turnId: e.turnId }));
+    on("turn.complete", () => ({ text: "" }));
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    const chatKeys = ["where-we-stand", "tidy-backlog", "tidy-docs", "reload-plugins"];
+    await $.turn.start({ text: "", turnId: "colleague", agentId: "a1" } as never);
+    expect(await ui.find({ type: "Button", key: "tidy-docs" })).toBeDefined();
+    await $.turn.start({ text: "lavora", turnId: "main" } as never);
+
+    for (const key of chatKeys) {
+        expect(await ui.find({ type: "Button", key })).toBeUndefined();
+        expect(await ui.find({ key: `${key}-idle` })).toBeDefined();
+    }
+
+    // One line high: a gray ground, no border, which would draw it three lines high.
+    expect((await ui.find({ key: "tidy-docs-idle" }))?.props).toMatchObject({ backgroundColor: expect.any(String) });
+    expect((await ui.find({ key: "tidy-docs-idle" }))?.props.borderStyle).toBeUndefined();
+    expect(await ui.find({ type: "Text", text: "Claude sta lavorando in questa chat: torna alla fine del turno" })).toBeDefined();
+    expect(await ui.find({ type: "Button", key: "start-61" })).toBeUndefined();
+    expect(await ui.find({ key: "idle-61" })).toBeDefined();
+    await $.turn.complete({ reason: "answer", turnId: "main", answer: "", durationMs: 1, isAborted: false } as never);
+
+    for (const key of chatKeys) {
+        expect(await ui.find({ type: "Button", key })).toBeDefined();
+    }
+
+    expect(await ui.find({ type: "Button", key: "start-61" })).toBeDefined();
+    await ui.press({ key: "where-we-stand" });
+    expect(prompts.length).toBe(1);
+    await ui.unmount();
+});
+
 test("on the mobile app, which draws no form, no button opens one: the rest of an open task stays", async ($, on) => {
     world(on);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);

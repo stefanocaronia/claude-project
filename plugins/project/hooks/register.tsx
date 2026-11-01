@@ -12,7 +12,7 @@ import { hold, holdNothing, letGo, thisChat } from "./holds.ts";
 import { drawPanel } from "./panel.tsx";
 import { refresh, watch } from "./project.ts";
 import { moveCited } from "./start.ts";
-import { readBoard, say } from "./state.ts";
+import { changeBoard, readBoard, say } from "./state.ts";
 
 const pane = "project";
 const command = "project-panel";
@@ -85,10 +85,24 @@ export const register: Register = (on) => {
         return result;
     });
 
+    // While this chat's own turn runs, the buttons that write to it wait: a prompt sent then would land in the middle of the work. A
+    // colleague's turn, a subagent's, is not this chat's.
+    on("turn.start", async ($, e, next) => {
+        if (e.agentId === undefined) {
+            await changeBoard($, (old) => ({ ...old, working: true })).catch(() => undefined);
+        }
+
+        return next(e);
+    });
+
     // The files are read again once a turn ends, Claude's or a colleague's, when one of them changed; a colleague who finished lets go
-    // of the tasks they held.
+    // of the tasks they held; this chat's own turn over, its buttons are back.
     on("turn.complete", async ($, e, next) => {
         const completed = await next(e);
+
+        if (e.agentId === undefined) {
+            await changeBoard($, (old) => ({ ...old, working: false })).catch(() => undefined);
+        }
 
         if (e.agentId) {
             await letGo($, e.agentId).catch(() => undefined);

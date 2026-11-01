@@ -110,14 +110,23 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
             : <Box key={key} flexShrink={0}>{href ? label : <Text color={color} dimColor={!color}>{`[${text}]`}</Text>}</Box>;
         return hint ? tip(key, hint, drawn) : drawn;
     };
-    // A button that cannot be pressed now keeps its place, drawn as the surface draws a button, dim, but no Button at all: no pointer,
-    // no focus, no press; its reason, when it has one, under the pointer.
-    const idleButton = (key: string, label: string, reason?: string) => {
-        const drawn = isDesktop
-            ? <Box key={key} flexShrink={0} borderStyle="round" borderColor={outline} paddingX={1}><Text color={idleColor}>{label}</Text></Box>
-            : <Box key={key} flexShrink={0}><Text color={idleColor}>{`[ ${label} ]`}</Text></Box>;
+    // A button that cannot be pressed now keeps its place, dim, but no Button at all: no pointer, no focus, no press; its reason, when it
+    // has one, under the pointer. On the desktop one line high, as its buttons are, on a gray ground (a border would draw it three lines
+    // high); `[ label ]` on the terminal; a plain one its label alone.
+    const idleButton = (key: string, label: string, reason?: string, isPlain = false) => {
+        const drawn = isPlain
+            ? <Box key={key} flexShrink={0}><Text color={idleColor}>{label}</Text></Box>
+            : isDesktop
+                ? <Box key={key} flexShrink={0} paddingX={1} backgroundColor={stateLayer}><Text color={idleColor}>{label}</Text></Box>
+                : <Box key={key} flexShrink={0}><Text color={idleColor}>{`[ ${label} ]`}</Text></Box>;
         return reason ? tip(key, reason, drawn) : drawn;
     };
+    // Whether this chat's own turn runs: the buttons that write to it wait until it ends.
+    const isWorking = Boolean(board.working);
+    // A button that writes to this chat, a prompt or a command: while its turn runs, idle in its place, «-idle» after its key.
+    const chatButton = (key: string, label: string, onPress: () => unknown, look: { variant?: "primary"; plain?: true; dimColor?: boolean } = {}) => (isWorking
+        ? idleButton(`${key}-idle`, label, words("busyTurn"), Boolean(look.plain))
+        : <Button key={key} label={label} onPress={() => void onPress()} {...look} />);
     // Who holds a task: Claude's critter, a colleague's portrait or initials, the owner's GitHub picture, a person's initials in gray.
     const face = (name: string, size: number) => {
         const member = byName.get(name) ?? (owner && name === owner.name ? { id: name, name, fullName: owner.fullName, role: "", color: "gray", portrait: owner.portrait } : undefined);
@@ -135,5 +144,5 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
         return Svg && drawn ? <Svg source={drawn} alt={priority} width={14} height={14} /> : <Text color={markOf(priority).color}>{markOf(priority).glyph}</Text>;
     };
 
-    return { Box, Text, Button, Link, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, isOpen, limited, isStarting, age, dueWords, rowText, linkedText, opener, card, section, more, tip, chip, idleButton, face, priorityIcon };
+    return { Box, Text, Button, Link, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, isOpen, limited, isStarting, age, dueWords, rowText, linkedText, opener, card, section, more, tip, chip, idleButton, isWorking, chatButton, face, priorityIcon };
 }

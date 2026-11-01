@@ -10,6 +10,7 @@
 //   node backlog.mjs issue-close T-12   (closes its GitHub issue with a comment: only on the user's yes)
 //   Where the issues are in sync (github: { issues: sync }), each change is followed by a sync with GitHub (issues.mjs).
 //   node backlog.mjs note T-12   (its note, written when missing: the path)
+//   node backlog.mjs comment T-12 [--by Stefano] -- "text"   (a comment on the task, kept in its note; show prints them)
 //   node backlog.mjs show T-12… | list [--atomic] [--state doing] [--to <name>] [--p P1] [--goal "…"] [--json] | find <words>… | goals
 //   node backlog.mjs export [--format json|csv|<an extension's>] [--state todo] [--all]   (the open tasks, or all of them, on stdout)
 //   node backlog.mjs import <file> [--format json|csv|<an extension's>] [--by <name>]   (new tasks, numbered here; all or none)
@@ -24,6 +25,7 @@ import { issueTask, lineTitle } from "../lib/issues.mjs";
 import { listOf, nestedParts, splitLinks, todoLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { formatTodo, parseTodo } from "../lib/todos.mjs";
+import { withComment } from "../lib/notes.mjs";
 import { effortWord, stateKeys } from "../lib/words.mjs";
 import { closeIssue, doneComment, ghLogin, readCode, readIssue, readIssues, readLogin } from "./code.mjs";
 import { context, loadExtensions } from "./extensions.mjs";
@@ -345,6 +347,16 @@ function execute(command, options, words, config, say)
         }
 
         console.log(shown(config, path));
+    } else if (command === "comment") {
+        // A person's words on a task, which Claude reads with it: in its note, written when missing. Who: --by, else the first person of
+        // the project who is not Claude.
+        const task = find(words[0]);
+        const text = words.slice(1).join(" ").trim() || fail(say("commentEmpty"));
+        const given = typeof options.by === "string" ? options.by.replace(/\s+/g, " ").replaceAll(" · ", " - ").trim() : "";
+        const by = given ? (assignees(config).find((name) => name.toLowerCase() === given.toLowerCase()) ?? given) : (config.people.find((person) => person !== "Claude") ?? "Claude");
+        const path = notePath(config, task.id);
+        writeDoc(config, path, withComment(existsSync(path) ? read(path) : `# ${prefix}-${task.id} · ${task.text}\n`, { day: today(), by, text }));
+        console.log(say("commentAdded", { id: `${prefix}-${task.id}`, path: shown(config, path) }));
     } else if (command === "show") {
         const shownTasks = words.map(find);
         const links = linksOf(tasks, config, say, stateName);
@@ -503,7 +515,7 @@ function linkErrors(task, all, config, say)
 }
 
 /** The lines `show` adds under a task: what it waits for and its state, what waits for it, the chain to do first, its links both
- * ways, its note. */
+ * ways, its note and the comments in it, whole. */
 function linksOf(tasks, config, say, stateName)
 {
     const prefix = config.prefixes.task;
@@ -515,7 +527,7 @@ function linksOf(tasks, config, say, stateName)
     const specTexts = new Map(readSpecs(config).specs.map((spec) => [`${config.prefixes.spec}-${spec.number}`, spec.text]));
 
     return (task) => {
-        const { after, chain, waitedBy, see, seenFrom, note, parent, parts, partsDone, nextPart, decisions, dueInfo, stale, specs } = links.get(task.id);
+        const { after, chain, waitedBy, see, seenFrom, note, comments, parent, parts, partsDone, nextPart, decisions, dueInfo, stale, specs } = links.get(task.id);
         return [
             ...specs.map((spec) => say("specOf", { id: spec, text: specTexts.get(spec) ?? "?" })),
             task.type ? say("typeLabel", { name: config.types[task.type] ?? task.type }) : null,
@@ -532,6 +544,7 @@ function linksOf(tasks, config, say, stateName)
             see.length > 0 ? say("seeLabel", { list: see.join(", ") }) : null,
             seenFrom.length > 0 ? say("seenFrom", { list: seenFrom.join(", ") }) : null,
             note ? say("noteLabel", { path: note }) : null,
+            ...comments.flatMap((comment) => [say("commentLabel", { by: comment.by, day: comment.day }), ...comment.text.split("\n").map((line) => `  ${line}`)]),
         ].filter(Boolean);
     };
 }

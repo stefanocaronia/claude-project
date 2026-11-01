@@ -125,6 +125,19 @@ test("a task's note is written once, in the notes folder, and show names it", ()
     assert.match(run("show", "T-2"), /note: docs\/tasks\/T-2\.md/);
 });
 
+test("a comment on a task goes in its note, the note's own text kept; show prints them whole, with who wrote them and when", () => {
+    const day = new Date().toLocaleDateString("sv-SE");
+    // Without --by, the project's first person who is not Claude; Claude by its name, in any case.
+    assert.match(run("comment", "T-2", "--", "Roll them twice?\nThe second counts."), /Comment added to T-2, in its note: docs\/tasks\/T-2\.md/);
+    run("comment", "T-2", "--by", "claude", "--", "--done, as asked");
+    assert.match(read("docs/tasks/T-2.md"), new RegExp(`Where it got to\\.\\n\\n## Comments\\n\\n### ${day} · Ann\\n\\nRoll them twice\\?\\nThe second counts\\.\\n\\n### ${day} · Claude\\n\\n--done, as asked\\n$`));
+    assert.match(run("show", "T-2"), new RegExp(`comment by Ann, ${day}:\\n {4}Roll them twice\\?\\n {4}The second counts\\.\\n  comment by Claude, ${day}:\\n {4}--done, as asked`));
+    // A task without a note has one written for its first comment; a comment without words is refused.
+    run("comment", "T-1", "--by", "Giulia", "--", "Seen in the review.");
+    assert.match(read("docs/tasks/T-1.md"), /^---\n[\s\S]*\n---\n\n# T-1 · [^\n]+\n\n## Comments\n\n### \d{4}-\d{2}-\d{2} · Giulia\n\nSeen in the review\.\n$/);
+    assert.match(fails("comment", "T-1", "--", "  "), /Give the comment's text/);
+});
+
 test("the check finds a cycle through a todo line, an after to a todo id nobody gave, a link to a missing task and an orphan note", () => {
     const tasks = read("docs/TASKS.md").replace("· the log", "· the log (after: #giulia-7) (see: T-50)").replace("· the rolls", "· the rolls (after: T-3)");
     writeFileSync(join(root, "docs/TASKS.md"), tasks);
@@ -193,6 +206,7 @@ async function pageChecks(port)
     const data = await (await fetch(`http://127.0.0.1:${port}/data`)).json();
     const two = data.board.find((task) => task.id === 2);
     assert.deepEqual([two.after, two.blockedBy, two.waitedBy, two.note, two.noteHref], [["T-3"], ["T-3"], [], "docs/tasks/T-2.md", "/note/2"]);
+    assert.deepEqual(two.comments.map(({ by, text }) => [by, text]), [["Ann", "Roll them twice?\nThe second counts."], ["Claude", "--done, as asked"]]);
     assert.deepEqual(data.board.find((task) => task.id === 3).see, ["T-50", "T-1"]);
 
     // Every document of the docs opens in the page: its address, its frontmatter's description; nothing outside the docs.

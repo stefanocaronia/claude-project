@@ -18,6 +18,7 @@ import { dueOf, isStale } from "../lib/schedule.mjs";
 import { compareVersions, messageSummary, parseRelease } from "../lib/release.mjs";
 import { contractState, contractValue } from "../lib/contracts.mjs";
 import { firstName, parseTodo } from "../lib/todos.mjs";
+import { parseComments } from "../lib/notes.mjs";
 
 // How long a change waits for the backlog's lock, and the age past which a lock left behind is taken over.
 const lockWait = 10_000;
@@ -342,6 +343,8 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
             waitedBy: waiters.get(id) ?? [],
             seenFrom: from.get(id) ?? [],
             note: notes.has(`${id}.md`) ? shown(config, notePath(config, task.id)) : null,
+            // The comments people left on it, in its note: { day, by, text }, the oldest first.
+            comments: notes.has(`${id}.md`) ? parseComments(read(notePath(config, task.id))) : [],
             decisions: decisions.get(id) ?? [],
             dueInfo: isClosed(task) ? null : dueOf(task.due, now),
             stale: isStale(task, Boolean(holds[String(task.id)]), now, config.limits.staleDays),

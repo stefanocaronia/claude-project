@@ -325,6 +325,12 @@ test("the page changes, adds and archives tasks through the backlog's command li
     const data = await (await fetch(`http://127.0.0.1:${port}/data`)).json();
     assert.deepEqual(data.board.map((task) => [task.id, task.state]).sort((first, second) => first[0] - second[0]), [[1, "doing"], [2, "archived"], [3, "done"], [4, "todo"], [5, "todo"], [6, "todo"]]);
     assert.equal(data.board.find((task) => task.id === 4).by, "C++");
+    // A comment from the page: its lines kept, the page's owner its author, read back on the task.
+    assert.equal((await post({ command: "comment", id: "T-4", text: "--done\r\nsul serio" })).ok, true);
+    assert.equal((await post({ command: "comment", id: "T-4", text: "   " })).ok, false);
+    assert.match(readFileSync(join(root, "docs/tasks/T-4.md"), "utf8"), /## Comments\n\n### \d{4}-\d{2}-\d{2} · C\+\+\n\n--done\nsul serio\n$/);
+    const commented = await (await fetch(`http://127.0.0.1:${port}/data`)).json();
+    assert.deepEqual(commented.board.find((task) => task.id === 4).comments.map(({ by, text }) => [by, text]), [["C++", "--done\nsul serio"]]);
     assert.equal(data.decisions.all[0].number, 1);
     // A task done or archived, taken up again: back in progress, out of the archive, without its day done.
     assert.equal((await post({ command: "start", id: "T-2" })).ok, true);

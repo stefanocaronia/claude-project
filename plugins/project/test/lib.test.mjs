@@ -10,6 +10,7 @@ import { firstName, formatTodo, parseTodo } from "../lib/todos.mjs";
 import { wordsOf } from "../lib/words.mjs";
 import { betterDescription, firstParagraph } from "../lib/frontmatter.mjs";
 import { linksIn } from "../lib/text.mjs";
+import { parseComments, withComment } from "../lib/notes.mjs";
 
 const it = wordsOf("it");
 const en = wordsOf("en");
@@ -218,6 +219,17 @@ test("a text's links: bare addresses and Markdown's links apart, the sentence ke
     assert.deepEqual(linksIn("[the guide](https://a.io/x_y) now"), [{ href: "https://a.io/x_y", label: "the guide" }, " now"]);
     assert.deepEqual(linksIn("(on https://en.wikipedia.org/wiki/Go_(game)), then"), ["(on ", { href: "https://en.wikipedia.org/wiki/Go_(game)", label: "https://en.wikipedia.org/wiki/Go_(game)" }, "), then"]);
     assert.deepEqual(linksIn("no link, ftp://old.io"), ["no link, ftp://old.io"]);
+});
+
+test("a note's comments: under their heading, the oldest first, each with its day and who wrote it; a line opening with # stays text", () => {
+    const own = "---\ntitle: T-3 · the dice\n---\n\n# T-3 · the dice\n\nWhere it got to.\n";
+    assert.deepEqual(parseComments(own), []);
+    const one = withComment(own, { day: "2026-11-01", by: "Ann", text: "Fair dice?\n# not a heading" });
+    assert.equal(one, `${own}\n## Comments\n\n### 2026-11-01 · Ann\n\nFair dice?\n\\# not a heading\n`);
+    // A section after the comments stays after them; a new comment goes at the end of theirs.
+    const two = withComment(`${one}\n## Tried\n\nloaded ones\n`, { day: "2026-11-02", by: "Claude", text: "Yes: tested 10 000 rolls." });
+    assert.match(two, /\\# not a heading\n\n### 2026-11-02 · Claude\n\nYes: tested 10 000 rolls\.\n\n## Tried\n\nloaded ones\n$/);
+    assert.deepEqual(parseComments(two), [{ day: "2026-11-01", by: "Ann", text: "Fair dice?\n# not a heading" }, { day: "2026-11-02", by: "Claude", text: "Yes: tested 10 000 rolls." }]);
 });
 
 test("paths resolve against a folder, absolute ones stay, and show relative to the root", () => {

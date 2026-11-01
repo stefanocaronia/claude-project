@@ -1,7 +1,7 @@
 // A task opened in its row: its whole text, then chips for what the row does not show (its goal, its days, its fields, its issue and
-// note), then a labeled row of chips for each tie (parts, waits, links both ways, decisions, specs, code). What the row shows already,
-// who holds it, its type, priority, effort and number, is not said again. Below, what can be done with it: done, postponed or back to
-// do, its text and fields written again, archived.
+// note), then a labeled row of chips for each tie (parts, waits, links both ways, decisions, specs, code), then the comments left on it
+// and a field for another. What the row shows already, who holds it, its type, priority, effort and number, is not said again. Below,
+// what can be done with it: done, postponed or back to do, its text and fields written again, archived.
 import type { EngineInterface } from "claude-code";
 
 import type { Pull, Task } from "../types";
@@ -17,7 +17,7 @@ const archiveAskFor = 4000;
 
 export function taskDetails($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Link, Input, Select, hasForms, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, dueWords, linkedText } = p;
+    const { Box, Text, Button, Link, Input, Select, hasForms, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, dueWords, linkedText, face, decider } = p;
     const choices = (values: string[]) => values.map((value) => ({ value, label: value }));
     const refColor = (id: string) => (id.startsWith(`${snapshot.prefixes.decision}-`) ? decisionColor : id.startsWith(`${prefix}-`) ? taskColor : undefined);
     // A labeled row of chips, none without one.
@@ -68,6 +68,30 @@ export function taskDetails($: EngineInterface, p: Panel)
                 ...(task.pulls ?? []).map((pull) => chip(`pull-${task.id}-${pull.number}`, `#${pull.number} ${pullState(pull)}`, pull.merged ? workColor : undefined, pull.url, pull.title)),
             ]),
             task.mergedPull ? <Text key={`merged-${task.id}`} color={workColor}>{`✓ ${words("mergedCanClose", { number: task.mergedPull.number })}`}</Text> : null,
+            ...comments(task),
+        ];
+    };
+    // The comments left on it, each with the face of who wrote it, and a field for another, the user's: a new field once it is in.
+    const comments = (task: Task) => {
+        const left = task.comments ?? [];
+        const send = (value: string) => {
+            const text = value.trim();
+
+            if (text) {
+                void backlog($, ["comment", idOf(task), ...(decider ? ["--by", decider] : []), "--", text]);
+            }
+        };
+        return [
+            ...left.map((comment, index) => (
+                <Box key={`comment-${task.id}-${index}`} flexDirection="row" gap={1}>
+                    <Box flexShrink={0}>{face(comment.by, 14)}</Box>
+                    <Box flexDirection="column" flexShrink={1} minWidth={0}>
+                        <Text dimColor>{`${comment.by} · ${comment.day}`}</Text>
+                        {linkedText(`comment-text-${task.id}-${index}`, comment.text)}
+                    </Box>
+                </Box>
+            )),
+            hasForms ? <Input key={`comment-field-${task.id}-${left.length}`} placeholder={words("commentHint")} rows={2} submitLabel={words("commentSend")} onSubmit={send} /> : null,
         ];
     };
     // Its text written again; its goal, who does it and the project's own fields, each changed at once by the backlog's command.

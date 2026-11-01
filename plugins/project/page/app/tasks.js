@@ -231,7 +231,7 @@ function waitOrAge(task)
 }
 
 /** A task's links in words, both ways, under its text: the large task it is a part of, what it waits for, what waits for it, what it
- * points to and what points to it; its note, which opens. Nothing when it has none. */
+ * points to and what points to it; its note, which opens; its comments, which its form shows. Nothing when it has none. */
 function taskLinks(task, isUnder = false)
 {
     const line = (label, list) => (list?.length ? `<span><b>${escape(label)}</b> ${escape(list.join(", "))}</span>` : "");
@@ -249,6 +249,7 @@ function taskLinks(task, isUnder = false)
         line(t("linkSee"), task.see),
         line(t("linkSeenFrom"), task.seenFrom),
         task.noteHref ? `<a href="${attribute(task.noteHref)}" target="_blank" rel="noopener">${escape(t("openNote"))}</a>` : "",
+        task.comments?.length ? `<button type="button" class="link-button" data-edit-task="${task.id}">${escape(t("commentsCount", task.comments.length))}</button>` : "",
         ...codeLinks(task),
     ].filter(Boolean);
     return parts.length > 0 ? `<div class="task-links">${parts.join("")}</div>` : "";

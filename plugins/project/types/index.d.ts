@@ -27,6 +27,8 @@ export type Task = {
     /** Its note's path from the project's root, and its address on the page; null without one. */
     note: string | null;
     noteHref: string | null;
+    /** The comments left on it, in its note, the oldest first: the user's, a colleague's, Claude's. */
+    comments?: { day: string; by: string; text: string }[];
     /** The large task it is a part of, `(in: T-23)`; or, for a large task, its parts, how many are closed and the next to start. */
     parent: string | null;
     parts: string[];
@@ -120,7 +122,8 @@ export type Snapshot = {
 export type Hold = { session: string; colleague: string | null; agentId: string | null };
 
 /** The panel's data, or why it has none; the holds of every chat of the project, by task number. */
-export type Board = { snapshot: Snapshot | null; problem: string | null; readAt: number; stamp: string; holds: Record<string, Hold>; session: string };
+/** The project as last read, every chat's holds and this chat's session; `working` while this chat's own turn runs. */
+export type Board = { snapshot: Snapshot | null; problem: string | null; readAt: number; stamp: string; holds: Record<string, Hold>; session: string; working?: boolean };
 
 /** What the user opened and closed: the sections, the one row open, the lists shown whole, the starts asked. */
 export type View = {
