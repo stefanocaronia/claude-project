@@ -9,6 +9,7 @@ import { closeGoal, planGoals, planPhases, planUpdated } from "../lib/plan.mjs";
 import { firstName, formatTodo, parseTodo } from "../lib/todos.mjs";
 import { wordsOf } from "../lib/words.mjs";
 import { betterDescription, firstParagraph } from "../lib/frontmatter.mjs";
+import { linksIn } from "../lib/text.mjs";
 
 const it = wordsOf("it");
 const en = wordsOf("en");
@@ -210,6 +211,13 @@ test("each project's page has a port of its own from its folder, the same every 
     assert.equal(readConfig("", "f:\\work\\engine\\").page.port, port);
     assert.notEqual(defaultPort("F:/work/other"), port);
     assert.equal(readConfig("page: { port: 5790 }\n", "F:/work/engine").page.port, 5790);
+});
+
+test("a text's links: bare addresses and Markdown's links apart, the sentence keeping its punctuation", () => {
+    assert.deepEqual(linksIn("see https://claude.com/docs/directory/publish."), ["see ", { href: "https://claude.com/docs/directory/publish", label: "https://claude.com/docs/directory/publish" }, "."]);
+    assert.deepEqual(linksIn("[the guide](https://a.io/x_y) now"), [{ href: "https://a.io/x_y", label: "the guide" }, " now"]);
+    assert.deepEqual(linksIn("(on https://en.wikipedia.org/wiki/Go_(game)), then"), ["(on ", { href: "https://en.wikipedia.org/wiki/Go_(game)", label: "https://en.wikipedia.org/wiki/Go_(game)" }, "), then"]);
+    assert.deepEqual(linksIn("no link, ftp://old.io"), ["no link, ftp://old.io"]);
 });
 
 test("paths resolve against a folder, absolute ones stay, and show relative to the root", () => {

@@ -2,6 +2,7 @@
 // left, and the pieces the parts share (a card, a section that opens and closes, a hint under the pointer, a chip, a face).
 import type { Elements, EngineInterface, RenderInput } from "claude-code";
 
+import { linksIn } from "../lib/text.mjs";
 import type { Board, Snapshot, Task, View } from "../types";
 
 import { cardTint, claudeSvg, faceSvg, idleColor, markOf, outline, prioritySvg, stateLayer, tooltipBackground, tooltipText } from "./draw.ts";
@@ -59,6 +60,12 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
     // A space that never breaks: "2 g" stays on one line.
     const age = (day: string | null) => (day ? words("days", { days: Math.max(0, Math.round((Date.parse(snapshot.today) - Date.parse(day)) / 86_400_000)) }).replace(" ", " ") : "");
     const dueWords = (due: NonNullable<Task["dueInfo"]>) => (due.isLate ? words("dueLate", { days: -due.days }) : due.days === 0 ? words("dueToday") : words("dueIn", { days: due.days }));
+    // A task's text on its row: its links' words in place of their addresses' markup.
+    const rowText = (text: string) => linksIn(text).map((part) => (typeof part === "string" ? part : part.label)).join("");
+    // A task's text once it is open: each link a link a click opens, whole, underscores and all.
+    const linkedText = (key: string, text: string) => (
+        <Text key={key}>{linksIn(text).map((part, at) => (typeof part === "string" ? part : <Link key={`${key}-link-${at}`} href={part.href} label={part.label} />))}</Text>
+    );
     // A row's title, which opens it in place and closes it again.
     const opener = (buttonKey: string, key: string, text: string, color?: string) => (
         <Button key={buttonKey} plain onPress={() => change((old) => ({ ...old, expanded: old.expanded === key ? null : key }))}>
@@ -128,5 +135,5 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
         return Svg && drawn ? <Svg source={drawn} alt={priority} width={14} height={14} /> : <Text color={markOf(priority).color}>{markOf(priority).glyph}</Text>;
     };
 
-    return { Box, Text, Button, Link, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, isOpen, limited, isStarting, age, dueWords, opener, card, section, more, tip, chip, idleButton, face, priorityIcon };
+    return { Box, Text, Button, Link, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, isOpen, limited, isStarting, age, dueWords, rowText, linkedText, opener, card, section, more, tip, chip, idleButton, face, priorityIcon };
 }

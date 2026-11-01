@@ -17,7 +17,7 @@ const archiveAskFor = 4000;
 
 export function taskDetails($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Link, Input, Select, hasForms, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, dueWords } = p;
+    const { Box, Text, Button, Link, Input, Select, hasForms, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, dueWords, linkedText } = p;
     const choices = (values: string[]) => values.map((value) => ({ value, label: value }));
     const refColor = (id: string) => (id.startsWith(`${snapshot.prefixes.decision}-`) ? decisionColor : id.startsWith(`${prefix}-`) ? taskColor : undefined);
     // A labeled row of chips, none without one.
@@ -50,7 +50,7 @@ export function taskDetails($: EngineInterface, p: Panel)
             task.noteHref ? chip(`note-chip-${task.id}`, words("openNote"), undefined, task.noteHref) : null,
         ].filter((one): one is JSX.Element => one !== null);
         return [
-            <Text key={`text-${task.id}`}>{task.text}</Text>,
+            linkedText(`text-${task.id}`, task.text),
             <Box key={`what-${task.id}`} flexDirection="row" flexWrap="wrap" gap={1}>{what}</Box>,
             ties("part-of", words("labelPartOf"), task.parent && !isPart ? [task.parent] : []),
             ties("parts", words("labelParts", { done: task.partsDone, total: (task.parts ?? []).length }), task.parts ?? []),

@@ -7,7 +7,7 @@ import type { Panel } from "./kit.tsx";
 
 export function goalSection(p: Panel, start: (task: Task) => JSX.Element | null)
 {
-    const { Box, Text, Link, Svg, isDesktop, snapshot, view, words, idOf, opener, card, section, more, limited, face, priorityIcon } = p;
+    const { Box, Text, Link, Svg, isDesktop, snapshot, view, words, idOf, rowText, opener, card, section, more, limited, face, priorityIcon } = p;
     const openGoals = snapshot.plan.goals.filter((goal) => !goal.closed);
     const closedGoals = snapshot.plan.goals.length - openGoals.length;
     const shown = limited("goals", openGoals);
@@ -86,7 +86,7 @@ export function goalSection(p: Panel, start: (task: Task) => JSX.Element | null)
                                     {face(task.to, 18)}
                                     {priorityIcon(task.priority)}
                                     <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
-                                        <Text wrap="truncate-end" color={task.state === "doing" ? workColor : undefined}>{`${idOf(task)} ${task.text}`}</Text>
+                                        <Text wrap="truncate-end" color={task.state === "doing" ? workColor : undefined}>{`${idOf(task)} ${rowText(task.text)}`}</Text>
                                     </Box>
                                     {start(task)}
                                 </Box>

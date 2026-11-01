@@ -6,6 +6,35 @@ export function escapeRegex(text)
     return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** A text's web addresses apart from the words around them, so that each can be drawn as a link: Markdown's [words](https://…) and bare
+ * http(s) addresses, which leave to the sentence the punctuation that ends it and a parenthesis they did not open. As Crew's.
+ * @param {string} text
+ * @returns {(string | { href: string, label: string })[]}
+ */
+export function linksIn(text)
+{
+    const parts = [];
+    let last = 0;
+
+    for (const match of text.matchAll(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s<>"'`]+/g)) {
+        const [whole, label, linked] = match;
+        let href = linked ?? whole.replace(/[.,;:!?»"'\]}]+$/, "");
+
+        while (!linked && href.endsWith(")") && (href.match(/\(/g)?.length ?? 0) < (href.match(/\)/g)?.length ?? 0)) {
+            href = href.slice(0, -1).replace(/[.,;:!?»"'\]}]+$/, "");
+        }
+
+        if (match.index > last) {
+            parts.push(text.slice(last, match.index));
+        }
+
+        parts.push({ href, label: label ?? href });
+        last = match.index + (linked ? whole.length : href.length);
+    }
+
+    return last < text.length ? [...parts, text.slice(last)] : parts;
+}
+
 /** A text as words are compared: lower case, without accents. */
 export function plain(text)
 {

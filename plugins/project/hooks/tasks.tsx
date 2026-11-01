@@ -22,7 +22,7 @@ let newText = "";
 
 export function taskLists($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, limited, isStarting, age, dueWords, opener, card, section, more, tip, face, priorityIcon } = p;
+    const { Box, Text, Button, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, limited, isStarting, age, dueWords, rowText, opener, card, section, more, tip, face, priorityIcon } = p;
     const details = taskDetails($, p);
     const indent = isDesktop ? 4 : 2;
     // A part shows under its large task, whatever its state; on its own only when its large task is not open.
@@ -174,7 +174,7 @@ export function taskLists($: EngineInterface, p: Panel)
             <Box flexShrink={0}><Text color={taskColor} bold>{idOf(task)}</Text></Box>
             {task.issueInfo?.another ? <Text key={`another-${task.id}`} color={warningColor}>⚠</Text> : null}
             <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
-                {opener(`open-${task.id}`, `task-${task.id}`, task.text)}
+                {opener(`open-${task.id}`, `task-${task.id}`, rowText(task.text))}
             </Box>
             {ageOrWait(task)}
             {effortCell(task)}
@@ -199,7 +199,7 @@ export function taskLists($: EngineInterface, p: Panel)
                     {typeMark(part)}
                     <Box flexShrink={0}><Text color={workColor}>✓</Text></Box>
                     <Box flexShrink={0}><Text color={taskColor} dimColor>{idOf(part)}</Text></Box>
-                    <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden"><Text dimColor strikethrough wrap="truncate-end">{part.text}</Text></Box>
+                    <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden"><Text dimColor strikethrough wrap="truncate-end">{rowText(part.text)}</Text></Box>
                 </Box>
             )),
             ...open.map((part) => <Box key={`part-${part.id}`} flexDirection="column" paddingLeft={indent}>{taskLines(part, true)}</Box>),

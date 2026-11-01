@@ -649,6 +649,21 @@ test("a project without Crew: no colleague, every task Claude's or a person's, a
     await ui.unmount();
 });
 
+test("a task's links: their words on its row, each a link once it is open, whole, underscores and all", async ($, on) => {
+    const text = "Leggi [la guida](https://claude.com/docs/directory/publish) e https://example.com/a_b_c.";
+    const linked = { ...snapshot, tasks: snapshot.tasks.map((task) => (task.id === 61 ? { ...task, text } : task)) };
+    world(on, [{ exitCode: 0, stdout: JSON.stringify(linked), stderr: "" }]);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    expect(await ui.find({ type: "Text", text: "▸ Leggi la guida e https://example.com/a_b_c." })).toBeDefined();
+    // The task's own links, among the panel's others (the documents, the issues).
+    const links = async () => (await ui.findAll({ type: "Link" })).map((link) => [(link.props as { href: string }).href, (link.props as { label?: string }).label]).filter(([href]) => /claude\.com\/docs|example\.com/.test(String(href)));
+    expect(await links()).toEqual([]);
+    await ui.press({ key: "open-61" });
+    expect(await links()).toEqual([["https://claude.com/docs/directory/publish", "la guida"], ["https://example.com/a_b_c", "https://example.com/a_b_c"]]);
+    await ui.unmount();
+});
+
 test("a ▶ that cannot be pressed stays in its place, gray, with its reason", async ($, on) => {
     world(on);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
