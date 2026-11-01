@@ -764,9 +764,9 @@ async function linkOf(ui: { find: (query: object) => Promise<{ props: { href?: s
     return ui.find({ type: "Link", text });
 }
 
-/** A section's heading: its drawing's words on the desktop, its button's label on the terminal. */
+/** A section's heading: its drawing's words on the desktop, the arrow its button, its button's label on the terminal. */
 async function headingOf(ui: { find: (query: object) => Promise<{ props: Record<string, unknown> } | undefined>; findAll: (query: object) => Promise<{ props: Record<string, unknown> }[]> }, key: string)
 {
-    const label = String((await ui.find({ key }))?.props.label ?? "");
-    return label.trim() !== "" ? label : (await ui.findAll({ type: "Svg" })).find((one) => String(one.props.source ?? "").includes(`<desc>${key}</desc>`))?.props.alt;
+    const drawn = (await ui.findAll({ type: "Svg" })).find((one) => String(one.props.source ?? "").includes(`<desc>${key}</desc>`));
+    return drawn ? drawn.props.alt : (await ui.find({ key }))?.props.label;
 }

@@ -11,8 +11,9 @@ import { changeView, say } from "./state.ts";
 
 // The sections open at the start: all but the postponed tasks.
 // A button's label of blanks, about as wide as the drawing it lies over and never wider, with the room the button keeps around its label:
-// a label too wide for its room ends in an ellipsis, so the button is given no width of its own.
-const blanks = (width: number) => " ".repeat(Math.max(1, Math.floor((width - 24) / 5)));
+// a label too wide for its room ends in an ellipsis, so the button is given no width of its own. A blank of the desktop's button is
+// about 3.6 px and it keeps 24 around its label: its ground, under the pointer, then covers the drawing.
+const blanks = (width: number) => " ".repeat(Math.max(1, Math.floor((width - 24) / 3.8)));
 const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, goals: true, decisions: true, specs: true, releases: true };
 // How many rows a list shows before "show all".
 const rows: Record<string, number> = { doing: 5, rest: 10, postponed: 5, issues: 5, goals: 5, open: 3 };
@@ -82,21 +83,20 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
         </Box>
     );
     // A section: its heading, which opens and closes it, and what it holds, one row of room between them. On the desktop the heading is a
-    // drawing, larger and bold, so that it stands apart from what the section holds, with a button of blanks over it.
+    // drawing, larger and bold, so that it stands apart from what the section holds; the arrow before it opens and closes it, as a
+    // desktop's button lights its ground under the pointer and a heading has no reason to.
     const section = (key: string, icon: string, title: string, items: (JSX.Element | null)[], after: JSX.Element | null = null) => {
         const label = `${isOpen(key) ? "▾" : "▸"} ${icon} ${title}`;
         const toggle = () => change((old) => ({ ...old, sections: { ...old.sections, [key]: !openIn(old, key) } }));
-        const heading = Svg ? headingSvg(label, `toggle-${key}`) : null;
+        const heading = Svg ? headingSvg(`${icon} ${title}`, `toggle-${key}`) : null;
         return (
             <Box key={key} flexDirection="column" gap={1}>
                 <Box flexDirection="row" flexWrap="nowrap" justifyContent="space-between" alignItems="center">
                     {Svg && heading
                         ? (
-                            <Box key={`heading-${key}`} flexShrink={1} minWidth={0}>
+                            <Box key={`heading-${key}`} flexDirection="row" alignItems="center" columnGap={1} flexShrink={1} minWidth={0}>
+                                <Button key={`toggle-${key}`} plain label={isOpen(key) ? "▾" : "▸"} onPress={() => void toggle()} />
                                 <Svg source={heading.source} alt={label} width={heading.width} height={heading.height} />
-                                <Box position="absolute" top={0} left={0}>
-                                    <Button key={`toggle-${key}`} plain label={blanks(heading.width)} onPress={() => void toggle()} />
-                                </Box>
                             </Box>
                         )
                         : <Button key={`toggle-${key}`} plain label={label} onPress={() => void toggle()} />}

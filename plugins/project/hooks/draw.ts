@@ -131,7 +131,7 @@ const chipPad = 4;
 export function headingSvg(label: string, name: string): { source: string; width: number; height: number }
 {
     const size = 17;
-    const height = 26;
+    const height = 24;
     const width = Math.ceil(labelWidth(label) * size * 1.08) + 4;
     const style = "<style>.h{fill:#1f1f1d}@media (prefers-color-scheme: dark){.h{fill:#f1f1ee}}</style>";
     const body = `<desc>${xml(name)}</desc>${style}<text class="h" x="0" y="${height / 2}" dominant-baseline="central" font-family="${font}" font-size="${size}" font-weight="600">${xml(label)}</text>`;
