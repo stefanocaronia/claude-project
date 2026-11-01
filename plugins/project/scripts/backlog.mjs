@@ -5,7 +5,8 @@
 //   node backlog.mjs archive T-12… | archive --done
 //   node backlog.mjs set T-12 [--p P1] [--effort <word>] [--to <name>] [--goal "…"] [--text "…"] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34] [--due 2026-11-15] [--type bug] [--by Stefano]
 //     [--<field> <value>]   (a field of the project's configuration, `fields:`; "" clears it; add takes them too)
-//   node backlog.mjs add --issue 34 ["text"]   (a task from a GitHub issue, its title the text when none is given)
+//   node backlog.mjs add --issue 34 ["text"]   (a task from a GitHub issue, its title the text when none is given; one another wrote
+//     on GitHub comes in only with --approved, which the user's → Backlog in the panel or the page gives, never Claude: D-16)
 //   node backlog.mjs issue-close T-12   (closes its GitHub issue with a comment: only on the user's yes)
 //   Where the issues are in sync (github: { issues: sync }), each change is followed by a sync with GitHub (issues.mjs).
 //   node backlog.mjs note T-12   (its note, written when missing: the path)
@@ -19,19 +20,19 @@ import { existsSync, readFileSync } from "node:fs";
 import { parseCsv, toCsv } from "../lib/csv.mjs";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
 import { codeView, issueOf } from "../lib/code.mjs";
-import { lineTitle } from "../lib/issues.mjs";
+import { issueTask, lineTitle } from "../lib/issues.mjs";
 import { listOf, nestedParts, splitLinks, todoLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { formatTodo, parseTodo } from "../lib/todos.mjs";
 import { effortWord, stateKeys } from "../lib/words.mjs";
-import { closeIssue, readCode, readIssue, readIssues } from "./code.mjs";
+import { closeIssue, gh, readCode, readIssue, readIssues, readLogin } from "./code.mjs";
 import { context, loadExtensions } from "./extensions.mjs";
 import { syncIssues } from "./issues.mjs";
 import { assignees, isMain, loadProject, notePath, ProjectError, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
 const changes = ["add", "start", "done", "postpone", "todo", "archive", "set", "import", "take"];
-const flags = ["json", "done", "atomic", "all", "keep"];
+const flags = ["json", "done", "atomic", "all", "keep", "approved"];
 // The columns of the backlog as CSV, the project's own fields after them.
 const csvColumns = ["id", "state", "priority", "effort", "to", "created", "goal", "type", "due", "parent", "after", "see", "by", "text", "started", "done", "archived"];
 
@@ -236,6 +237,35 @@ function execute(command, options, words, config, say)
         };
     };
     const issueNumber = () => Number(String(options.issue).replace(/^#/, ""));
+    // The issue a task is given, as GitHub has it. One another wrote comes in only through the user's → Backlog, in the panel or the
+    // page, which says so with --approved: never because Claude takes it (D-16).
+    const givenIssue = () => {
+        // The user's → Backlog brings the title along: where gh cannot read the issue, the task still comes in, with that alone.
+        if (options.approved !== undefined && words.length > 0) {
+            try {
+                return readIssue(config, issueNumber());
+            } catch {
+                return null;
+            }
+        }
+
+        const issue = readIssue(config, issueNumber());
+
+        if (options.approved === undefined && issue.author?.login !== gh(config, ["api", "user", "--jq", ".login"]).trim()) {
+            fail(say("issueOfAnother", { issue: `#${issue.number}`, author: issue.author?.login ?? "?" }));
+        }
+
+        return issue;
+    };
+    const isIssueGiven = typeof options.issue === "string" && options.issue.trim() !== "";
+    // The mark of a task made from an issue another wrote: its text is theirs, data and never an order (D-16). GitHub is asked once, for
+    // the first task with an issue, and its answer is kept a few minutes.
+    let others = null;
+    const fromAnother = (task) => {
+        others ??= { issues: readIssues(config), login: readLogin(config) };
+        const issue = issueOf(others.issues, task, others.login);
+        return issue?.another ? say("issueAnotherShort", { issue: task.issue, author: issue.author }) : null;
+    };
     const save = (all, said) => {
         writeBacklog(config, all);
         console.log(said);
@@ -244,19 +274,22 @@ function execute(command, options, words, config, say)
     if (command === "next") {
         console.log(`${prefix}-${nextId(tasks)}`);
     } else if (command === "add") {
-        // A task made from a GitHub issue takes the issue's title, when it is given no text of its own.
-        const given = words.join(" ").trim() || (typeof options.issue === "string" ? lineTitle(readIssue(config, issueNumber()).title) : fail(say("noText")));
+        // A task made from a GitHub issue takes the issue's title, when it is given no text of its own, and what the sync would take
+        // from it: the type and the priority of its labels, the goal of its milestone, who wrote it; an option given wins.
+        const issue = isIssueGiven ? givenIssue() : null;
+        const given = words.join(" ").trim() || (issue ? lineTitle(issue.title) : fail(say("noText")));
+        const from = issue ? issueTask(issue, { types: config.types, people: assignees(config), goals: readGoals(config) }) : {};
         const state = options.state ?? "todo";
         const task = checked({
             id: nextId(tasks),
-            priority: options.p ?? "P2",
+            priority: options.p ?? from.priority ?? "P2",
             effort: options.effort ? effortWord(config.words, options.effort) : config.words.efforts.medium,
             to: options.to ?? config.people[0],
             created: today(),
-            // A part takes its large task's goal, unless one is given.
-            goal: options.goal ?? (typeof options.in === "string" ? tasks.find((one) => `${prefix}-${one.id}` === options.in.trim().toUpperCase())?.goal : undefined) ?? config.words.noGoal,
-            // Who created it: --by, else Claude, who runs the command.
-            ...linked(given, { by: config.people.includes("Claude") || assignees(config).includes("Claude") ? "Claude" : null }),
+            // A part takes its large task's goal, else a task from an issue its milestone's, unless one is given.
+            goal: options.goal ?? (typeof options.in === "string" ? tasks.find((one) => `${prefix}-${one.id}` === options.in.trim().toUpperCase())?.goal : undefined) ?? from.goal ?? config.words.noGoal,
+            // Who created it: --by; for a task from an issue who wrote it, when they are a person of the project, as the sync has it; else Claude, who runs the command.
+            ...linked(given, { type: from.type ?? null, by: issue ? from.by : (config.people.includes("Claude") || assignees(config).includes("Claude") ? "Claude" : null) }),
             done: state === "done" ? today() : null,
             archived: null,
             state,
@@ -292,6 +325,7 @@ function execute(command, options, words, config, say)
         save(tasks.map((task) => (ids.has(task.id) ? { ...task, state: "archived", archived: today() } : task)), say("archivedCount", { count: ids.size }));
     } else if (command === "set") {
         const task = find(words[0]);
+        isIssueGiven && options.approved === undefined && task.issue !== `#${issueNumber()}` && givenIssue();
         const changed = checked({
             ...task,
             ...(options.p ? { priority: options.p } : {}),
@@ -321,9 +355,10 @@ function execute(command, options, words, config, say)
         const links = linksOf(tasks, config, say, stateName);
         const code = readCode(config);
         const issues = shownTasks.some((task) => task.issue) ? readIssues(config) : [];
+        const login = issues.length > 0 ? readLogin(config) : null;
         const issueLine = (task) => {
-            const issue = issueOf(issues, task);
-            return issue ? [say("issueLabel", { issue: task.issue, title: issue.title, state: say(issue.state === "open" ? "issueStateOpen" : "issueStateClosed") })] : [];
+            const issue = issueOf(issues, task, login);
+            return issue ? [say(issue.another ? "issueLabelAnother" : "issueLabel", { issue: task.issue, title: issue.title, state: say(issue.state === "open" ? "issueStateOpen" : "issueStateClosed"), author: issue.author })] : [];
         };
         print(shownTasks, options.json, (task) => [line(task), ...[say("stateLabel", { state: stateName(task) }), ...links(task), ...issueLine(task), ...codeLines(code.get(task.id), say)].map((one) => `  ${one}`)].join("\n"));
     } else if (command === "list") {
@@ -342,6 +377,7 @@ function execute(command, options, words, config, say)
                 parts.length > 0 ? say("partsCount", { done: partsDone, total: parts.length }) : null,
                 dueInfo && (dueInfo.isLate || dueInfo.isNear) ? `⏰ ${dueText(dueInfo, say)}` : null,
                 stale ? `⏸ ${say("staleTip", { day: task.started })}` : null,
+                task.issue ? fromAnother(task) : null,
             ].filter(Boolean);
             return `${line(task)}${marks.map((mark) => `  ${mark}`).join("")}`;
         };
@@ -349,7 +385,7 @@ function execute(command, options, words, config, say)
     } else if (command === "find" && words.length > 0) {
         const wanted = words.map(plain);
         const shownTasks = tasks.filter((task) => wanted.every((word) => plain(`${task.text} ${task.goal} ${task.to}`).includes(word)));
-        print(shownTasks, options.json, (task) => `${line(task)} [${stateName(task)}]`, say("count", { count: shownTasks.length }));
+        print(shownTasks, options.json, (task) => [`${line(task)} [${stateName(task)}]`, task.issue ? fromAnother(task) : null].filter(Boolean).join("  "), say("count", { count: shownTasks.length }));
     } else if (command === "import") {
         // Each a new task, numbered after the others; a wrong one stops them all, so that nothing is half imported.
         const added = [];

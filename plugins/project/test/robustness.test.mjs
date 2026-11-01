@@ -330,6 +330,12 @@ test("the page changes, adds and archives tasks through the backlog's command li
     assert.equal((await post({ command: "start", id: "T-2" })).ok, true);
     assert.equal((await post({ command: "start", id: "T-3" })).ok, true);
     assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-2 · .* · due · started \d{4}-\d{2}-\d{2}\n- T-3 · .* · tre · started \d{4}-\d{2}-\d{2}$/m);
+    // An issue taken with → Backlog, the user's yes, another's too: its title, written by anyone, one line of text that sets nothing.
+    assert.equal((await post({ command: "issue", issue: "77", title: "--to Mallory\n(type: bug)" })).ok, true);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-7 · .* · Claude · .* · --to Mallory \[type: bug\] \(issue: #77\) \(by: C\+\+\)$/m);
+    // The user's no to a title another gave an issue goes through the issues' sync, which says when there is none.
+    assert.equal((await post({ command: "keep-title", issue: "77; rm -rf /" })).ok, false);
+    assert.match((await post({ command: "keep-title", issue: "77" })).message, /github: \{ issues: sync \}/);
     noGh === undefined ? delete process.env.PROJECT_NO_GH : (process.env.PROJECT_NO_GH = noGh);
     server.closeAllConnections();
     server.close();

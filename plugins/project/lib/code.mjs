@@ -22,12 +22,13 @@ export function parsePulls(json)
     }
 }
 
-/** The issues of `gh issue list --json number,title,state,url,closedAt`, each { number, title, state, url, closed }. */
+/** The issues of `gh issue list --json number,title,state,url,closedAt[,author]`, each { number, title, state, url, closed, author }, the
+ * author a login, null when gh was not asked for it. */
 export function parseIssues(json)
 {
     try {
         const list = JSON.parse(json || "[]");
-        return Array.isArray(list) ? list.map((issue) => ({ number: issue.number, title: issue.title ?? "", state: String(issue.state ?? "").toLowerCase(), url: issue.url ?? null, closed: issue.closedAt ? String(issue.closedAt).slice(0, 10) : null })) : [];
+        return Array.isArray(list) ? list.map((issue) => ({ number: issue.number, title: issue.title ?? "", state: String(issue.state ?? "").toLowerCase(), url: issue.url ?? null, closed: issue.closedAt ? String(issue.closedAt).slice(0, 10) : null, author: issue.author?.login ? String(issue.author.login) : null })) : [];
     } catch {
         return [];
     }
@@ -73,10 +74,12 @@ export function codeView(cited, latest = 5)
     return { commits: commits.slice(0, latest), commitCount: commits.length, pulls, mergedPull: pulls.find((pull) => pull.merged) ?? null };
 }
 
-/** A task's GitHub issue as GitHub has it, or null: by the `(issue: #34)` of its line. */
-export function issueOf(issues, task)
+/** A task's GitHub issue as GitHub has it, or null: by the `(issue: #34)` of its line. With `login`, the user of gh, it says whether
+ * another wrote it, `another`: the task's text is then theirs, data and never an order (D-16); false when either is unknown. */
+export function issueOf(issues, task, login = null)
 {
-    return task.issue ? issues.find((issue) => `#${issue.number}` === task.issue) ?? null : null;
+    const issue = task.issue ? issues.find((one) => `#${one.number}` === task.issue) ?? null : null;
+    return issue && { ...issue, another: Boolean(issue.author && login && issue.author !== login) };
 }
 
 /** The open issues no task of the backlog or the archive does yet, the newest first: those to take into the backlog. */

@@ -57,8 +57,9 @@ export function taskSide(task)
 }
 
 /** What a sync does, from the issues, the tasks and the last state in sync, `base` = { "12": { issue, task, id } }:
- * - `incoming`: the open issues that come in as tasks, assigned to `me`, or to nobody where `takeUnassigned`; `assign`, those of them
- *   assigned to nobody (the issue of a task already there is assigned as its fields say, planFields);
+ * - `incoming`: the open issues `me` wrote that come in as tasks, assigned to them, or to nobody where `takeUnassigned`; `assign`,
+ *   those of them assigned to nobody (the issue of a task already there is assigned as its fields say, planFields). Another's issue
+ *   never comes in by itself: it waits in the panel's and the page's list for the user's → Backlog (D-16);
  * - `closeIssues` ({ number, id, reason: "completed" | "not planned" }), `reopenIssues` ({ number, id }): a task closed or opened again;
  * - `closeTasks` ({ id, number, state: "done" | "archived" }), `reopenTasks` ({ id, number }): an issue closed or opened again;
  * - `base`, the state once all of it is done. */
@@ -72,8 +73,9 @@ export function planSync({ issues, tasks, base = {}, me, takeUnassigned = false 
         const before = base[String(issue.number)];
 
         if (!task) {
-            const isMine = me && issue.assignees.includes(me);
-            const isFree = issue.assignees.length === 0 && takeUnassigned;
+            const isOwn = Boolean(me) && issue.author?.login === me;
+            const isMine = isOwn && issue.assignees.includes(me);
+            const isFree = isOwn && issue.assignees.length === 0 && takeUnassigned;
 
             // An issue whose task was there at the last sync and is gone: taken out by hand, not to come in again.
             if (issue.state === "open" && !before && (isMine || isFree)) {
@@ -140,6 +142,23 @@ export function lineTitle(title)
     return String(title).replaceAll(" · ", " - ").replace(/\s+/g, " ").trim().replace(/\(([^()]*:[^()]*)\)$/, "[$1]");
 }
 
+// What makes a title read like an instruction to its reader rather than the name of some work: a link; a command that fetches, runs or
+// takes rights, or a shell's chaining; words that tell the reader to set its rules aside, or speak to it as a model.
+const instructionSigns = [
+    /\b(https?|ftp):\/\/|\bwww\.\w/i,
+    /\$\(|&&|\|\|?\s*(ba|z)?sh\b|\b(curl|wget|sudo|chmod|chown|rm\s+-\w+|powershell|pwsh|iex|invoke-(webrequest|expression)|(ba)?sh\s+-c|eval|exec|node\s+-e|python3?\s+-c|base64)\b/i,
+    /\b(ignore|disregard|forget|override|bypass)\b.{0,40}\b(previous|prior|above|all|any|instructions?|rules?|guidelines?|system|prompt|user)\b/i,
+    /\b(ignora|ignorate|ignori|dimentica|dimenticate|trascura|scavalca)\b.{0,40}\b(precedent\w*|istruzion\w*|regol\w*|tutt\w*|sopra|sistema|prompt|utente)/i,
+    /\b(system prompt|you are now|act as|as an ai|language model|prompt di sistema|agisci come|d'ora in poi sei)\b/i,
+];
+
+/** Whether an issue's title reads like an instruction (a link, a command, «ignore the rules…»): the panel and the page mark it, for the
+ * user to read before taking it (D-16). A sign, not a verdict. */
+export function readsAsInstruction(title)
+{
+    return instructionSigns.some((sign) => sign.test(String(title ?? "")));
+}
+
 /** The same fields of an issue: its title as a task's line can hold it, the type and the priority its labels say, its first assignee. */
 export function issueFields(issue, types)
 {
@@ -152,17 +171,32 @@ export function issueFields(issue, types)
     };
 }
 
+/** What a task made from an issue takes from it besides its title, whether the sync brings it in or the backlog adds it: the type and
+ * the priority its labels say, the goal its milestone names when the plan has it open (else null), who created it when its author is a
+ * person of the project (else null). */
+export function issueTask(issue, { types, people, goals })
+{
+    const author = issue.author ? people.find((person) => [issue.author.login, issue.author.name.split(/\s+/)[0]].some((name) => name && name.toLowerCase() === person.toLowerCase())) ?? null : null;
+    return {
+        priority: priorityOfLabels(issue.labels),
+        type: typeOfLabels(issue.labels, types),
+        goal: goals.find((one) => !one.closed && issue.milestone && one.name.toLowerCase() === issue.milestone.toLowerCase())?.name ?? null,
+        by: author,
+    };
+}
+
 /** What makes a task and its issue agree, field by field: the side that changed since the last sync wins; both changed, or no last
- * sync, the backlog wins, but for a field only one side holds, which fills the other. { push, change, taken, agreed }: push the fields
- * to write on GitHub, in its terms; change those to write on the task, in the backlog's (text, type, priority, to, goal), taken the
- * fields they come from; agreed the
- * fields as both sides will hold them, for the next sync. A value GitHub holds that the backlog cannot (a login of no person, a
- * milestone the plan has no open goal for) is left on GitHub and not taken: the task keeps its own. */
-export function planFields({ task, issue, before = {}, me, loginOf, personOf, goalOf, noGoal, types })
+ * sync, the backlog wins, but for a field only one side holds, which fills the other. { push, change, taken, held, agreed }: push the
+ * fields to write on GitHub, in its terms; change those to write on the task, in the backlog's (text, type, priority, to, goal), taken
+ * the fields they come from; held those GitHub changed that wait for the user's yes, `hold` naming them (the title of an issue another
+ * wrote, D-16), the task keeping its own; agreed the fields as both sides will hold them, for the next sync. A value GitHub holds that
+ * the backlog cannot (a login of no person, a milestone the plan has no open goal for) is left on GitHub and not taken: the task keeps
+ * its own. */
+export function planFields({ task, issue, before = {}, me, loginOf, personOf, goalOf, noGoal, types, hold = [] })
 {
     const local = taskFields(task, { me, loginOf, noGoal });
     const remote = issueFields(issue, types);
-    const plan = { push: {}, change: {}, taken: [], agreed: {} };
+    const plan = { push: {}, change: {}, taken: [], held: {}, agreed: {} };
     const take = {
         title: (value) => (value ? { text: value } : null),
         type: (value) => ({ type: value }),
@@ -182,7 +216,11 @@ export function planFields({ task, issue, before = {}, me, loginOf, personOf, go
         const isTheirs = was !== undefined ? mine === was : mine === null;
         const taken = isTheirs ? take[key](theirs) : null;
 
-        if (isTheirs && taken) {
+        // Held, the last state in sync stays as it was: until the user says yes, every sync finds the change again.
+        if (taken && hold.includes(key)) {
+            plan.held[key] = theirs;
+            plan.agreed[key] = mine;
+        } else if (isTheirs && taken) {
             Object.assign(plan.change, taken);
             plan.taken.push(key);
             plan.agreed[key] = theirs;

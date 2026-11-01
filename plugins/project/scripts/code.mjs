@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { citationsOf, parseIssues, parseLog, parsePulls, repoUrl } from "../lib/code.mjs";
+import { parseSyncIssues } from "../lib/issues.mjs";
 import { git, projectRepos, ProjectError } from "./project.mjs";
 
 // How many commits of each repo are read, the newest; how long a reading of gh holds.
@@ -23,16 +24,30 @@ export function readCode(config)
     return citationsOf(repos, parsePulls(ghCached(config, "pulls", ["pr", "list", "--state", "all", "--limit", "200", "--json", "number,title,body,state,url,mergedAt"])), config.prefixes.task, [basename(config.root)]);
 }
 
-/** The project's GitHub issues, open and closed, each { number, title, state, url, closed }; none without gh. */
+// What gh is asked of the user it is signed in as.
+const userArgs = ["api", "user", "--jq", "{name: .name, login: .login, avatar: .avatar_url}"];
+
+/** The project's GitHub issues, open and closed, each { number, title, state, url, closed, author }; none without gh. */
 export function readIssues(config)
 {
-    return parseIssues(ghCached(config, "issues", ["issue", "list", "--state", "all", "--limit", "300", "--json", "number,title,state,url,closedAt"]));
+    return parseIssues(ghCached(config, "issues", ["issue", "list", "--state", "all", "--limit", "300", "--json", "number,title,state,url,closedAt,author"]));
 }
 
-/** One issue as GitHub has it now, { number, title, state, url, closed }; a message that says why when gh cannot read it. */
+/** The login this machine's gh is signed in as, from the reading readOwner makes; null without gh. */
+export function readLogin(config)
+{
+    try {
+        return JSON.parse(ghCached(config, "user", userArgs))?.login ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/** One issue as GitHub has it now, as the sync reads it (parseSyncIssues): its labels, milestone and author fill the task made from it; a
+ * message that says why when gh cannot read it. */
 export function readIssue(config, number)
 {
-    return parseIssues(`[${gh(config, ["issue", "view", String(number), "--json", "number,title,state,url,closedAt"])}]`)[0];
+    return parseSyncIssues(`[${gh(config, ["issue", "view", String(number), "--json", "number,title,state,stateReason,assignees,author,labels,milestone,url,closedAt"])}]`)[0];
 }
 
 /** Closes an issue on GitHub with a comment, and forgets the last reading of the issues. */
@@ -50,7 +65,7 @@ export async function readOwner(config)
     let user = null;
 
     try {
-        user = JSON.parse(ghCached(config, "user", ["api", "user", "--jq", "{name: .name, login: .login, avatar: .avatar_url}"]));
+        user = JSON.parse(ghCached(config, "user", userArgs));
     } catch {
         return null;
     }

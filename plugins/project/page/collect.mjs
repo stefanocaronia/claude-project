@@ -9,9 +9,10 @@ import { phaseStates, planPhases, planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
+import { readsAsInstruction } from "../lib/issues.mjs";
 import { decisionLinks } from "../lib/links.mjs";
 import { check } from "../scripts/check.mjs";
-import { readCode, readIssues, readOwner } from "../scripts/code.mjs";
+import { readCode, readIssues, readLogin, readOwner } from "../scripts/code.mjs";
 import { syncSummary } from "../scripts/issues.mjs";
 import { specsState } from "../scripts/specs.mjs";
 import { context, extensionChecks } from "../scripts/extensions.mjs";
@@ -60,7 +61,7 @@ export async function collect(config, say, extensions = [])
         board: readBoard(config),
         releases: readReleasesData(config),
         specs: readSpecsData(config),
-        issues: freeIssues(readIssues(config), readBacklog(config).tasks).map(({ number, title, url }) => ({ number, title, url })),
+        issues: freeIssues(readIssues(config), readBacklog(config).tasks).map(({ number, title, url }) => ({ number, title, url, instruction: readsAsInstruction(title) })),
         issuesSync: syncSummary(config),
         boardDays,
         holds: readHolds(config),
@@ -165,6 +166,7 @@ function readBoard(config)
     const links = taskLinks(config, tasks);
     const code = readCode(config);
     const issues = readIssues(config);
+    const login = readLogin(config);
     const released = new Map(readReleases(config).flatMap((release) => release.tasks.map((id) => [id, release.version])));
     // Each with its links, as the panel has them: after, see, blockedBy, chain, waitedBy, seenFrom; its note's path, and where the page serves it.
     return tasks
@@ -178,7 +180,7 @@ function readBoard(config)
             colleague: ids.get(task.to) ?? null,
             noteHref: links.get(task.id).note ? `/note/${task.id}` : null,
             ...codeView(code.get(task.id)),
-            issueInfo: issueOf(issues, task),
+            issueInfo: issueOf(issues, task, login),
             // The version whose notes list it, when one does.
             release: released.get(task.id) ?? null,
         }));

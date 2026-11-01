@@ -1,15 +1,17 @@
 // The GitHub issues in sync with the backlog, where the project turns it on (`github: { issues: sync }` in .claude/project.yaml, which
-// stands for the user's yes to act on GitHub; D-13). The open issues assigned to the user of gh come in as tasks, with those assigned
-// to nobody where they are the repo's only collaborator (`unassigned: take | leave` fixes it); a task closed closes its issue, done with
-// a comment naming its commits, archived as not planned; an issue closed closes its task; an opening again goes across too. A new task
-// never becomes an issue. The page syncs every few minutes, the start of a session once, the backlog's changes after them; the last
-// state in sync is kept in the repo's git folder, so that a change never bounces back.
+// stands for the user's yes to act on GitHub; D-13). The open issues the user of gh wrote and is assigned come in as tasks, with those
+// assigned to nobody where they are the repo's only collaborator (`unassigned: take | leave` fixes it); another's issue waits for the
+// user's → Backlog in the panel or the page, and a title another changes on GitHub waits for the user's yes there (D-16). A task closed
+// closes its issue, done with a comment naming its commits, archived as not planned; an issue closed closes its task; an opening again
+// goes across too. A new task never becomes an issue. The page syncs every few minutes, the start of a session once, the backlog's
+// changes after them; the last state in sync is kept in the repo's git folder, so that a change never bounces back.
 //   node issues.mjs sync [--dry] [--quiet]   (--dry says what it would do, and does nothing)
 //   node issues.mjs status [--json]          (the last sync: when, what it did, what failed)
+//   node issues.mjs keep-title 34            (the user's no to the title another gave issue #34: the task's goes back on GitHub)
 import { closeSync, existsSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
-import { labelFor, labelsOf, lineTitle, parseSyncIssues, planFields, planSync, priorityOfLabels, taskFields, taskSide, typeOfLabels } from "../lib/issues.mjs";
+import { issueTask, labelFor, labelsOf, lineTitle, parseSyncIssues, planFields, planSync, taskFields, taskSide } from "../lib/issues.mjs";
 import { forgetGh, gh, readCode } from "./code.mjs";
 import { assignees, git, isMain, loadProject, ProjectError, readBacklog, readGoals, runCli, today, withBacklogLock, writeBacklog } from "./project.mjs";
 
@@ -27,15 +29,24 @@ if (isMain(import.meta.url)) {
         } else if (command === "status") {
             const state = readState(config);
             console.log(rest.includes("--json") ? JSON.stringify(state.last ?? null) : state.last ? [say("issuesLast", { at: localTime(state.last.at) }), ...state.last.lines].join("\n") : say("issuesNever"));
+        } else if (command === "keep-title" && /^#?\d+$/.test(rest[0] ?? "")) {
+            const { lines, kept } = syncIssues(config, say, { keepTitle: rest[0].replace(/^#/, "") });
+
+            if (!kept) {
+                throw new ProjectError(lines.join("\n"));
+            }
+
+            console.log(lines.join("\n"));
         } else {
             throw new ProjectError(say("issuesUsage"));
         }
     });
 }
 
-/** One sync of the issues with the backlog: { lines, changed }, the lines saying what it did, in the project's language. Nothing where the
- * project has not turned it on, without gh, or while another sync runs. */
-export function syncIssues(config, say, { dry = false } = {})
+/** One sync of the issues with the backlog: { lines, changed, kept }, the lines saying what it did, in the project's language. Nothing
+ * where the project has not turned it on, without gh, or while another sync runs. `keepTitle`, an issue's number: the title another
+ * gave it, held for the user's yes, is refused first, kept true once it is. */
+export function syncIssues(config, say, { dry = false, keepTitle = null } = {})
 {
     if (config.github?.issues !== "sync") {
         return { lines: [say("issuesOff")], changed: false };
@@ -53,17 +64,28 @@ export function syncIssues(config, say, { dry = false } = {})
     }
 
     try {
-        return sync(config, say, dry);
+        return sync(config, say, dry, keepTitle);
     } finally {
         unlinkSync(lock);
     }
 }
 
-function sync(config, say, dry)
+function sync(config, say, dry, keepTitle)
 {
     const prefix = config.prefixes.task;
     const state = readState(config);
     let me;
+
+    // The title another gave an issue, which the user refuses: taken as seen, so that the task's own, now the side that changed, goes
+    // back on the issue.
+    const refused = keepTitle === null ? undefined : state.base[keepTitle]?.held;
+
+    if (keepTitle !== null && refused === undefined) {
+        return { lines: [say("issuesNothingHeld", { issue: `#${keepTitle}` })], changed: false, kept: false };
+    }
+
+    const base = keepTitle === null ? state.base : { ...state.base, [keepTitle]: { ...state.base[keepTitle], fields: { ...state.base[keepTitle].fields, title: refused }, held: undefined } };
+
     let issues;
 
     try {
@@ -76,14 +98,14 @@ function sync(config, say, dry)
     }
 
     const { tasks } = readBacklog(config);
-    // Those assigned to nobody come in where the configuration says, or where the user is the repo's only collaborator: asked of GitHub
-    // only when one such is there to take.
+    // The user's own issues assigned to nobody come in where the configuration says, or where the user is the repo's only collaborator:
+    // asked of GitHub only when one such is there to take.
     const linked = new Set(tasks.map((task) => task.issue).filter(Boolean));
-    const waiting = issues.some((issue) => issue.state === "open" && issue.assignees.length === 0 && !linked.has(`#${issue.number}`) && !state.base[String(issue.number)]);
+    const waiting = issues.some((issue) => issue.state === "open" && issue.author?.login === me && issue.assignees.length === 0 && !linked.has(`#${issue.number}`) && !base[String(issue.number)]);
     const takeUnassigned = config.github.unassigned === "take" || (config.github.unassigned === "auto" && waiting && isOnlyCollaborator(config, me));
-    const plan = planSync({ issues, tasks, base: state.base, me, takeUnassigned });
+    const plan = planSync({ issues, tasks, base, me, takeUnassigned });
     const accounts = accountsOf(config, me);
-    const fields = fieldPlans(config, issues, tasks, plan, state.base, me, accounts);
+    const fields = fieldPlans(config, issues, tasks, plan, base, me, accounts);
     const pushes = fields.filter((one) => Object.keys(one.push).length > 0);
     const takes = fields.filter((one) => one.taken.length > 0);
     const id = (task) => `${prefix}-${task}`;
@@ -92,6 +114,10 @@ function sync(config, say, dry)
     // The open tasks whose issue is gone: deleted, or moved to another repo.
     const numbers = new Set(issues.map((issue) => issueOf(issue.number)));
     const missing = tasks.filter((task) => task.issue && taskSide(task) === "open" && !numbers.has(task.issue)).map((task) => ({ id: id(task.id), issue: task.issue }));
+    // The titles others gave their issues on GitHub, waiting for the user's yes in the panel or the page. The lines that say so carry
+    // no title, which stays out of the chat; they say it once, when the title first waits.
+    const held = fields.filter((one) => one.held.title !== undefined).map((one) => ({ id: id(one.task.id), issue: issueOf(one.issue.number), number: String(one.issue.number), title: one.held.title }));
+    const newlyHeld = held.filter((one) => base[one.number]?.held !== one.title);
 
     if (dry) {
         const lines = [
@@ -103,11 +129,15 @@ function sync(config, say, dry)
             ...plan.reopenTasks.map((one) => say("issuesWouldReopenTask", { issue: issueOf(one.number), id: id(one.id) })),
             ...pushes.map((one) => say("issuesWouldPush", { issue: issueOf(one.issue.number), id: id(one.task.id), list: named(Object.keys(one.push)) })),
             ...takes.map((one) => say("issuesWouldTake", { issue: issueOf(one.issue.number), id: id(one.task.id), list: named(one.taken) })),
+            ...held.map((one) => say("issuesWouldHold", one)),
         ];
         return { lines: lines.length > 0 ? lines : [say("issuesInSync")], changed: false };
     }
 
-    const lines = [];
+    const lines = newlyHeld.map((one) => say("issuesHeld", one));
+    held.forEach((one) => {
+        plan.base[one.number] = { ...plan.base[one.number], held: one.title };
+    });
     const failed = [];
     const project = config.name ? ` (${config.name})` : "";
     // GitHub first: what does not go through is told, and its issue keeps its last state, to be tried again at the next sync.
@@ -118,7 +148,7 @@ function sync(config, say, dry)
             return true;
         } catch (error) {
             failed.push(say("issuesFailed", { issue: issueOf(number), error: error.message }));
-            plan.base[String(number)] = state.base[String(number)];
+            plan.base[String(number)] = base[String(number)];
             return false;
         }
     };
@@ -202,11 +232,12 @@ function sync(config, say, dry)
 
     forgetGh(config, "issues");
     const said = lines.length + failed.length > 0 ? [...lines, ...failed] : [say("issuesInSync")];
-    writeState(config, { base: plan.base, last: { at: new Date().toISOString(), lines: said, error: failed[0] ?? null, missing } });
-    return { lines: said, changed: isChanged };
+    writeState(config, { base: plan.base, last: { at: new Date().toISOString(), lines: said, error: failed[0] ?? null, missing, held: held.map(({ number, ...one }) => one) } });
+    return { lines: said, changed: isChanged, kept: keepTitle !== null };
 }
 
-/** The fields to align of each task and its issue both open, and staying so in this sync. */
+/** The fields to align of each task and its issue both open, and staying so in this sync. The title of an issue another wrote, changed
+ * on GitHub, waits for the user's yes (D-16). */
 function fieldPlans(config, issues, tasks, plan, base, me, { loginOf, personOf })
 {
     const moving = new Set([...plan.closeIssues, ...plan.reopenIssues, ...plan.closeTasks, ...plan.reopenTasks].map((one) => one.number));
@@ -214,7 +245,8 @@ function fieldPlans(config, issues, tasks, plan, base, me, { loginOf, personOf }
     const goalOf = (milestone) => goals.find((goal) => goal.name.toLowerCase() === milestone.toLowerCase())?.name ?? null;
     return issues.filter((issue) => issue.state === "open" && !moving.has(issue.number)).flatMap((issue) => {
         const task = tasks.find((one) => one.issue === `#${issue.number}` && taskSide(one) === "open");
-        return task ? [{ issue, task, ...planFields({ task, issue, before: base[String(issue.number)]?.fields, me, loginOf, personOf, goalOf, noGoal: config.words.noGoal, types: config.types }) }] : [];
+        const hold = issue.author?.login === me ? [] : ["title"];
+        return task ? [{ issue, task, ...planFields({ task, issue, before: base[String(issue.number)]?.fields, me, loginOf, personOf, goalOf, noGoal: config.words.noGoal, types: config.types, hold }) }] : [];
     });
 }
 
@@ -285,25 +317,23 @@ function editor(config)
  * open, its author who created it when they are a person of the project. */
 function incomingTask(config, issue, tasks)
 {
-    const people = assignees(config);
-    const author = issue.author ? people.find((person) => [issue.author.login, issue.author.name.split(/\s+/)[0]].some((name) => name && name.toLowerCase() === person.toLowerCase())) ?? null : null;
-    const goal = readGoals(config).find((one) => !one.closed && issue.milestone && one.name.toLowerCase() === issue.milestone.toLowerCase())?.name ?? config.words.noGoal;
+    const from = issueTask(issue, { types: config.types, people: assignees(config), goals: readGoals(config) });
     return {
         id: nextId(tasks),
-        priority: priorityOfLabels(issue.labels),
+        priority: from.priority,
         effort: config.words.efforts.medium,
         // The coordinator's, as a new task: the user takes it when they want.
         to: config.people[0],
         created: today(),
-        goal,
+        goal: from.goal ?? config.words.noGoal,
         text: lineTitle(issue.title),
         after: [],
         see: [],
         parent: null,
         issue: `#${issue.number}`,
         due: null,
-        type: typeOfLabels(issue.labels, config.types),
-        by: author,
+        type: from.type,
+        by: from.by,
         fields: {},
         done: null,
         archived: null,
@@ -349,8 +379,9 @@ export function readState(config)
     }
 }
 
-/** What the check, the panel and the page say of the sync: { at, error, missing }, `at` this machine's time of the last sync or null
- * before the first, `missing` the open tasks whose issue is no longer on GitHub; null where the issues are not in sync. */
+/** What the check, the panel and the page say of the sync: { at, error, missing, held }, `at` this machine's time of the last sync or
+ * null before the first, `missing` the open tasks whose issue is no longer on GitHub, `held` the titles others gave their issues that
+ * wait for the user's yes ({ id, issue, title }); null where the issues are not in sync. */
 export function syncSummary(config)
 {
     if (config.github?.issues !== "sync") {
@@ -358,7 +389,7 @@ export function syncSummary(config)
     }
 
     const { last } = readState(config);
-    return { at: last?.at ? localTime(last.at) : null, error: last?.error ?? null, missing: last?.missing ?? [] };
+    return { at: last?.at ? localTime(last.at) : null, error: last?.error ?? null, missing: last?.missing ?? [], held: last?.held ?? [] };
 }
 
 function writeState(config, state)

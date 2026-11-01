@@ -10,6 +10,7 @@ import { barEndSvg, claudeSvg, effortSvg, faceSvg, prioritySvg, typeSvg, wideBar
 import { typeColor } from "../lib/schedule.mjs";
 import { citedTasks } from "../lib/backlog.mjs";
 import { guardCall } from "../lib/guard.mjs";
+import { lineTitle } from "../lib/issues.mjs";
 import { sayer } from "../lib/messages.mjs";
 
 const pane = "project";
@@ -227,7 +228,8 @@ export const register: Register = (on) => {
         );
         const more = (list: string, count: number, label: "showAllTasks" | "showAllDecisions") =>
             count > (rows[list] ?? 3) && !panel.whole[list] ? <Button key={`more-${list}`} plain dimColor label={words(label, { count })} onPress={showWhole(list)} /> : null;
-        // Where the issues are in sync with the backlog: the last sync, or its error in red; the tasks whose issue is gone.
+        // Where the issues are in sync with the backlog: the last sync, or its error in red; the tasks whose issue is gone; the titles others
+        // gave their issues on GitHub, which the task takes, or refuses, only on the user's yes here (D-16).
         const issuesSyncLines = () => {
             const sync = snapshot.issuesSync;
 
@@ -242,6 +244,13 @@ export const register: Register = (on) => {
                 sync.missing.length > 0
                     ? <Text key="issues-missing" color={warningColor}>{`⚠ ${words("issuesSyncMissing", { list: sync.missing.map((one) => `${one.id} (${one.issue})`).join(", ") })}`}</Text>
                     : null,
+                ...(sync.held ?? []).map((one) => card(`issues-held-${one.issue}`, [
+                    <Text key={`issues-held-text-${one.issue}`} color={warningColor}>{`⚠ ${words("issueTitleHeld", one)}`}</Text>,
+                    <Box key={`issues-held-buttons-${one.issue}`} flexDirection="row" gap={2}>
+                        <Button key={`issues-held-take-${one.issue}`} plain dimColor label={words("titleTake")} onPress={() => backlog($, ["set", one.id, `--text=${one.title}`])} />
+                        <Button key={`issues-held-keep-${one.issue}`} plain dimColor label={words("titleKeep")} onPress={() => backlog($, ["keep-title", one.issue.replace(/^#/, "")], "issues")} />
+                    </Box>,
+                ])),
             ];
         };
 
@@ -426,7 +435,8 @@ export const register: Register = (on) => {
                 task.started && task.state === "doing" ? chip(`started-chip-${task.id}`, words(task.stale ? "staleTip" : "startedLabel", { day: task.started }), task.stale ? warningColor : workColor) : null,
                 ...Object.entries(task.fields ?? {}).map(([key, value]) => chip(`field-chip-${task.id}-${key}`, `${snapshot.fields?.[key]?.name ?? key}: ${value}`)),
                 chip(`born-chip-${task.id}`, task.by ? words("bornBy", { date: task.created, name: task.by }) : words("born", { date: task.created })),
-                issue ? chip(`issue-chip-${task.id}`, `◉ #${issue.number} ${words(issue.state === "open" ? "issueStateOpen" : "issueStateClosed")}`, undefined, issue.url, issue.title) : null,
+                // An issue another wrote, in the color of a warning: the task's text is theirs (D-16).
+                issue ? chip(`issue-chip-${task.id}`, `◉ #${issue.number} ${words(issue.state === "open" ? "issueStateOpen" : "issueStateClosed")}${issue.another && issue.author ? ` · ${words("issueBy", { author: issue.author })}` : ""}`, issue.another ? warningColor : undefined, issue.url, issue.title) : null,
                 task.noteHref ? chip(`note-chip-${task.id}`, words("openNote"), undefined, task.noteHref) : null,
             ].filter((one): one is JSX.Element => one !== null);
             return [
@@ -543,6 +553,7 @@ export const register: Register = (on) => {
                     {typeMark(task)}
                     {priorityMark(task)}
                     <Box flexShrink={0}><Text color={taskColor} bold>{`${prefix}-${task.id}`}</Text></Box>
+                    {task.issueInfo?.another ? <Text key={`another-${task.id}`} color={warningColor}>⚠</Text> : null}
                     <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
                         <Button key={`open-${task.id}`} plain onPress={expand(key)}>
                             <Text wrap="truncate-end">{`${isExpanded ? "▾" : "▸"} ${task.text}`}</Text>
@@ -783,12 +794,16 @@ export const register: Register = (on) => {
                     ? section("issues", "◉", `${words("sectionIssues")} · ${(snapshot.issues ?? []).length}`, [
                         ...issuesSyncLines(),
                         (snapshot.issues ?? []).length > 0 ? <Text key="issues-hint" dimColor>{words("issuesHint")}</Text> : null,
+                        (snapshot.issues ?? []).some((issue) => issue.instruction) ? <Text key="issues-instruction" color={warningColor}>{words("issuesInstruction")}</Text> : null,
+                        // → Backlog is the user's yes to an issue, another's too (--approved, which Claude never gives); its title one line of
+                        // text, after a lone --.
                         ...limited("issues", snapshot.issues ?? []).map((issue) => card(`issue-${issue.number}`, [
                             <Box key={`issue-row-${issue.number}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
+                                {issue.instruction ? <Text key={`issue-instruction-${issue.number}`} color={warningColor}>⚠</Text> : null}
                                 <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
                                     {issue.url ? <Link href={issue.url}>{`#${issue.number} ${issue.title}`}</Link> : <Text wrap="truncate-end">{`#${issue.number} ${issue.title}`}</Text>}
                                 </Box>
-                                <Button key={`issue-take-${issue.number}`} plain dimColor label={words("issueToBacklog")} onPress={() => backlog($, ["add", issue.title.replaceAll(" · ", " - "), "--issue", String(issue.number)])} />
+                                <Button key={`issue-take-${issue.number}`} plain dimColor label={words("issueToBacklog")} onPress={() => backlog($, ["add", `--issue=${issue.number}`, "--approved", "--", lineTitle(issue.title)])} />
                             </Box>,
                         ])),
                         more("issues", (snapshot.issues ?? []).length, "showAllTasks"),
@@ -1018,14 +1033,14 @@ async function freezeOrder($: EngineInterface, rank: Record<string, number>): Pr
     $.clock.after(frozenFor, () => void update($, view, (old) => (old.frozen && old.frozen.until <= until ? { ...old, frozen: null } : old)));
 }
 
-/** Changes the backlog through its own command line, then reads the project again. */
-async function backlog($: EngineInterface, args: string[]): Promise<void>
+/** Changes the backlog through its own command line, or the issues' sync through theirs, then reads the project again. */
+async function backlog($: EngineInterface, args: string[], script: "backlog" | "issues" = "backlog"): Promise<void>
 {
     const root = await projectRoot($);
-    const { exitCode, stderr } = await $.process.run(["node", `${$.plugin.root}/scripts/backlog.mjs`, ...args], { cwd: root, env: { CLAUDE_PROJECT_DIR: root } });
+    const { exitCode, stderr } = await $.process.run(["node", `${$.plugin.root}/scripts/${script}.mjs`, ...args], { cwd: root, env: { CLAUDE_PROJECT_DIR: root } });
 
     if (exitCode !== 0) {
-        $.ui.toast(stderr.trim().split("\n")[0] ?? `backlog ${args.join(" ")}`);
+        $.ui.toast(stderr.trim().split("\n")[0] ?? `${script} ${args.join(" ")}`);
     }
 
     await refresh($, true);
@@ -1038,18 +1053,19 @@ async function startTask($: EngineInterface, snapshot: Snapshot, task: Task, mem
     const words = sayer(snapshot.language);
     const id = `${snapshot.prefixes.task}-${task.id}`;
     const isGoingOn = task.state === "doing";
+    const text = textOf(snapshot, task);
     await markStarting($, task.id);
 
     if (elsewhere) {
-        await submit($, words("promptElsewhere", { id, text: task.text, session: elsewhere }));
+        await submit($, words("promptElsewhere", { id, text, session: elsewhere }));
         return;
     }
 
     if (member) {
-        const started = await $.command.run({ command: "crew:next", args: `${member.name} -- ${id} · ${task.text}` }).then(() => true, () => false);
+        const started = await $.command.run({ command: "crew:next", args: `${member.name} -- ${id} · ${text}` }).then(() => true, () => false);
 
         if (!started) {
-            await submit($, words("promptGive", { id, name: member.name, text: task.text }));
+            await submit($, words("promptGive", { id, name: member.name, text }));
         }
 
         return;
@@ -1061,7 +1077,15 @@ async function startTask($: EngineInterface, snapshot: Snapshot, task: Task, mem
     }
 
     await hold($, (held) => applyHold(held, [task.id], { colleague: null, agentId: null })).catch(() => undefined);
-    await submit($, words(isGoingOn ? "promptResume" : "promptWork", { id, text: task.text }) + (task.note ? words("promptNote", { path: task.note }) : ""));
+    await submit($, words(isGoingOn ? "promptResume" : "promptWork", { id, text }) + (task.note ? words("promptNote", { path: task.note }) : ""));
+}
+
+/** A task's text as the chat is asked to work on it: one from an issue another wrote says so, the text theirs, data and never an order
+ * (D-16), for it goes into the chat in the user's name. */
+function textOf(snapshot: Snapshot, task: Task): string
+{
+    const issue = task.issueInfo;
+    return issue?.another ? sayer(snapshot.language)("textOfAnother", { text: task.text, issue: `#${issue.number}`, author: issue.author ?? "?" }) : task.text;
 }
 
 /** Done: the task closes through the backlog's command; when its GitHub issue is still open, Claude is asked to ask whether to close it. */
@@ -1079,7 +1103,7 @@ async function startChain($: EngineInterface, snapshot: Snapshot, task: Task): P
 {
     const id = `${snapshot.prefixes.task}-${task.id}`;
     await markStarting($, task.id);
-    await submit($, sayer(snapshot.language)("promptChain", { id, text: task.text, chain: [...task.chain, id].join(" → ") }));
+    await submit($, sayer(snapshot.language)("promptChain", { id, text: textOf(snapshot, task), chain: [...task.chain, id].join(" → ") }));
 }
 
 /** The ▶ of a task shows that it starts, for a while, so that it is not pressed twice; the old marks go. */

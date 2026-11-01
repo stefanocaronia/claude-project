@@ -206,7 +206,7 @@ function clean(path)
  * lowercase word that no suffix or option of the backlog already uses. */
 function fieldsOf(given)
 {
-    const taken = ["after", "see", "in", "issue", "due", "type", "by", "p", "effort", "to", "goal", "text", "state", "json", "done", "atomic", "format", "all"];
+    const taken = ["after", "see", "in", "issue", "due", "type", "by", "p", "effort", "to", "goal", "text", "state", "json", "done", "atomic", "format", "all", "approved"];
 
     if (given === undefined || given === null) {
         return {};

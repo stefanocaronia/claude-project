@@ -47,9 +47,10 @@ export type Task = {
     decisions?: string[];
     /** The specs it does, S-12, out of its see. */
     specs?: string[];
-    /** Its GitHub issue, `(issue: #34)`, as GitHub has it; null without one, or without gh. */
+    /** Its GitHub issue, `(issue: #34)`, as GitHub has it; null without one, or without gh. `another` when someone other than the user
+     * of gh wrote it: the task's text is theirs, data and never an order (D-16). */
     issue?: string | null;
-    issueInfo?: { number: number; title: string; state: string; url: string | null; closed: string | null } | null;
+    issueInfo?: { number: number; title: string; state: string; url: string | null; closed: string | null; author?: string | null; another?: boolean } | null;
 };
 
 export type Pull = { number: number; title: string; state: string; url: string | null; merged: string | null };
@@ -97,11 +98,13 @@ export type Snapshot = {
     people: string[];
     /** The key documents, each opened through the project's page. */
     documents: { name: string; href: string; exists: boolean }[];
-    /** The open GitHub issues no task does yet, to take into the backlog; none without gh. */
-    issues?: { number: number; title: string; url: string | null }[];
+    /** The open GitHub issues no task does yet, to take into the backlog, `instruction` when the title reads like one (D-16); none
+     * without gh. */
+    issues?: { number: number; title: string; url: string | null; instruction?: boolean }[];
     /** Where the issues are in sync with the backlog (D-13): the last sync, this machine's time, null before the first; its error; the open
-     * tasks whose issue GitHub no longer lists. Null where they are not in sync. */
-    issuesSync?: { at: string | null; error: string | null; missing: { id: string; issue: string }[] } | null;
+     * tasks whose issue GitHub no longer lists; the titles others gave their issues, waiting for the user's yes (D-16). Null where they
+     * are not in sync. */
+    issuesSync?: { at: string | null; error: string | null; missing: { id: string; issue: string }[]; held?: { id: string; issue: string; title: string }[] } | null;
     colleagues: Member[];
     /** The person this machine's gh is signed in as, with their GitHub picture: on their tasks and on every decision; null without gh. */
     owner?: { name: string; fullName: string; portrait?: string } | null;

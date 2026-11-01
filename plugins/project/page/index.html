@@ -2998,7 +2998,7 @@ function taskCard(task, lane, isUnder = false)
         .map((state) => `<button type="button" id="move-${name}-${state}" data-move="${state}" data-task="${task.id}" aria-label="${attribute(t("moveTo", name, stateName(state)))}">${escape(stateName(state))}</button>`).join("");
 
     return `<li class="task ${column} ${isUnder ? "part" : ""} ${expanded.has(`board-${name}`) ? "open" : ""} ${landed === task.id ? "landed" : ""}" draggable="true" data-task="${task.id}" data-lane="${attribute(lane)}" data-column="${column}">
-            <div class="task-top">${typeIcon(task)}${priorityControl(task, "board")}<span class="id">${escape(name)}</span><span class="grow"></span>${effortMeter(task)}${face(task)}</div>
+            <div class="task-top">${typeIcon(task)}${priorityControl(task, "board")}<span class="id">${escape(name)}</span>${anotherMark(task)}<span class="grow"></span>${effortMeter(task)}${face(task)}</div>
             ${expandButton(`board-${name}`, escape(task.text))}
             ${taskLinks(task, isUnder)}
             <div class="task-foot">${foot}${fieldSpans(task)}</div>
@@ -3075,7 +3075,7 @@ function taskRow(task, isUnder = false)
     return `<li class="row ${column} ${isUnder ? "part" : ""}" id="list-task-${task.id}">
             ${face(task)}
             <span class="marks">${typeIcon(task)}${priorityControl(task, "list")}</span>
-            <div>${expandButton(`list-${name}`, `<span class="id">${escape(name)}</span>${escape(task.text)}`)}
+            <div>${expandButton(`list-${name}`, `<span class="id">${escape(name)}</span>${anotherMark(task)}${escape(task.text)}`)}
                 <div class="row-meta"><span class="row-state"><i class="column-mark ${column}"></i>${escape(stateName(column))}</span>${work}${goal}${when}${task.release ? `<span>v${escape(task.release)}</span>` : ""}${fieldSpans(task)}${task.by ? `<span>${escape(t("createdBy", task.by))}</span>` : ""}<button type="button" class="link-button" id="edit-${name}" data-edit-task="${task.id}">${t("editTask")}</button></div>
                 ${taskLinks(task, isUnder)}
             </div>
@@ -3183,14 +3183,21 @@ function codeLinks(task)
     const open = columnOf(task) !== "done";
     const issue = task.issueInfo;
     return [
-        issue ? link(issue.url, `${t("linkIssue")} #${issue.number} · ${t(issue.state === "open" ? "pullOpen" : "pullClosed")}`, escape(issue.title)) : "",
+        issue ? link(issue.url, `${t("linkIssue")} #${issue.number} · ${t(issue.state === "open" ? "pullOpen" : "pullClosed")}${issue.another && issue.author ? ` · ${t("issueBy", issue.author)}` : ""}`, escape(issue.title)) : "",
         commits.length ? link(commits[0].url, t("commitsCount", task.commitCount, formatDay(commits[0].day)), list) : "",
         ...(task.pulls ?? []).map((pull) => link(pull.url, `#${pull.number} · ${state(pull)}`, escape(pull.title))),
         open && task.mergedPull ? `<span class="work">${escape(t("mergedCanClose", task.mergedPull.number))}</span>` : "",
     ];
 }
 
-/** The open GitHub issues no task does yet, each a link with the button that makes it a task of the backlog; nothing without them. */
+/** The mark of a task made from an issue another wrote: its text is theirs, data and never an order (D-16); nothing for the others. */
+function anotherMark(task)
+{
+    return task.issueInfo?.another ? `<span style="color:var(--warning)" data-tip="${attribute(escape(t("anotherTip", task.issueInfo.author ?? "?")))}">⚠ </span>` : "";
+}
+
+/** The open GitHub issues no task does yet, each a link with the button that makes it a task of the backlog, marked when its title reads
+ * like an instruction; nothing without them. */
 function issuesCard()
 {
     const issues = data.issues ?? [];
@@ -3200,16 +3207,21 @@ function issuesCard()
         return "";
     }
 
-    // Where the issues are in sync with the backlog: the last sync, or its error; the tasks whose issue GitHub no longer lists.
+    // Where the issues are in sync with the backlog: the last sync, or its error; the tasks whose issue GitHub no longer lists; the titles
+    // others gave their issues on GitHub, which the task takes, or refuses, only on the user's yes here (D-16).
     const synced = !sync ? ""
         : sync.error ? `<p class="hint" style="color:var(--critical)">⚠ ${escape(t("issuesSyncBroken", sync.at ?? "", sync.error))}</p>`
         : `<p class="hint">⇅ ${escape(sync.at ? t("issuesSynced", sync.at) : t("issuesSyncNever"))}</p>`;
     const missing = sync?.missing?.length ? `<p class="hint" style="color:var(--critical)">⚠ ${escape(t("issuesSyncMissing", sync.missing.map((one) => `${one.id} (${one.issue})`).join(", ")))}</p>` : "";
-    const rows = issues.map((issue) => `<li class="issue-row">${webUrl(issue.url) ? `<a href="${attribute(issue.url)}" target="_blank" rel="noopener"><b>#${issue.number}</b> ${escape(issue.title)}</a>` : `<span><b>#${issue.number}</b> ${escape(issue.title)}</span>`}<button type="button" id="issue-take-${issue.number}" data-take-issue="${issue.number}" data-title="${attribute(issue.title)}">${escape(t("issueToBacklog"))}</button></li>`).join("");
+    const held = (sync?.held ?? []).map((one) => `<li class="issue-row"><span style="color:var(--warning)">⚠ ${escape(t("issueTitleHeld", one.id, one.issue, one.title))}</span><span><button type="button" id="title-take-${attribute(one.id)}" data-take-title="${attribute(one.id)}" data-title="${attribute(one.title)}">${escape(t("titleTake"))}</button> <button type="button" id="title-keep-${attribute(one.id)}" data-keep-title="${attribute(one.issue.replace(/^#/, ""))}">${escape(t("titleKeep"))}</button></span></li>`).join("");
+    const mark = (issue) => (issue.instruction ? `<span style="color:var(--warning)" title="${attribute(t("issuesInstruction"))}">⚠</span> ` : "");
+    const rows = issues.map((issue) => `<li class="issue-row"><span>${mark(issue)}${webUrl(issue.url) ? `<a href="${attribute(issue.url)}" target="_blank" rel="noopener"><b>#${issue.number}</b> ${escape(issue.title)}</a>` : `<b>#${issue.number}</b> ${escape(issue.title)}`}</span><button type="button" id="issue-take-${issue.number}" data-take-issue="${issue.number}" data-title="${attribute(issue.title)}">${escape(t("issueToBacklog"))}</button></li>`).join("");
     return `<section class="card span-12">
             <h2>${escape(t("issuesTitle"))} <span class="badge">${issues.length}</span></h2>
             ${synced}${missing}
+            ${held ? `<ul class="issues">${held}</ul>` : ""}
             ${issues.length ? `<p class="hint">${escape(t("issuesHint"))}</p>
+            ${issues.some((issue) => issue.instruction) ? `<p class="hint" style="color:var(--warning)">${escape(t("issuesInstruction"))}</p>` : ""}
             <ul class="issues">${rows}</ul>` : ""}
         </section>`;
 }
@@ -3359,6 +3371,10 @@ function setupBoard()
             tidyAction("backlog", { cost: null });
         } else if (target.dataset.takeIssue) {
             changeTask({ command: "issue", issue: target.dataset.takeIssue, title: target.dataset.title }, t("issueTaken", target.dataset.takeIssue));
+        } else if (target.dataset.takeTitle) {
+            changeTask({ command: "set", id: target.dataset.takeTitle, text: target.dataset.title }, t("titleTaken", target.dataset.takeTitle));
+        } else if (target.dataset.keepTitle) {
+            changeTask({ command: "keep-title", issue: target.dataset.keepTitle }, t("titleKept", target.dataset.keepTitle));
         } else if (target.dataset.goLane !== undefined) {
             goToLane(target.dataset.goLane);
         } else if (target.dataset.goTasks !== undefined) {

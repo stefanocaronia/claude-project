@@ -1,13 +1,15 @@
 // The core docs the plugin's scripts own, kept from a direct read or write: through backlog.mjs, decisions.mjs and specs.mjs a lookup
 // reads the same every time and costs a few lines in place of a file. The backlog and its archive are the backlog's alone; the
-// decisions and the specs are searched through their scripts and read whole only to be edited. Pure: the panel's hook asks it of each
-// tool call, with the files from snapshot.mjs.
+// decisions and the specs are searched through their scripts and read whole only to be edited. And the user's yes the panel and the
+// page give the backlog's command, --approved, is never Claude's to give (D-16). Pure: the panel's hook asks it of each tool call, with
+// the files from snapshot.mjs.
 
 // The programs that read, search or write a file's text from a shell.
 const textPrograms = /^(grep|egrep|fgrep|rg|ag|ack|cat|bat|head|tail|less|more|sed|awk|gawk|perl|nl|cut|sort|uniq|tac|type|findstr|select-string|sls|get-content|gc|set-content|add-content|out-file|tee|tee-object|python|python3|py)$/i;
 
-/** What a tool call does to a guarded doc: { key, file, script } for the message that sends Claude to the script, or null when it may go.
- * `files` are the docs the scripts own, each { path, script, owned }, the path relative to the project's root. */
+/** What a tool call does to a guarded doc: { key, file, script } for the message that sends Claude to the script, or null when it may go;
+ * the backlog's command given the user's --approved, { key: "guardApproved" }. `files` are the docs the scripts own, each { path,
+ * script, owned }, the path relative to the project's root. */
 export function guardCall(call, files)
 {
     const refuse = (file) => ({ key: file.owned ? "guardOwned" : `guardSearch_${file.script}`, file: file.path, script: file.script });
@@ -27,6 +29,11 @@ export function guardCall(call, files)
 
     if (tool === "Bash" || tool === "PowerShell") {
         for (const segment of segments(String(call.command ?? ""))) {
+            // The yes to another's issue the user gives with → Backlog: Claude asks the user to take it there.
+            if (/backlog\.mjs\b/i.test(segment) && /(^|[\s'"])--approved\b/i.test(segment)) {
+                return { key: "guardApproved", file: "", script: "backlog" };
+            }
+
             const file = files.find((one) => mentions(segment, baseName(one.path)));
 
             if (file && (textPrograms.test(program(segment)) || isScript(segment) || isRedirect(segment, baseName(file.path)))) {

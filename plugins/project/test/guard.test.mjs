@@ -55,3 +55,17 @@ test("a shell reads a guarded file with grep, cat, sed, Get-Content, a redirect 
         assert.equal(key({ tool: "Bash", command }), null, command);
     }
 });
+
+test("the user's yes to another's issue, --approved, is the panel's and the page's to give, never Claude's", () => {
+    for (const command of [
+        "node plugins/project/scripts/backlog.mjs add --issue=8 --approved -- \"The title\"",
+        "node \"F:/x/scripts/backlog.mjs\" set T-3 --issue 8 '--approved'",
+    ]) {
+        assert.equal(key({ tool: "Bash", command }), "guardApproved", command);
+    }
+
+    assert.equal(key({ tool: "PowerShell", command: "node backlog.mjs add --issue 8 --approved" }), "guardApproved");
+    // Claude's own take of an issue, which the command checks, and a text that only names the option, go.
+    assert.equal(key({ tool: "Bash", command: "node backlog.mjs add --issue 8" }), null);
+    assert.equal(key({ tool: "Bash", command: "node backlog.mjs add -- \"Explain the --approvedness of things\"" }), null);
+});

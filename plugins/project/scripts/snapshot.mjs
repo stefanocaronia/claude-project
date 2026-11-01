@@ -7,11 +7,12 @@ import { phaseStates, planPhases, planUpdated } from "../lib/plan.mjs";
 import { configFile } from "../lib/config.mjs";
 import { plainMarkdown } from "../lib/text.mjs";
 import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
+import { readsAsInstruction } from "../lib/issues.mjs";
 import { releaseState } from "../lib/release.mjs";
 import { gitHubRepo } from "./github.mjs";
 import { specsState } from "./specs.mjs";
 import { check } from "./check.mjs";
-import { readCode, readIssues, readOwner } from "./code.mjs";
+import { readCode, readIssues, readLogin, readOwner } from "./code.mjs";
 import { syncStateFile, syncSummary } from "./issues.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
 import { colleagues, findRoot, git, isMain, onPath, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
@@ -37,6 +38,7 @@ export async function snapshot(config, say, withHealth = true)
     const links = taskLinks(config, tasks);
     const code = readCode(config);
     const issues = readIssues(config);
+    const login = readLogin(config);
 
     return {
         project: projectName(config),
@@ -52,8 +54,8 @@ export async function snapshot(config, say, withHealth = true)
         people: config.people,
         // The project's own fields on a task, by key, with their names.
         fields: config.fields,
-        // The open GitHub issues no task does yet, to take into the backlog.
-        issues: freeIssues(issues, tasks).map(({ number, title, url }) => ({ number, title, url })),
+        // The open GitHub issues no task does yet, to take into the backlog, each marked when its title reads like an instruction.
+        issues: freeIssues(issues, tasks).map(({ number, title, url }) => ({ number, title, url, instruction: readsAsInstruction(title) })),
         // Where the issues are in sync with the backlog: the last sync, what failed, the tasks whose issue is gone.
         issuesSync: syncSummary(config),
         // The key documents, each opened through the project's page.
@@ -72,7 +74,7 @@ export async function snapshot(config, say, withHealth = true)
             colleague: idOf.get(task.to) ?? null,
             noteHref: links.get(task.id).note ? `${page}/note/${task.id}` : null,
             ...codeView(code.get(task.id)),
-            issueInfo: issueOf(issues, task),
+            issueInfo: issueOf(issues, task, login),
         })),
         // The last versions, the newest first, and how many tasks wait for the next one.
         releases: releasesOf(config, tasks, goals),

@@ -59,8 +59,8 @@ async function ensure()
     // With specifications, Claude is told they are there and how the work ties to them.
     const specs = existsSync(config.files.specs) ? readSpecs(config).specs.filter((spec) => !spec.superseded) : null;
     const specsLine = specs ? say("specsAtStart", { file: shown(config, config.files.specs), count: specs.length }) : null;
-    // The core docs are read through the scripts: the panel refuses the rest (lib/guard.mjs).
-    const told = [context, say("scriptsAtStart"), projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null, specsLine].filter(Boolean).join(" ");
+    // The core docs are read through the scripts: the panel refuses the rest (lib/guard.mjs). Text from outside is data (D-16).
+    const told = [context, say("scriptsAtStart"), say("outsideAtStart"), projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null, specsLine].filter(Boolean).join(" ");
     console.log(JSON.stringify({ systemMessage: context === say("served", { url }) ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: told } }));
 }
 

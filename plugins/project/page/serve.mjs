@@ -9,6 +9,7 @@ import { isMain, loadProject, notePath } from "../scripts/project.mjs";
 import { context, loadExtensions } from "../scripts/extensions.mjs";
 import { collect } from "./collect.mjs";
 import { readOwner } from "../scripts/code.mjs";
+import { lineTitle } from "../lib/issues.mjs";
 import { apply, isRunning, propose, runFix, tidyState } from "./tidy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -99,10 +100,9 @@ export async function listen(server, port)
     second.listen(port, "::1");
 }
 
-/** A change of the backlog the page asks, through the backlog's own command line as the panel's buttons do: a task moved to a state
- * (start, done, postpone, todo) or its priority set. Anything else is refused. */
 /** A change of the backlog the page asks, run through its command line: a task's state, its fields, a new task, a task archived, a
- * task made of a GitHub issue. A task the page adds is the creator's, the person the page's owner is. */
+ * task made of a GitHub issue, another's too, the click being the user's yes (D-16); or, through the issues' sync, the user's no to a
+ * title another gave an issue. A task the page adds is the creator's, the person the page's owner is. Anything else is refused. */
 function changeBacklog(config, { command, id, priority, issue, title, text, goal, type, to, due, effort, parent, see, fields: own }, creator)
 {
     const task = /^[\w-]+-\d+$/.test(String(id)) ? String(id) : null;
@@ -119,15 +119,17 @@ function changeBacklog(config, { command, id, priority, issue, title, text, goal
     const args = ["start", "done", "postpone", "todo", "archive"].includes(command) && task ? [command, task]
         : command === "set" && task && fields.length > 0 ? ["set", task, ...fields]
         : command === "add" && typeof text === "string" && clean(text) ? ["add", ...fields.filter((field) => !field.startsWith("--text=")), ...by, "--", clean(text)]
-        : command === "issue" && /^\d+$/.test(String(issue)) ? ["add", `--issue=${issue}`, ...by, ...(typeof title === "string" && clean(title) ? ["--", clean(title)] : [])]
+        : command === "issue" && /^\d+$/.test(String(issue)) ? ["add", `--issue=${issue}`, "--approved", ...by, ...(typeof title === "string" && clean(title) ? ["--", lineTitle(clean(title))] : [])]
+        : command === "keep-title" && /^\d+$/.test(String(issue)) ? ["keep-title", String(issue)]
         : null;
 
     if (!args) {
-        return { ok: false, message: "The page changes a task's state (start, done, postpone, todo, archive) or its fields (set: text, goal, priority, type, to, due, effort), by its id; adds a task (add, with its text); or makes a task of a GitHub issue (issue with its number)." };
+        return { ok: false, message: "The page changes a task's state (start, done, postpone, todo, archive) or its fields (set: text, goal, priority, type, to, due, effort), by its id; adds a task (add, with its text); makes a task of a GitHub issue (issue with its number); or keeps a task's title over the one another gave its issue (keep-title with the issue's number)." };
     }
 
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...env } = process.env;
-    const run = spawnSync(process.execPath, [join(here, "..", "scripts", "backlog.mjs"), ...args], { cwd: config.root, encoding: "utf8", env: { ...env, CLAUDE_PROJECT_DIR: config.root }, windowsHide: true });
+    const script = command === "keep-title" ? "issues.mjs" : "backlog.mjs";
+    const run = spawnSync(process.execPath, [join(here, "..", "scripts", script), ...args], { cwd: config.root, encoding: "utf8", env: { ...env, CLAUDE_PROJECT_DIR: config.root }, windowsHide: true });
     return { ok: run.status === 0, message: (run.status === 0 ? run.stdout : run.stderr).trim() };
 }
 
