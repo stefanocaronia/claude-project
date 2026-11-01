@@ -100,13 +100,13 @@ export async function submit($: EngineInterface, text: string): Promise<void>
     await $.prompt.submit({ text, asUser: true });
 }
 
-/** Claude Code's /reload-plugins, as the user would type it: a plugin changed in its folder is read again. */
+/** Claude Code's /reload-plugins --force, as the user would type it: a plugin changed in its folder is read again, even one the engine thinks unchanged. */
 export async function reloadPlugins($: EngineInterface): Promise<void>
 {
-    const ran = await $.command.run({ command: "reload-plugins" }).then(() => true, () => false);
+    const ran = await $.command.run({ command: "reload-plugins", args: "--force" }).then(() => true, () => false);
 
     if (!ran) {
-        await submit($, "/reload-plugins");
+        await submit($, "/reload-plugins --force");
     }
 }
 
