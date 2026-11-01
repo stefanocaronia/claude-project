@@ -1,7 +1,36 @@
-// The panel's small drawings, each at a fixed size, so that the width never shrinks them; the text around them is the surface's own.
-// They are Crew's (github.com/stefanocaronia/claude-crew, MIT), so that the two panels side by side look alike; the light and dark
-// colors follow savvy-progress by johnnyvizz (MIT).
+// The panel's colors and marks, and its small drawings, each at a fixed size, so that the width never shrinks them; the text around them
+// is the surface's own. They are Crew's (github.com/stefanocaronia/claude-crew, MIT), so that the two panels side by side look alike; the
+// light and dark colors follow savvy-progress by johnnyvizz (MIT).
 import type { Member } from "../types";
+
+// A priority as an issue tracker draws it, the green of work, the purple of decisions, the red of errors, the orange of a warning.
+export const priorities = { P1: { glyph: "⇈", color: "#E5493A" }, P2: { glyph: "=", color: "#E2852B" }, P3: { glyph: "↓", color: "#4C8FE0" } } as const;
+export const workColor = "#4E9A6B";
+export const decisionColor = "#8A63C9";
+export const errorColor = "#D0453F";
+export const warningColor = "#E2852B";
+// A task's number beside its title, as a decision's is beside its own, in a color of its own.
+export const taskColor = "#2E9AA6";
+// Material's outline, its hover state layer, and the gray of a count with nothing wrong, readable in both themes.
+export const outline = "#8080803d";
+export const stateLayer = "#80808014";
+export const quietColor = "#888780";
+// A link's or a document's chip under the pointer: one line high, no border, a stronger gray.
+export const chipHover = "#80808029";
+// Every card's faint gray, the same for all, as Crew's.
+export const cardTint = "#80808003";
+// A ▶ that cannot be pressed now: gray, fainter than a dim one.
+export const idleColor = "#80808040";
+// A hint in Material's inverse colors, which read on both themes, as Crew's.
+export const tooltipBackground = "#2b2b29";
+export const tooltipText = "#f4f4f1";
+// The marks drawn as text, each kept one color by the text variation selector: work, a goal, a decision (the scales), a version.
+export const workMark = "⚒︎";
+export const goalMark = "⚑︎";
+export const scales = "⚖︎";
+export const versionMark = "🏷︎";
+// The effort a task needs, as the terminal draws it.
+export const effortMeters: Record<string, string> = { low: "▮▯▯▯", medium: "▮▮▯▯", high: "▮▮▮▯", xhigh: "▮▮▮▮", max: "▮▮▮▮", none: "" };
 
 const font = "-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif";
 const theme = `<style>
@@ -10,6 +39,12 @@ const theme = `<style>
 </style>`;
 // A colleague color in the light theme's tint, the one their initials sit on.
 const tints: Record<string, string> = { red: "#b42318", blue: "#1d4ed8", green: "#15803d", yellow: "#8a6100", purple: "#7e22ce", orange: "#c2410c", pink: "#be185d", cyan: "#0e7490" };
+
+/** A priority's glyph and color; P2's for one it does not know. */
+export function markOf(priority: string)
+{
+    return priorities[priority as keyof typeof priorities] ?? priorities.P2;
+}
 
 /** A colleague's portrait in a circle, or their initials on their color; a person without a profile in gray. */
 export function faceSvg(member: Member, uri: string | undefined, size: number): string
@@ -36,16 +71,16 @@ export function prioritySvg(priority: string): string | undefined
 {
     const stroke = (color: string) => `fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
     const marks: Record<string, string> = {
-        P1: `<path d="M3.5 7.5L7 4l3.5 3.5M3.5 11L7 7.5l3.5 3.5" ${stroke("#E5493A")}/>`,
-        P2: `<path d="M3 5.5h8M3 8.5h8" ${stroke("#E2852B")}/>`,
-        P3: `<path d="M3.5 5.5L7 9l3.5-3.5" ${stroke("#4C8FE0")}/>`,
+        P1: `<path d="M3.5 7.5L7 4l3.5 3.5M3.5 11L7 7.5l3.5 3.5" ${stroke(priorities.P1.color)}/>`,
+        P2: `<path d="M3 5.5h8M3 8.5h8" ${stroke(priorities.P2.color)}/>`,
+        P3: `<path d="M3.5 5.5L7 9l3.5-3.5" ${stroke(priorities.P3.color)}/>`,
     };
     const mark = marks[priority];
     return mark ? svg(14, 14, mark, false) : undefined;
 }
 
 /** A task's type as Jira draws an issue type: a rounded square in its color with a white sign, a bug a dot, a feature a bookmark, a
- * chore a tick, a research a lens; a type of the project's own its first letter. */
+ * chore a tick, a research a lens, a test a flask; a type of the project's own its first letter. */
 export function typeSvg(type: string, color: string): string
 {
     const signs: Record<string, string> = {
@@ -70,7 +105,6 @@ export function effortSvg(level: string): string | undefined
 
     return svg(16, 12, [0, 1, 2, 3].map((index) => `<rect x="${index * 4}" y="1" width="3" height="10" rx="1" fill="#8a8a86" fill-opacity="${index < filled ? 1 : 0.3}"/>`).join(""), false);
 }
-
 
 /** A wide bar's square middle, filled or the track, stretched to the room it is given: its rounded ends are `barEndSvg`. */
 export function wideBarSvg(color: string | undefined, isFilled: boolean): string

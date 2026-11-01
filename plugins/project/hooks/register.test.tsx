@@ -1,6 +1,7 @@
 // The panel's drawing and controls on the terminal and the desktop, over a snapshot of a small project: claude plugin test plugins/project
 import type { On } from "claude-code";
 import { expect, mock, test } from "claude-code/testing";
+import type { MockClock } from "claude-code/testing";
 
 const plugin = "project";
 const surfaces = ["terminal", "desktop"] as const;
@@ -46,7 +47,7 @@ const snapshot = {
 type Answer = { exitCode: number; stdout: string; stderr: string };
 const good: Answer = { exitCode: 0, stdout: JSON.stringify(snapshot), stderr: "" };
 
-function world(on: On, answers: Answer[] = [good], whileReading?: () => void): { runs: string[][]; prompts: string[]; commands: string[]; stamp: { mtimeMs: number }; opens: { count: number } }
+function world(on: On, answers: Answer[] = [good], whileReading?: () => void): { runs: string[][]; prompts: string[]; commands: string[]; stamp: { mtimeMs: number }; opens: { count: number }; clock: MockClock }
 {
     const runs: string[][] = [];
     const prompts: string[] = [];
@@ -540,7 +541,7 @@ test("a task added from the list to do, with its priority, type and large task, 
     await ui.press({ key: "edit-text-80" });
     await ui.input({ key: "edit-80", text: "I sotto-compiti, scritti di nuovo" });
     await ui.press({ key: "archive-80" });
-    expect(await ui.find({ type: "Button", label: "🗄 Archiviare T-80? Premi ancora" })).toBeDefined();
+    expect((await ui.find({ key: "archive-80" }))?.props.label).toBe("🗄 Archiviare T-80? Premi ancora");
     await ui.press({ key: "archive-80" });
     expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([
         ["backlog.mjs", "add", "un - compito nuovo", "--p", "P1", "--type", "bug", "--in", "T-80", "--by", "Stefano"],
