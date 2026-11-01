@@ -19,9 +19,10 @@ test("git's log and gh's pull requests read, and the code that cites each task, 
     assert.deepEqual(pulls.map((pull) => [pull.number, pull.state, pull.merged]), [[4, "merged", "2026-10-30"], [5, "open", null]]);
     assert.deepEqual(parsePulls("not json"), []);
 
-    const cited = citationsOf([{ name: "project", url: "https://github.com/a/b", commits }], pulls);
+    const cited = citationsOf([{ name: "project", url: "https://github.com/a/b", commits: [...commits, { hash: "ccccccc3333", day: "2026-10-31", subject: "As in rpg-engine's T-1, and my-b's T-2", body: "" }] }], pulls, "T", ["my-b"]);
     assert.deepEqual(cited.get(1).commits.map((commit) => [commit.hash, commit.url]), [["bbbbbbb", "https://github.com/a/b/commit/bbbbbbb2222"], ["aaaaaaa", "https://github.com/a/b/commit/aaaaaaa1111"]]);
     assert.deepEqual(cited.get(2).pulls.map((pull) => pull.number), [5]);
+    assert.deepEqual(cited.get(2).commits.map((commit) => commit.hash), ["ccccccc", "bbbbbbb"]);
     const view = codeView(cited.get(1), 1);
     assert.deepEqual([view.commits.length, view.commitCount, view.mergedPull?.number], [1, 2, 4]);
     assert.deepEqual(codeView(undefined), { commits: [], commitCount: 0, pulls: [], mergedPull: null });

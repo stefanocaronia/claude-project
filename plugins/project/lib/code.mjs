@@ -34,22 +34,25 @@ export function parseIssues(json)
 }
 
 /** By task number, the commits and the pull requests that cite it: { commits: [{ hash, day, subject, repo, url }], pulls: [{ number, title,
- * state, url, merged }] }, the newest first. A commit's url when its repo has a page for it (`repoUrl`). */
-export function citationsOf(repos, pulls, prefix = "T")
+ * state, url, merged }] }, the newest first. A commit's url when its repo has a page for it (`repoUrl`). A task named after another
+ * project (`rpg-engine's T-8`) is not this one's: `own` and the repos' names on their pages are the project's names. */
+export function citationsOf(repos, pulls, prefix = "T", own = [])
 {
     const byTask = new Map();
     const entry = (id) => byTask.get(id) ?? byTask.set(id, { commits: [], pulls: [] }).get(id);
+    const names = [...own, ...repos.map((repo) => repo.url?.split("/").at(-1))];
+    const cited = (text) => citedTasks(text, prefix, names);
 
     for (const repo of repos) {
         for (const commit of repo.commits) {
-            for (const id of citedTasks(`${commit.subject}\n${commit.body}`, prefix)) {
+            for (const id of cited(`${commit.subject}\n${commit.body}`)) {
                 entry(id).commits.push({ hash: commit.hash.slice(0, 7), day: commit.day, subject: commit.subject, repo: repo.name, url: repo.url ? `${repo.url}/commit/${commit.hash}` : null });
             }
         }
     }
 
     for (const pull of pulls) {
-        for (const id of citedTasks(`${pull.title}\n${pull.body}`, prefix)) {
+        for (const id of cited(`${pull.title}\n${pull.body}`)) {
             entry(id).pulls.push({ number: pull.number, title: pull.title, state: pull.state, url: pull.url, merged: pull.merged });
         }
     }

@@ -152,6 +152,10 @@ test("init sets a project up in its language, never overwrites, and a fresh proj
     assert.match(add, /T-1 aggiunto: - T-1 · P2 · medium · Ann/);
     const findings = JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: fresh, encoding: "utf8", env }).stdout);
     assert.deepEqual(findings.filter((finding) => finding.severity !== "note"), []);
+    // In the core's format already: nothing to rename.
+    assert.doesNotMatch(JSON.stringify(findings), /rename/);
+    assert.match(readFileSync(join(fresh, "private/project/PLAN.md"), "utf8"), /^## Goals\n\n### Primo traguardo \(phase 1\)$/m);
+    assert.match(readFileSync(join(fresh, "private/project/DECISIONS.md"), "utf8"), /^\| # \| Decision \| Why \|\n\|---\|---\|---\|\n\n## To decide\n$/m);
     assert.match(execFileSync(process.execPath, [join(scripts, "decisions.mjs"), "next"], { cwd: fresh, encoding: "utf8", env }), /^D-1$/m);
 
     const second = init("--language", "it", "--private", "private");
@@ -172,6 +176,8 @@ test("adopt finds a project's own docs and language, writes the configuration th
     put("notes/plan/PLAN.md", "# Piano\n\n## Traguardi\n\n### Il nucleo (fase 1)\n\n- [ ] P1 · 2026-10-01 · i dadi\n  - con i tiri nascosti\n- [x] 2026-09-20 · il registro\n\nTesto del traguardo.\n");
     put("notes/plan/DECISIONI.md", "| # | Decisione | Perché |\n|---|---|---|\n| 1 | Dadi veri. | |\n\n## Da decidere\n\n- uno\n");
     put("src/dice.ts", "// D-1\n");
+    // A test's decisions are made-up data, never cited.
+    put("src/dice.test.ts", "// D-77\n");
     put("lib/other.ts", "// nothing\n");
 
     const survey = init("adopt");
@@ -183,8 +189,13 @@ test("adopt finds a project's own docs and language, writes the configuration th
     assert.match(survey, /Niente scritto/);
     assert.equal(existsSync(join(old, ".claude/project.yaml")), false);
 
-    const written = init("adopt", "--write");
+    assert.match(fails2(init, "adopt", "--docs", "x", "--write"), /adopt prende --language, --people e --name, non --docs/);
+    assert.match(fails2(init, "adopt", "--language", "xx", "--write"), /The language is one of/);
+    assert.equal(existsSync(join(old, ".claude/project.yaml")), false);
+    const written = init("adopt", "--people", "Claude,Ann", "--name", "I dadi", "--write");
     assert.match(written, /\+ notes\/plan\/TASKS\.md/);
+    assert.match(readFileSync(join(old, ".claude/project.yaml"), "utf8"), /^name: "I dadi"\nlanguage: it\n(.*\n)?people: \[Claude, Ann\]$/m);
+    assert.doesNotMatch(spawnSync(process.execPath, [join(scripts, "check.mjs")], { cwd: old, encoding: "utf8", env }).stdout, /D-77/);
     assert.match(written, /= notes\/plan\/PLAN\.md \(c.è già/);
     assert.match(readFileSync(join(old, ".claude/project.yaml"), "utf8"), /^docs: notes\/plan$/m);
 

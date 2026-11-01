@@ -19,17 +19,17 @@ const examples = { language: "--language it", docs: "--docs project", people: '-
 
 const templates = {
     en: {
-        plan: (name, updated) => `# ${name} — Plan\n\n> ${updated}. What the project is doing now, in short.\n\n| Phase | At the end you can… |\n|---|---|\n| 1. First phase | what one can do at its end |\n\nThe plan holds the phases and the goals; the tasks are in the [backlog](TASKS.md).\n\n## Goals\n\n### First goal (phase 1)\n\nWhat it is for.\n`,
+        plan: (name, updated, words) => `# ${name} — Plan\n\n> ${updated}. What the project is doing now, in short.\n\n| Phase | At the end you can… |\n|---|---|\n| 1. First phase | what one can do at its end |\n\nThe plan holds the phases and the goals; the tasks are in the [backlog](TASKS.md).\n\n## ${words.goals}\n\n### First goal (${words.phase} 1)\n\nWhat it is for.\n`,
         tasks: (name) => `# ${name} — Backlog\n\nThe project's tasks, one a line, changed with the project plugin's backlog command, by hand only a task's text. The archived ones are in the [archive](archive/TASKS-archive.md).\n\n`,
         archive: (name) => `# ${name} — Archived tasks\n`,
-        decisions: (name) => `# ${name} — Decisions\n\n> What is decided and why, in short. A proposal stays under "To decide" until it is decided.\n\n| # | Decision | Why |\n|---|---|---|\n\n## To decide\n`,
+        decisions: (name, words) => `# ${name} — Decisions\n\n> What is decided and why, in short. A proposal stays under "${words.open}" until it is decided.\n\n| # | ${words.decision} | ${words.why} |\n|---|---|---|\n\n## ${words.open}\n`,
         index: (name) => `# ${name} — Project docs\n\n- [Plan](PLAN.md): the phases and the goals.\n- [Backlog](TASKS.md): the tasks.\n- [Decisions](DECISIONS.md): what is decided and why.\n`,
     },
     it: {
-        plan: (name, updated) => `# ${name} — Piano\n\n> ${updated}. Cosa fa il progetto ora, in breve.\n\n| Fase | Alla fine puoi… |\n|---|---|\n| 1. Prima fase | cosa si può fare alla sua fine |\n\nIl piano tiene le fasi e i traguardi; i compiti sono nel [backlog](TASKS.md).\n\n## Traguardi\n\n### Primo traguardo (fase 1)\n\nA cosa serve.\n`,
+        plan: (name, updated, words) => `# ${name} — Piano\n\n> ${updated}. Cosa fa il progetto ora, in breve.\n\n| Fase | Alla fine puoi… |\n|---|---|\n| 1. Prima fase | cosa si può fare alla sua fine |\n\nIl piano tiene le fasi e i traguardi; i compiti sono nel [backlog](TASKS.md).\n\n## ${words.goals}\n\n### Primo traguardo (${words.phase} 1)\n\nA cosa serve.\n`,
         tasks: (name) => `# ${name} — Backlog\n\nI compiti del progetto, uno per riga, cambiati col comando backlog del plugin project, a mano solo il testo. Quelli archiviati sono nell'[archivio](archive/TASKS-archive.md).\n\n`,
         archive: (name) => `# ${name} — Compiti archiviati\n`,
-        decisions: (name) => `# ${name} — Decisioni\n\n> Cosa è deciso e perché, in breve. Una proposta resta in "Da decidere" finché non si decide.\n\n| # | Decisione | Perché |\n|---|---|---|\n\n## Da decidere\n`,
+        decisions: (name, words) => `# ${name} — Decisioni\n\n> Cosa è deciso e perché, in breve. Una proposta resta sotto "${words.open}" finché non si decide.\n\n| # | ${words.decision} | ${words.why} |\n|---|---|---|\n\n## ${words.open}\n`,
         index: (name) => `# ${name} — Documenti di progetto\n\n- [Piano](PLAN.md): le fasi e i traguardi.\n- [Backlog](TASKS.md): i compiti.\n- [Decisioni](DECISIONS.md): cosa è deciso e perché.\n`,
     },
 };
@@ -37,12 +37,7 @@ const templates = {
 /** Writes what a project lacks of the configuration and the docs; returns the files written and those already there, as shown paths. */
 export function init(root, options = {})
 {
-    const language = options.language ?? "en";
-
-    if (!presets[language]) {
-        throw new ProjectError(`The language is one of ${Object.keys(presets).join(", ")}, not ${language}; another language: pick one and override its words under words: in ${configFile}.`);
-    }
-
+    const language = languageOf(options.language ?? "en");
     const name = options.name ?? readmeTitle(root) ?? basename(root);
     const docs = options.docs ?? (options.private ? `${options.private}/project` : "project");
     const people = options.people ?? ["Claude"];
@@ -70,10 +65,11 @@ export function init(root, options = {})
 
     config = readConfig(read(join(root, configFile)), root);
     const text = templates[language];
-    place(config.files.plan, text.plan(name, `${config.words.updated} ${today()}`));
+    // The format's words are the core's, English in every language; the rest of the text is in the project's.
+    place(config.files.plan, text.plan(name, `${config.words.updated} ${today()}`, config.words));
     place(config.files.tasks, text.tasks(name) + Object.values(config.words.states).map((state) => `## ${state}`).join("\n\n") + "\n");
     place(config.files.archive, text.archive(name));
-    place(config.files.decisions, text.decisions(name));
+    place(config.files.decisions, text.decisions(name, config.words));
     place(config.files.index, text.index(name));
     return { written, kept };
 }
@@ -81,7 +77,6 @@ export function init(root, options = {})
 if (isMain(import.meta.url)) {
     runCli(() => {
         const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-        const options = {};
         const args = process.argv.slice(2);
 
         if (args[0] === "adopt") {
@@ -94,19 +89,39 @@ if (isMain(import.meta.url)) {
             return;
         }
 
-        for (let index = 0; index < args.length; index += 2) {
-            const key = args[index].replace(/^--/, "");
-            const value = args[index + 1];
-
-            if (value === undefined || value.startsWith("--")) {
-                throw new ProjectError(sayer(options.language ?? "en")("noValue", { name: key, example: examples[key] ?? `--${key} <value>` }));
-            }
-
-            options[key] = key === "people" ? value.split(",").map((one) => one.trim()).filter(Boolean) : value;
-        }
-
+        const options = optionsOf(args);
         printWritten(init(root, options), sayer(options.language ?? "en"));
     });
+}
+
+/** A language the plugin has words for, as given; any other is refused before a file is written. */
+function languageOf(language)
+{
+    if (!presets[language]) {
+        throw new ProjectError(`The language is one of ${Object.keys(presets).join(", ")}, not ${language}; another language: pick one and override its words under words: in ${configFile}.`);
+    }
+
+    return language;
+}
+
+/** The options of a command line, each with the word after it, the people as a list; the flags named apart (adopt's --write) are none. */
+function optionsOf(args, flags = [])
+{
+    const options = {};
+    const rest = args.filter((arg) => !flags.includes(arg));
+
+    for (let index = 0; index < rest.length; index += 2) {
+        const key = rest[index].replace(/^--/, "");
+        const value = rest[index + 1];
+
+        if (value === undefined || value.startsWith("--")) {
+            throw new ProjectError(sayer(options.language ?? "en")("noValue", { name: key, example: examples[key] ?? `--${key} <value>` }));
+        }
+
+        options[key] = key === "people" ? value.split(",").map((one) => one.trim()).filter(Boolean) : value;
+    }
+
+    return options;
 }
 
 /** rename: the core files and folders a project still keeps under their old Italian names, moved to the English ones (the archive's whole
@@ -201,11 +216,20 @@ export function renameCore(root, isWritten)
     return { ...planned, changed, others };
 }
 
-/** adopt: what the project has and the configuration that reads it; --write writes it and the missing docs; --steps moves the plan's
- * checkbox steps into the backlog. The details are for Claude, who tells the user; the frame speaks the docs' language. */
+/** adopt: what the project has and the configuration that reads it, with the language, the people and the name given (--language,
+ * --people, --name) over what it finds; --write writes it and the missing docs; --steps moves the plan's checkbox steps into the
+ * backlog. The details are for Claude, who tells the user; the frame speaks the docs' language. */
 function adoptCommand(root, args)
 {
-    const { found, settings, report } = survey(root);
+    const { found, settings: seen, report } = survey(root);
+    const given = args[0] === "--decisions" || args.includes("--steps") ? {} : optionsOf(args, ["--write"]);
+    const unknown = Object.keys(given).find((key) => !["language", "people", "name"].includes(key));
+
+    if (unknown) {
+        throw new ProjectError(sayer(seen.language)("adoptOption", { name: unknown }));
+    }
+
+    const settings = { ...seen, ...given, language: languageOf(given.language ?? seen.language) };
     const say = sayer(settings.language);
 
     if (args[0] === "--decisions") {

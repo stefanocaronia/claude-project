@@ -319,10 +319,11 @@ export function notePath(config, id)
 }
 
 /** The text files under the configured places a decision may be cited in, a `*` in a part of a path matching any name; a file reached
- * by two paths (a folder and a link to it) once. */
+ * by two paths (a folder and a link to it) once. A test in a folder (`*.test.*`, `*.spec.*`) is left out: its D-n are made-up data. */
 export function citingFiles(config)
 {
     const extensions = /\.(md|ts|tsx|js|mjs|cjs|yaml|yml|json|css|py)$/;
+    const tests = /\.(test|spec)\.\w+$/;
     const skip = new Set(config.skip);
     const files = new Map();
     const add = (path) => files.set(realPath(path).toLowerCase(), path.replaceAll("\\", "/"));
@@ -335,7 +336,7 @@ export function citingFiles(config)
                 if (!skip.has(entry.name)) {
                     walk(child);
                 }
-            } else if (extensions.test(entry.name) && entry.name !== "package-lock.json") {
+            } else if (extensions.test(entry.name) && !tests.test(entry.name) && entry.name !== "package-lock.json") {
                 add(child);
             }
         }

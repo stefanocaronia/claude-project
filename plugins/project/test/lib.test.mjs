@@ -97,6 +97,9 @@ test("the next number, the cited tasks and an effort's key", () => {
     assert.equal(nextId([]), 1);
     assert.equal(nextId([{ id: 4 }, { id: 11 }]), 12);
     assert.deepEqual(citedTasks("see T-12 and T-3, again T-12; not XT-4"), [12, 3]);
+    // Another project's task is not this one's; the project's own name is.
+    assert.deepEqual(citedTasks("claude-project's T-8, rpg-engine#T-2, our T-9, a follow-up T-4, T-7/T-6"), [9, 4, 7, 6]);
+    assert.deepEqual(citedTasks("claude-crew’s T-8", "T", ["Claude-Crew"]), [8]);
     assert.equal(effortKey("extra", it), "xhigh");
     assert.equal(effortKey("—", it), "none");
     assert.equal(effortKey("huge", it), undefined);

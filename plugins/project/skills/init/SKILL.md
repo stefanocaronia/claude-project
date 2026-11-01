@@ -50,7 +50,7 @@ Then propose the migration as one numbered list, one decision per point, with wh
 4. **The texts that cite them**: the instructions, the docs' index, the colleagues' memory. Each line rewritten to the plugin's commands.
 
 On the user's yes, point by point:
-- `init.mjs adopt --write`, which writes the configuration and the missing docs, and never overwrites one;
+- `init.mjs adopt --write`, which writes the configuration and the missing docs, and never overwrites one; `--language`, `--people "Claude,Ann"` and `--name "…"` before `--write` put the user's choices over what adopt found;
 - `--steps` if they chose it;
 - the configuration's additions with Edit;
 - then the rest.

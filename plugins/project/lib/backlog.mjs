@@ -100,10 +100,14 @@ export function moveTasks(tasks, ids, state, today)
     return { tasks: moved, missing };
 }
 
-/** The ids of the tasks a text cites, `T-12`, each once, in order. */
-export function citedTasks(text, prefix = "T")
+/** The ids of the tasks a text cites, `T-12`, each once, in order. One named after another project, `rpg-engine's T-8` or
+ * `rpg-engine#T-8` (a name with a -, . or / before a letter), is that project's and left out, unless the name is one of `own`, the
+ * project's. */
+export function citedTasks(text, prefix = "T", own = [])
 {
-    return [...new Set([...String(text).matchAll(new RegExp(`\\b${escapeRegex(prefix)}-(\\d+)\\b`, "g"))].map((match) => Number(match[1])))];
+    const owns = new Set(own.filter(Boolean).map((name) => name.toLowerCase()));
+    const pattern = new RegExp(`(?:\\b(\\w+(?:[-./][A-Za-z]\\w*)+)(?:['’]s\\s+|#))?\\b${escapeRegex(prefix)}-(\\d+)\\b`, "g");
+    return [...new Set([...String(text).matchAll(pattern)].filter((match) => !match[1] || owns.has(match[1].toLowerCase())).map((match) => Number(match[2])))];
 }
 
 /** The next free number: past every task of the backlog and the archive. */

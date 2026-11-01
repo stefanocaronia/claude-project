@@ -4,7 +4,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { citationsOf, parseIssues, parseLog, parsePulls, repoUrl } from "../lib/code.mjs";
 import { git, projectRepos, ProjectError } from "./project.mjs";
 
@@ -20,7 +20,7 @@ export function readCode(config)
         url: repoUrl(git(repo.path, ["remote", "get-url", "origin"])),
         commits: parseLog(git(repo.path, ["log", `-${commitLimit}`, "--format=%H%x1f%ad%x1f%s%x1f%b%x1e", "--date=short"])),
     }));
-    return citationsOf(repos, parsePulls(ghCached(config, "pulls", ["pr", "list", "--state", "all", "--limit", "200", "--json", "number,title,body,state,url,mergedAt"])), config.prefixes.task);
+    return citationsOf(repos, parsePulls(ghCached(config, "pulls", ["pr", "list", "--state", "all", "--limit", "200", "--json", "number,title,body,state,url,mergedAt"])), config.prefixes.task, [basename(config.root)]);
 }
 
 /** The project's GitHub issues, open and closed, each { number, title, state, url, closed }; none without gh. */
