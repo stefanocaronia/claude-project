@@ -24,8 +24,10 @@ export type Task = {
     /** The tasks and decisions it points to, `(see: T-12, D-2)`, and the tasks that point to it. */
     see: string[];
     seenFrom: string[];
-    /** Its note's path from the project's root, and its address on the page; null without one. */
+    /** Its note's path from the project's root; and its address on the page, null without one or when the note holds only its title
+     * and comments, which show with the task. */
     note: string | null;
+    noteHasBody?: boolean;
     noteHref: string | null;
     /** The comments left on it, in its note, the oldest first: the user's, a colleague's, Claude's. */
     comments?: { day: string; by: string; text: string }[];

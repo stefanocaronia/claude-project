@@ -33,6 +33,16 @@ export function parseComments(note)
     return comments.map(({ day, by, lines: body }) => ({ day, by, text: body.join("\n").trim() }));
 }
 
+/** Whether a note says more than its title and its comments: a note made by a comment holds nothing the task does not show already. */
+export function hasBody(note)
+{
+    const lines = String(note ?? "").replaceAll("\r\n", "\n").replace(/^---\n[\s\S]*?\n---\n/, "").split("\n");
+    const start = lines.findIndex((line) => line.trim() === commentsHeading);
+    const next = lines.findIndex((line, index) => start !== -1 && index > start && /^## /.test(line));
+    const kept = start === -1 ? lines : [...lines.slice(0, start), ...(next === -1 ? [] : lines.slice(next))];
+    return kept.some((line) => line.trim() !== "" && !/^# /.test(line));
+}
+
 /** A note with a comment added at the end of its comments, the section made at the note's end when it has none; the rest of the note
  * as it was. */
 export function withComment(note, { day, by, text })

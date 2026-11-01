@@ -207,6 +207,9 @@ async function pageChecks(port)
     const two = data.board.find((task) => task.id === 2);
     assert.deepEqual([two.after, two.blockedBy, two.waitedBy, two.note, two.noteHref], [["T-3"], ["T-3"], [], "docs/tasks/T-2.md", "/note/2"]);
     assert.deepEqual(two.comments.map(({ by, text }) => [by, text]), [["Ann", "Roll them twice?\nThe second counts."], ["Claude", "--done, as asked"]]);
+    // A note its first comment made holds only its title and comments, which show with the task: no note to open.
+    const one = data.board.find((task) => task.id === 1);
+    assert.deepEqual([one.note, one.noteHref, one.comments.length], ["docs/tasks/T-1.md", null, 1]);
     assert.deepEqual(data.board.find((task) => task.id === 3).see, ["T-50", "T-1"]);
 
     // Every document of the docs opens in the page: its address, its frontmatter's description; nothing outside the docs.

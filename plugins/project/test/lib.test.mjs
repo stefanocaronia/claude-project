@@ -10,7 +10,7 @@ import { firstName, formatTodo, parseTodo } from "../lib/todos.mjs";
 import { wordsOf } from "../lib/words.mjs";
 import { betterDescription, firstParagraph } from "../lib/frontmatter.mjs";
 import { linksIn } from "../lib/text.mjs";
-import { parseComments, withComment } from "../lib/notes.mjs";
+import { hasBody, parseComments, withComment } from "../lib/notes.mjs";
 
 const it = wordsOf("it");
 const en = wordsOf("en");
@@ -230,6 +230,10 @@ test("a note's comments: under their heading, the oldest first, each with its da
     const two = withComment(`${one}\n## Tried\n\nloaded ones\n`, { day: "2026-11-02", by: "Claude", text: "Yes: tested 10 000 rolls." });
     assert.match(two, /\\# not a heading\n\n### 2026-11-02 · Claude\n\nYes: tested 10 000 rolls\.\n\n## Tried\n\nloaded ones\n$/);
     assert.deepEqual(parseComments(two), [{ day: "2026-11-01", by: "Ann", text: "Fair dice?\n# not a heading" }, { day: "2026-11-02", by: "Claude", text: "Yes: tested 10 000 rolls." }]);
+    // A note says something of its own past its title and comments, here or in a section after them; one a comment made does not.
+    const bare = withComment("---\ntitle: T-4 · the map\n---\n\n# T-4 · the map\n", { day: "2026-11-01", by: "Ann", text: "Bigger?" });
+    assert.deepEqual([hasBody(own), hasBody(one), hasBody(two), hasBody(bare)], [true, true, true, false]);
+    assert.equal(hasBody(`${bare}\n## Tried\n\nsmaller\n`), true);
 });
 
 test("paths resolve against a folder, absolute ones stay, and show relative to the root", () => {

@@ -183,7 +183,7 @@ function readBoard(config, code)
             text: clean(task.text),
             effortKey: effortKey(task.effort, config.words) ?? "none",
             colleague: ids.get(task.to) ?? null,
-            noteHref: links.get(task.id).note ? `/note/${task.id}` : null,
+            noteHref: links.get(task.id).noteHasBody ? `/note/${task.id}` : null,
             ...codeView(code.get(task.id)),
             issueInfo: issueOf(issues, task, login),
             // The version whose notes list it, when one does.

@@ -18,7 +18,7 @@ import { dueOf, isStale } from "../lib/schedule.mjs";
 import { compareVersions, messageSummary, parseRelease } from "../lib/release.mjs";
 import { contractState, contractValue } from "../lib/contracts.mjs";
 import { firstName, parseTodo } from "../lib/todos.mjs";
-import { parseComments } from "../lib/notes.mjs";
+import { hasBody, parseComments } from "../lib/notes.mjs";
 
 // How long a change waits for the backlog's lock, and the age past which a lock left behind is taken over.
 const lockWait = 10_000;
@@ -329,6 +329,7 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
         const waiting = (part) => graph.blockers(`${prefix}-${part.id}`).length === 0;
         const rank = (part) => `${part.state === "todo" ? 0 : 1}${part.priority}${part.created}`;
         const next = own.filter((part) => ["todo", "postponed"].includes(part.state) && waiting(part)).sort((first, second) => rank(first).localeCompare(rank(second)))[0];
+        const note = notes.has(`${id}.md`) ? read(notePath(config, task.id)) : null;
         return [task.id, {
             parent: task.parent ?? null,
             parts: own.map((part) => `${prefix}-${part.id}`),
@@ -342,9 +343,11 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
             chain: graph.chain(id),
             waitedBy: waiters.get(id) ?? [],
             seenFrom: from.get(id) ?? [],
-            note: notes.has(`${id}.md`) ? shown(config, notePath(config, task.id)) : null,
+            note: note === null ? null : shown(config, notePath(config, task.id)),
+            // Whether its note says more than its title and its comments: only then is there a note to open.
+            noteHasBody: note !== null && hasBody(note),
             // The comments people left on it, in its note: { day, by, text }, the oldest first.
-            comments: notes.has(`${id}.md`) ? parseComments(read(notePath(config, task.id))) : [],
+            comments: note === null ? [] : parseComments(note),
             decisions: decisions.get(id) ?? [],
             dueInfo: isClosed(task) ? null : dueOf(task.due, now),
             stale: isStale(task, Boolean(holds[String(task.id)]), now, config.limits.staleDays),

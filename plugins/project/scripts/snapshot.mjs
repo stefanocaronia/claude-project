@@ -72,7 +72,7 @@ export async function snapshot(config, say, withHealth = true)
             text: plainMarkdown(task.text),
             effortKey: effortKey(task.effort, config.words) ?? "none",
             colleague: idOf.get(task.to) ?? null,
-            noteHref: links.get(task.id).note ? `${page}/note/${task.id}` : null,
+            noteHref: links.get(task.id).noteHasBody ? `${page}/note/${task.id}` : null,
             ...codeView(code.get(task.id)),
             issueInfo: issueOf(issues, task, login),
         })),
