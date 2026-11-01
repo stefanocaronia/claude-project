@@ -44,6 +44,9 @@ async function ensure()
 
     if (owner === null || isStale) {
         spawn(process.execPath, [join(here, "serve.mjs"), "--port", String(port)], { cwd: config.root, env: { ...process.env, CLAUDE_PROJECT_DIR: config.root }, detached: true, stdio: "ignore", windowsHide: true }).unref();
+    } else if (config.github.issues === "sync") {
+        // The page already up syncs the issues on its own timer: the start of the session syncs them once now, in the background.
+        spawn(process.execPath, [join(here, "..", "scripts", "issues.mjs"), "sync", "--quiet"], { cwd: config.root, env: { ...process.env, CLAUDE_PROJECT_DIR: config.root }, detached: true, stdio: "ignore", windowsHide: true }).unref();
     }
 
     const context = owner === null || owner.toLowerCase() === config.root.toLowerCase() ? say("served", { url })
@@ -56,7 +59,8 @@ async function ensure()
     // With specifications, Claude is told they are there and how the work ties to them.
     const specs = existsSync(config.files.specs) ? readSpecs(config).specs.filter((spec) => !spec.superseded) : null;
     const specsLine = specs ? say("specsAtStart", { file: shown(config, config.files.specs), count: specs.length }) : null;
-    const told = [context, projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null, specsLine].filter(Boolean).join(" ");
+    // The core docs are read through the scripts: the panel refuses the rest (lib/guard.mjs).
+    const told = [context, say("scriptsAtStart"), projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null, specsLine].filter(Boolean).join(" ");
     console.log(JSON.stringify({ systemMessage: context === say("served", { url }) ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: told } }));
 }
 

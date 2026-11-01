@@ -66,6 +66,6 @@ Tidying never asks the user to decide anything. For a decision, a point to decid
 ## The rules that stay
 
 - The docs hold only what is decided, in short.
-- The backlog changes only through `backlog.mjs`, but for a task's text.
+- The backlog changes only through `backlog.mjs`, a task's text too (`set T-12 --text`); the decisions and the specs are read whole only to edit them, and searched through their scripts.
 - Edit files with Edit; Python writes CRLF and `node -e` loses backslashes.
 - At the end, `check.mjs` again, and a short report to the user of what changed. Commit only when they ask.

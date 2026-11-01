@@ -12,8 +12,9 @@ import { gitHubRepo } from "./github.mjs";
 import { specsState } from "./specs.mjs";
 import { check } from "./check.mjs";
 import { readCode, readIssues, readOwner } from "./code.mjs";
+import { syncStateFile, syncSummary } from "./issues.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
-import { colleagues, findRoot, git, isMain, onPath, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
+import { colleagues, findRoot, git, isMain, onPath, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 // The most a portrait may weigh in the panel's drawing, which the desktop drops past about 100 KB: Crew's small ones are under 2 KB.
@@ -22,7 +23,7 @@ const portraitLimit = 4096;
 /** The panel's data for a project. */
 export async function snapshot(config, say, withHealth = true)
 {
-    const { tasks } = readBacklog(config);
+    const { tasks, unread } = readBacklog(config);
     const team = colleagues(config).map((colleague) => ({ ...colleague, ...profileOf(config, colleague.id, colleague.name), ...portraitOf(config, colleague.id) }));
     const idOf = new Map(team.map((colleague) => [colleague.name, colleague.id]));
     const goals = readGoals(config);
@@ -51,9 +52,11 @@ export async function snapshot(config, say, withHealth = true)
         people: config.people,
         // The project's own fields on a task, by key, with their names.
         fields: config.fields,
-        // The key documents, each opened through the project's page.
         // The open GitHub issues no task does yet, to take into the backlog.
         issues: freeIssues(issues, tasks).map(({ number, title, url }) => ({ number, title, url })),
+        // Where the issues are in sync with the backlog: the last sync, what failed, the tasks whose issue is gone.
+        issuesSync: syncSummary(config),
+        // The key documents, each opened through the project's page.
         documents: config.documents.map((document, index) => ({ name: document.name, href: `${page}/#documents/${index}`, exists: existsSync(document.path) })),
         colleagues: team,
         // The person this machine's gh is signed in as, with their GitHub picture inline: on their tasks and on every decision.
@@ -93,10 +96,26 @@ export async function snapshot(config, say, withHealth = true)
                 return { ...proposal, text: plainMarkdown(proposal.text), line: point.line, whole: point.text };
             }),
         },
-        // The files whose change makes the panel read the project again.
-        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.specs, config.files.notes, config.files.releases, ...todoFiles(config).map((one) => one.file)],
+        // The files whose change makes the panel read the project again: the issues' sync state too, where they are in sync.
+        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.specs, config.files.notes, config.files.releases, ...todoFiles(config).map((one) => one.file), ...(config.github?.issues === "sync" ? [syncStateFile(config)].filter(Boolean) : [])],
         health: findings && { errors: count(findings, "error"), warnings: count(findings, "warning"), notes: count(findings, "note") },
+        // The core docs the scripts own, which the panel keeps from a direct read or write (lib/guard.mjs).
+        guard: guardOf(config, unread),
     };
+}
+
+/** The docs the scripts own, each { path, script, owned } relative to the root: the backlog and its archive, read and changed through
+ * backlog.mjs alone, but while a line of them does not read, which only a hand can mend; the decisions and the specs, searched through
+ * their scripts. */
+function guardOf(config, unread)
+{
+    const broken = new Set(unread.map((line) => line.file));
+    const relative = (path) => shown(config, path);
+    return [
+        ...[config.files.tasks, config.files.archive].filter((file) => !broken.has(file)).map((file) => ({ path: relative(file), script: "backlog", owned: true })),
+        { path: relative(config.files.decisions), script: "decisions", owned: false },
+        ...(existsSync(config.files.specs) ? [{ path: relative(config.files.specs), script: "specs", owned: false }] : []),
+    ];
 }
 
 if (isMain(import.meta.url)) {

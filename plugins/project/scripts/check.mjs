@@ -8,6 +8,8 @@ import { escapeRegex } from "../lib/text.mjs";
 import { codeView, issueOf } from "../lib/code.mjs";
 import { parseTodo } from "../lib/todos.mjs";
 import { readCode, readIssues } from "./code.mjs";
+import { syncSummary } from "./issues.mjs";
+import { taskSide } from "../lib/issues.mjs";
 import { backlogProblems } from "./backlog.mjs";
 import { extensionChecks, loadExtensions } from "./extensions.mjs";
 import { readable } from "../lib/words.mjs";
@@ -30,6 +32,7 @@ export function check(config, say)
     checkBacklog(config, say, add);
     checkLinks(config, say, add);
     checkCode(config, say, add);
+    checkIssues(config, say, add);
     checkTime(config, say, add);
     checkPlan(config, say, add);
     checkOpen(config, say, add);
@@ -322,8 +325,8 @@ function checkCode(config, say, add)
         }
     }
 
-    // A task and its GitHub issue that no longer agree: one closed, the other open.
-    const issues = readIssues(config);
+    // A task and its GitHub issue that no longer agree: one closed, the other open; where the issues are in sync, the next sync settles it.
+    const issues = config.github?.issues === "sync" ? [] : readIssues(config);
 
     for (const task of readBacklog(config).tasks.filter((one) => one.issue)) {
         const issue = issueOf(issues, task);
@@ -334,6 +337,28 @@ function checkCode(config, say, add)
         } else if (issue?.state === "closed" && !isClosed) {
             add("note", "code", task.file, task.line, say("issueClosedTaskOpen", { id: `${prefix}-${task.id}`, issue: task.issue, day: issue.closed ?? "?" }));
         }
+    }
+}
+
+/** Where the issues are in sync: the last sync that failed, and the open tasks whose issue GitHub no longer lists. */
+function checkIssues(config, say, add)
+{
+    const sync = syncSummary(config);
+
+    if (!sync) {
+        return;
+    }
+
+    if (sync.error) {
+        add("warning", "code", null, null, say("issuesSyncFailed", { at: sync.at, error: sync.error }));
+    }
+
+    const prefix = config.prefixes.task;
+    const tasks = new Map(readBacklog(config).tasks.map((task) => [`${prefix}-${task.id}`, task]));
+
+    for (const { id, issue } of sync.missing) {
+        const task = tasks.get(id);
+        task && taskSide(task) === "open" && add("warning", "code", task.file, task.line, say("issueMissing", { id, issue }));
     }
 }
 

@@ -79,6 +79,8 @@ export type Snapshot = {
     doneParts?: DonePart[];
     /** Whether git and gh are here, and the project's repo on GitHub, owner/name, or null. */
     github?: { tools: boolean; repo: string | null };
+    /** The core docs the scripts own, relative to the root: the panel refuses a direct read or write of them (lib/guard.mjs). */
+    guard?: { path: string; script: string; owned: boolean }[];
     /** The last versions, the newest first, how many tasks wait for the next one, with the number it suggests, and the contracts that
      * moved; null where the project shows no releases (none yet and none declared, or release: false). */
     releases?: { list: { version: string; day: string; summary: string; count: number | null }[]; total?: number; pending: number; next: string; raised?: string[]; contracts?: { name: string; before: string | null; current: string | null }[] } | null;
@@ -97,6 +99,9 @@ export type Snapshot = {
     documents: { name: string; href: string; exists: boolean }[];
     /** The open GitHub issues no task does yet, to take into the backlog; none without gh. */
     issues?: { number: number; title: string; url: string | null }[];
+    /** Where the issues are in sync with the backlog (D-13): the last sync, this machine's time, null before the first; its error; the open
+     * tasks whose issue GitHub no longer lists. Null where they are not in sync. */
+    issuesSync?: { at: string | null; error: string | null; missing: { id: string; issue: string }[] } | null;
     colleagues: Member[];
     /** The person this machine's gh is signed in as, with their GitHub picture: on their tasks and on every decision; null without gh. */
     owner?: { name: string; fullName: string; portrait?: string } | null;

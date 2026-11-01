@@ -84,9 +84,32 @@ export function readConfig(text, root)
         release: releaseOf(given.release),
         // The numbers others read of the project, apart from its version: `contracts: [{ name, file, pointer: /a/b }]`, or `pattern:`.
         contracts: contractsOf(given.contracts, root),
+        // GitHub: the issues in sync where the project turns it on, `github: { issues: sync }`, which stands for the user's yes to act on
+        // GitHub; `unassigned: take | leave` fixes whether the open issues assigned to nobody come in, else they do where the user is
+        // the repo's only collaborator.
+        github: githubOf(given.github),
     };
 
     return config;
+}
+
+/** The GitHub settings: { issues: "sync" | "off", unassigned: "auto" | "take" | "leave", logins: { person: login } }. */
+function githubOf(given)
+{
+    if (given !== undefined && given !== null && !isMap(given)) {
+        throw new Error(`github is a map (github: { issues: sync }), not ${Array.isArray(given) ? "a list" : typeof given}.`);
+    }
+
+    const issues = given?.issues === true ? "sync" : given?.issues === false || given?.issues === undefined || given?.issues === null ? "off" : String(given.issues);
+    const unassigned = given?.unassigned === undefined || given?.unassigned === null ? "auto" : String(given.unassigned);
+
+    if (!["sync", "off"].includes(issues) || !["auto", "take", "leave"].includes(unassigned)) {
+        throw new Error(`github: issues is sync or off, unassigned is take, leave or auto, not ${JSON.stringify(given)}.`);
+    }
+
+    // The people of the project with an account on GitHub, by name: `logins: { Giulia: giulia-r }`; the user of gh is known by their login.
+    const logins = isMap(given?.logins) ? Object.fromEntries(Object.entries(given.logins).map(([person, login]) => [person, String(login)])) : {};
+    return { issues, unassigned, logins };
 }
 
 /** The release settings: { show: true | false | null, run: [], remember: [] }, null showing the versions once there is a release. */

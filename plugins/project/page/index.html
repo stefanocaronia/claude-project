@@ -3194,16 +3194,23 @@ function codeLinks(task)
 function issuesCard()
 {
     const issues = data.issues ?? [];
+    const sync = data.issuesSync;
 
-    if (!issues.length) {
+    if (!issues.length && !sync) {
         return "";
     }
 
+    // Where the issues are in sync with the backlog: the last sync, or its error; the tasks whose issue GitHub no longer lists.
+    const synced = !sync ? ""
+        : sync.error ? `<p class="hint" style="color:var(--critical)">⚠ ${escape(t("issuesSyncBroken", sync.at ?? "", sync.error))}</p>`
+        : `<p class="hint">⇅ ${escape(sync.at ? t("issuesSynced", sync.at) : t("issuesSyncNever"))}</p>`;
+    const missing = sync?.missing?.length ? `<p class="hint" style="color:var(--critical)">⚠ ${escape(t("issuesSyncMissing", sync.missing.map((one) => `${one.id} (${one.issue})`).join(", ")))}</p>` : "";
     const rows = issues.map((issue) => `<li class="issue-row">${issue.url ? `<a href="${attribute(issue.url)}" target="_blank" rel="noopener"><b>#${issue.number}</b> ${escape(issue.title)}</a>` : `<span><b>#${issue.number}</b> ${escape(issue.title)}</span>`}<button type="button" id="issue-take-${issue.number}" data-take-issue="${issue.number}" data-title="${attribute(issue.title)}">${escape(t("issueToBacklog"))}</button></li>`).join("");
     return `<section class="card span-12">
             <h2>${escape(t("issuesTitle"))} <span class="badge">${issues.length}</span></h2>
-            <p class="hint">${escape(t("issuesHint"))}</p>
-            <ul class="issues">${rows}</ul>
+            ${synced}${missing}
+            ${issues.length ? `<p class="hint">${escape(t("issuesHint"))}</p>
+            <ul class="issues">${rows}</ul>` : ""}
         </section>`;
 }
 

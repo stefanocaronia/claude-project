@@ -80,7 +80,7 @@ export async function readOwner(config)
 }
 
 /** What gh answers, the last reading when it is recent; "[]" when gh is missing or fails, or PROJECT_NO_GH is set. */
-function ghCached(config, name, args)
+export function ghCached(config, name, args)
 {
     if (process.env.PROJECT_NO_GH) {
         return "[]";
@@ -105,17 +105,25 @@ function ghCached(config, name, args)
 }
 
 /** A gh command in the project's folder, its output; a ProjectError that says how to fix it when gh fails. */
-function gh(config, args)
+export function gh(config, args)
 {
     if (process.env.PROJECT_NO_GH) {
         throw new ProjectError("gh is turned off here (PROJECT_NO_GH).");
     }
 
     try {
-        return execFileSync("gh", args, { cwd: config.root, encoding: "utf8", timeout: 15_000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, GH_PROMPT_DISABLED: "1" } });
+        // The tests' stand-in for gh, a script run with node in its place.
+        const [program, given] = process.env.PROJECT_FAKE_GH ? [process.execPath, [process.env.PROJECT_FAKE_GH, ...args]] : ["gh", args];
+        return execFileSync(program, given, { cwd: config.root, encoding: "utf8", timeout: 15_000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, GH_PROMPT_DISABLED: "1" } });
     } catch (error) {
         throw new ProjectError(`gh ${args.slice(0, 2).join(" ")} failed: ${String(error.stderr ?? error.message).trim().split("\n")[0]} Install gh and run gh auth login, in a repo whose remote is on GitHub.`);
     }
+}
+
+/** Forgets the last reading of gh by its name, "issues" or "pulls": the next one asks again. */
+export function forgetGh(config, name)
+{
+    writeFileSync(cacheFile(config, name), "");
 }
 
 function cacheFile(config, name)

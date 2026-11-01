@@ -13,6 +13,8 @@ import { apply, isRunning, propose, runFix, tidyState } from "./tidy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pluginRoot = join(here, "..");
+// How often the GitHub issues are synced, where the project turns it on.
+const issuesEvery = 5 * 60_000;
 const types = { ".html": "text/html; charset=utf-8", ".json": "application/json", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css", ".png": "image/png", ".jpg": "image/jpeg", ".svg": "image/svg+xml", ".md": "text/plain; charset=utf-8", ".yaml": "text/plain; charset=utf-8" };
 
 /** The page's server for a project, with its extensions loaded; listen() starts it on the loopback addresses. */
@@ -167,6 +169,26 @@ if (isMain(import.meta.url)) {
 
     console.log(`Project page on http://localhost:${port}`);
     restartOnChange(port);
+    syncOnTimer();
+}
+
+/** The GitHub issues in sync every few minutes, where the project turns it on: each sync in a process of its own, so that the page never
+ * waits for gh. The configuration is read each time, so that turning it on needs no new page. */
+function syncOnTimer()
+{
+    const sync = () => {
+        try {
+            if (loadProject().config.github.issues !== "sync") {
+                return;
+            }
+        } catch {
+            return;
+        }
+
+        spawn(process.execPath, [join(pluginRoot, "scripts", "issues.mjs"), "sync", "--quiet"], { cwd: process.cwd(), env: process.env, stdio: "ignore", windowsHide: true }).unref();
+    };
+    sync();
+    setInterval(sync, issuesEvery).unref();
 }
 
 /** A page that outlives a change of the plugin's code or of the project's configuration (its core files renamed, say) would read the

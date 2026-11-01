@@ -1,4 +1,4 @@
-// The project's backlog, changed only through here but for a task's text:
+// The project's backlog, read and changed only through here, a task's text too (the panel refuses a direct read or write of its files):
 //   node backlog.mjs next
 //   node backlog.mjs add "text" [--goal "<goal of the plan>"] [--p P2] [--effort <word>] [--to <name>] [--state todo|doing|postponed|done]
 //   node backlog.mjs start|done|postpone|todo T-12 [T-13…]
@@ -7,6 +7,7 @@
 //     [--<field> <value>]   (a field of the project's configuration, `fields:`; "" clears it; add takes them too)
 //   node backlog.mjs add --issue 34 ["text"]   (a task from a GitHub issue, its title the text when none is given)
 //   node backlog.mjs issue-close T-12   (closes its GitHub issue with a comment: only on the user's yes)
+//   Where the issues are in sync (github: { issues: sync }), each change is followed by a sync with GitHub (issues.mjs).
 //   node backlog.mjs note T-12   (its note, written when missing: the path)
 //   node backlog.mjs show T-12… | list [--atomic] [--state doing] [--to <name>] [--p P1] [--goal "…"] [--json] | find <words>… | goals
 //   node backlog.mjs export [--format json|csv|<an extension's>] [--state todo] [--all]   (the open tasks, or all of them, on stdout)
@@ -24,6 +25,7 @@ import { formatTodo, parseTodo } from "../lib/todos.mjs";
 import { effortWord, stateKeys } from "../lib/words.mjs";
 import { closeIssue, readCode, readIssue, readIssues } from "./code.mjs";
 import { context, loadExtensions } from "./extensions.mjs";
+import { syncIssues } from "./issues.mjs";
 import { assignees, isMain, loadProject, notePath, ProjectError, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
@@ -96,7 +98,15 @@ async function run(args)
     }
 
     // A change reads the backlog again once it holds the lock, so it never writes over a change made meanwhile.
-    return changes.includes(command) ? withBacklogLock(config, () => execute(command, options, words, config, say)) : execute(command, options, words, config, say);
+    const result = changes.includes(command) ? withBacklogLock(config, () => execute(command, options, words, config, say)) : execute(command, options, words, config, say);
+
+    // Where the issues are in sync, a change of the backlog goes to GitHub at once, and what GitHub changed comes in.
+    if (changes.includes(command) && config.github?.issues === "sync") {
+        const quiet = [say("issuesInSync"), say("issuesBusy")];
+        syncIssues(config, say).lines.filter((line) => !quiet.includes(line)).forEach((line) => console.log(line));
+    }
+
+    return result;
 }
 
 /** The formats the backlog is written in and read from: json and csv, and those of the extensions, by name. */
@@ -258,8 +268,9 @@ function execute(command, options, words, config, say)
         const parents = state === "doing" ? ids.map((id) => tasks.find((task) => task.id === id).parent).filter(Boolean).map(find).filter((task) => ["todo", "postponed"].includes(task.state)).map((task) => task.id) : [];
         const moved = moveTasks(moveTasks(tasks, ids, state, today()).tasks, parents, "doing", today()).tasks;
         save(moved, [...ids, ...parents].map((id) => say("moved", { id: `${prefix}-${id}`, state: config.labels.states[state] })).join("\n"));
-        // A task done whose GitHub issue is still open: Claude asks whether to close it, and closes it on a yes.
-        const issues = state === "done" ? readIssues(config) : [];
+        // A task done whose GitHub issue is still open: Claude asks whether to close it, and closes it on a yes; where the issues are in
+        // sync, the sync closes it.
+        const issues = state === "done" && config.github?.issues !== "sync" ? readIssues(config) : [];
 
         for (const task of ids.map((id) => moved.find((one) => one.id === id)).filter((one) => one.issue)) {
             if (issues.find((issue) => `#${issue.number}` === task.issue)?.state === "open") {

@@ -55,7 +55,7 @@ function world(on: On, answers: Answer[] = [good]): { runs: string[][]; prompts:
     const opens = { count: 0 };
     let reads = 0;
     mock.env(on, { OS: "Linux", TMPDIR: "/tmp", LANG: "it_IT.UTF-8" });
-    mock.clock(on, { now: Date.UTC(2026, 9, 30, 9, 0) });
+    const clock = mock.clock(on, { now: Date.UTC(2026, 9, 30, 9, 0) });
     mock.store(on);
     on("session.start", () => ({ cwd: "/p" }) as never);
     on("session.root", () => ({ value: "/p" }));
@@ -96,7 +96,7 @@ function world(on: On, answers: Answer[] = [good]): { runs: string[][]; prompts:
         const { Text } = $.ui.resolve(e);
         return <Text key="engine">engine</Text>;
     });
-    return { runs, prompts, commands, stamp, opens };
+    return { runs, prompts, commands, stamp, opens, clock };
 }
 
 test("the panel shows the project's numbers, the tasks in progress and the P1 to do, the goals, the points to decide", async ($, on) => {
@@ -346,6 +346,19 @@ test("▶ on Claude's own task moves it to in progress before asking, and a chan
     expect(reads()).toBe(before + 1);
 });
 
+test("a grep, a cat or a Read of the backlog is refused with the command to use; a decision is read to be edited, not searched", async ($, on) => {
+    const guard = [{ path: "docs/TASKS.md", script: "backlog", owned: true }, { path: "docs/DECISIONS.md", script: "decisions", owned: false }];
+    world(on, [{ ...good, stdout: JSON.stringify({ ...snapshot, guard }) }]);
+    on("tool.call", () => ({ result: "ran" }) as never);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const read = await $.tool.call({ tool: "Read", file_path: "/p/docs/TASKS.md" } as never);
+    expect(read.deny).toMatch(/^docs\/TASKS\.md è del backlog: si legge e si cambia solo con backlog\.mjs/);
+    expect((await $.tool.call({ tool: "Bash", command: "grep -n T-61 docs/TASKS.md" } as never)).deny).toMatch(/backlog\.mjs/);
+    expect((await $.tool.call({ tool: "Grep", pattern: "D-14", path: "docs/DECISIONS.md" } as never)).deny).toMatch(/^docs\/DECISIONS\.md si cerca con decisions\.mjs/);
+    expect((await $.tool.call({ tool: "Read", file_path: "/p/docs/DECISIONS.md", offset: 28 } as never)).deny).toBeUndefined();
+    expect((await $.tool.call({ tool: "Bash", command: "git add docs/TASKS.md && node scripts/backlog.mjs show T-61" } as never)).deny).toBeUndefined();
+});
+
 test("the button for where the project stands asks Claude for a short report, and tidying the backlog runs the tidy skill", async ($, on) => {
     const { prompts, commands } = world(on);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
@@ -400,6 +413,33 @@ test("the open GitHub issues no task does yet show apart and go into the backlog
     await ui.press({ key: "done-70" });
     expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "add", "Il login fallisce", "--issue", "40"], ["backlog.mjs", "done", "T-70"]]);
     expect(prompts[0]).toMatch(/^T-70 è fatto e la sua issue #33 su GitHub è ancora aperta: chiedimi se chiuderla/);
+    await ui.unmount();
+});
+
+test("with nobody working in the chat, the panel looks at the files every few seconds and reads the project again only when one changed", async ($, on) => {
+    const { runs, stamp, clock } = world(on);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const reads = () => runs.filter((args) => args[0] === "snapshot.mjs").length;
+    const before = reads();
+    await clock.advance(15_000);
+    expect(reads()).toBe(before);
+    // The page's sync brought an issue in, or another chat changed the backlog.
+    stamp.mtimeMs = 2;
+    await clock.advance(15_000);
+    expect(reads()).toBe(before + 1);
+    await clock.advance(15_000);
+    expect(reads()).toBe(before + 1);
+});
+
+test("where the issues are in sync, their section shows the last sync, or its error in red, and the tasks whose issue is gone, with no issue free", async ($, on) => {
+    const issuesSync = { at: "2026-11-01 10:05", error: "gh api user failed", missing: [{ id: "T-70", issue: "#33" }] };
+    world(on, [{ ...good, stdout: JSON.stringify({ ...snapshot, issues: [], issuesSync }) }]);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
+    expect((await ui.find({ key: "toggle-issues" }))?.props.label).toBe("▾ ◉ Issue di GitHub · 0");
+    expect(await ui.find({ key: "issues-hint" })).toBeUndefined();
+    expect(await ui.find({ type: "Text", text: "⚠ Sincronia fallita · 2026-11-01 10:05: gh api user failed" })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: "⚠ Compiti la cui issue GitHub non elenca più: T-70 (#33)" })).toBeDefined();
     await ui.unmount();
 });
 

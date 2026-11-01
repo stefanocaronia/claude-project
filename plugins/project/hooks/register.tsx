@@ -9,6 +9,7 @@ import type { Board, Goal, Member, Proposal, Pull, Snapshot, Task, View } from "
 import { barEndSvg, claudeSvg, effortSvg, faceSvg, prioritySvg, typeSvg, wideBarSvg } from "./draw.ts";
 import { typeColor } from "../lib/schedule.mjs";
 import { citedTasks } from "../lib/backlog.mjs";
+import { guardCall } from "../lib/guard.mjs";
 import { sayer } from "../lib/messages.mjs";
 
 const pane = "project";
@@ -58,6 +59,10 @@ const effortMeters: Record<string, string> = { low: "▮▯▯▯", medium: "▮
 const noProject = 3;
 // How long a start asked from the panel shows on its button, at most, while Claude starts the work.
 const startingFor = 120_000;
+// How often the panel looks at the project's files while nobody works in this chat: a change made elsewhere (the page's sync of the
+// issues, another chat, an edit by hand) shows without waiting for a turn. A look is a stat of each file; the project is read again only
+// when one changed.
+const watchEvery = 15_000;
 // Whether this module has read the project since it was loaded: a reload of the plugins keeps the panel's state, not this, so the first
 // drawing after one reads the project again, as a new session would.
 let hasRead = false;
@@ -72,6 +77,7 @@ export const register: Register = (on) => {
             void $.ui.open({ id: pane, title: say(await read($, board))("pane") }).catch(() => undefined);
         }
 
+        $.clock.every(watchEvery, () => void refresh($, false).catch(() => undefined));
         return started;
     });
 
@@ -100,6 +106,15 @@ export const register: Register = (on) => {
     // A task this chat starts or closes through the backlog's command line: this chat holds it, or no longer does. Any change through
     // the plugin's commands shows at once, not only when the turn ends: a task Claude starts is in progress while it works on it.
     on("tool.call", async ($, e, next) => {
+        // The core docs the scripts own are read and changed through them, in this chat and in a colleague's: a grep, a cat or a Read
+        // of them is refused with the command to use.
+        const { snapshot: known } = await read($, board);
+        const refused = known?.guard ? guardCall(e, known.guard) : null;
+
+        if (refused) {
+            return { deny: sayer(known?.language ?? "en")(refused.key, { file: refused.file }) };
+        }
+
         const result = await next(e);
         const command = typeof (e as { command?: unknown }).command === "string" ? (e as { command: string }).command : "";
         const change = e.agentId ? null : /backlog\.mjs["']?\s+(start|done|postpone|todo|archive)\b/.exec(command);
@@ -212,6 +227,23 @@ export const register: Register = (on) => {
         );
         const more = (list: string, count: number, label: "showAllTasks" | "showAllDecisions") =>
             count > (rows[list] ?? 3) && !panel.whole[list] ? <Button key={`more-${list}`} plain dimColor label={words(label, { count })} onPress={showWhole(list)} /> : null;
+        // Where the issues are in sync with the backlog: the last sync, or its error in red; the tasks whose issue is gone.
+        const issuesSyncLines = () => {
+            const sync = snapshot.issuesSync;
+
+            if (!sync) {
+                return [];
+            }
+
+            return [
+                sync.error
+                    ? <Text key="issues-sync" color={errorColor} wrap="truncate-end">{`⚠ ${words("issuesSyncBroken", { at: sync.at ?? "", error: sync.error })}`}</Text>
+                    : <Text key="issues-sync" dimColor>{`⇅ ${sync.at ? words("issuesSynced", { at: sync.at }) : words("issuesSyncNever")}`}</Text>,
+                sync.missing.length > 0
+                    ? <Text key="issues-missing" color={warningColor}>{`⚠ ${words("issuesSyncMissing", { list: sync.missing.map((one) => `${one.id} (${one.issue})`).join(", ") })}`}</Text>
+                    : null,
+            ];
+        };
 
         // Who holds a task: Claude's critter, a colleague's portrait or initials, the owner's GitHub picture, a person's initials in gray.
         const owner = snapshot.owner;
@@ -747,9 +779,10 @@ export const register: Register = (on) => {
                 {taskSection("doing", "⚒︎", words("sectionDoing"), doing, words("noneDoing"))}
                 {taskSection("rest", "☰", words("sectionRest"), rest, words("noneRest"))}
                 {postponed.length > 0 ? taskSection("postponed", "⏸", snapshot.words.states.postponed, postponed, "") : null}
-                {(snapshot.issues ?? []).length > 0
+                {(snapshot.issues ?? []).length > 0 || snapshot.issuesSync
                     ? section("issues", "◉", `${words("sectionIssues")} · ${(snapshot.issues ?? []).length}`, [
-                        <Text key="issues-hint" dimColor>{words("issuesHint")}</Text>,
+                        ...issuesSyncLines(),
+                        (snapshot.issues ?? []).length > 0 ? <Text key="issues-hint" dimColor>{words("issuesHint")}</Text> : null,
                         ...limited("issues", snapshot.issues ?? []).map((issue) => card(`issue-${issue.number}`, [
                             <Box key={`issue-row-${issue.number}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
                                 <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
