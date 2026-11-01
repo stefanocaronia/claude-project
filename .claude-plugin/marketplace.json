@@ -12,7 +12,7 @@
       "name": "project",
       "source": "./plugins/project",
       "description": "Project: the plan's phases and goals, a backlog of numbered tasks with priority, effort and assignee, the decisions and specifications with their numbers, versions and releases, GitHub issues in sync, a check of the docs' health; a panel beside the chat and a page with the charts; works with Crew's colleagues.",
-      "version": "0.13.0",
+      "version": "0.14.0",
       "category": "productivity"
     }
   ]
