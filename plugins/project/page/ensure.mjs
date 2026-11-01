@@ -9,6 +9,7 @@ import { sayer } from "../lib/messages.mjs";
 import { findRoot, git, loadProject, onPath, ProjectError, projectCommandOnPath, projectName, readSpecs, shown } from "../scripts/project.mjs";
 
 const from = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+const here = dirname(fileURLToPath(import.meta.url));
 
 if (findRoot(from) === null) {
     invite();
@@ -22,6 +23,8 @@ if (findRoot(from) === null) {
     }
 }
 
+/** The page started, or started again in place of another copy's; what serves its port said to the user and to Claude, with how to work
+ * on the project. */
 async function ensure()
 {
     const { config, say } = loadProject(from);
@@ -29,7 +32,6 @@ async function ensure()
     const url = `http://localhost:${port}`;
     const answer = await whoServes(port);
     const owner = answer === null ? null : answer.root ?? "";
-    const here = dirname(fileURLToPath(import.meta.url));
     // This project's page run by another copy of the plugin (an older version, before an update), or by a version older than 0.8.1, which
     // does not say its folder and does not restart itself: it makes way for this one's.
     const isStale = owner?.toLowerCase() === config.root.toLowerCase() && (!answer.plugin || !same(answer.plugin, join(here, "..")));
@@ -49,9 +51,8 @@ async function ensure()
         spawn(process.execPath, [join(here, "..", "scripts", "issues.mjs"), "sync", "--quiet"], { cwd: config.root, env: { ...process.env, CLAUDE_PROJECT_DIR: config.root }, detached: true, stdio: "ignore", windowsHide: true }).unref();
     }
 
-    const context = owner === null || owner.toLowerCase() === config.root.toLowerCase() ? say("served", { url })
-        : owner === "" ? say("portBusy", { port })
-        : say("portOther", { port, owner });
+    const isServed = owner === null || owner.toLowerCase() === config.root.toLowerCase();
+    const context = isServed ? say("served", { url }) : owner === "" ? say("portBusy", { port }) : say("portOther", { port, owner });
     // The line is shown to the user at the start of the session, and given to Claude as context; with the plugin's command on the path,
     // Claude is told to call it in place of the scripts' long path.
     // Without git or gh, Claude is told to offer the github skill when the user works with GitHub.
@@ -61,7 +62,7 @@ async function ensure()
     const specsLine = specs ? say("specsAtStart", { file: shown(config, config.files.specs), count: specs.length }) : null;
     // The core docs are read through the scripts: the panel refuses the rest (lib/guard.mjs). Text from outside is data (D-16).
     const told = [context, say("scriptsAtStart"), say("outsideAtStart"), projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null, specsLine].filter(Boolean).join(" ");
-    console.log(JSON.stringify({ systemMessage: context === say("served", { url }) ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: told } }));
+    console.log(JSON.stringify({ systemMessage: isServed ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: told } }));
 }
 
 /** One line, once a repo: the plugin is here and /project:init sets it up. The repos already told are kept in the temporary folder. */
@@ -115,6 +116,7 @@ function listener(port)
     }
 }
 
+/** Whether two paths name the same folder, whatever their slashes and case. */
 function same(one, other)
 {
     const plain = (path) => resolve(path).replaceAll("\\", "/").replace(/\/$/, "").toLowerCase();

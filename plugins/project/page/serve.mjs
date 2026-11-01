@@ -1,5 +1,5 @@
 // The project's page: node serve.mjs, from the project's folder or with CLAUDE_PROJECT_DIR; then http://localhost:<page.port>.
-// It serves the page, its data, the cleanup, the colleagues' portraits, and each extension's script and routes.
+// It serves the page and its scripts (app/), its data, the cleanup, the colleagues' portraits, and each extension's script and routes.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
@@ -78,7 +78,8 @@ export async function pageServer(from)
                 await extensionRoute(extensions, config, say, request, response, url);
             } else if (url.pathname === "/") {
                 send(response, 200, "text/html; charset=utf-8", readFileSync(join(here, "index.html")));
-            } else if (/^\/[\w-]+\.(js|css)$/.test(url.pathname)) {
+            } else if (/^\/(?:app\/)?[\w-]+\.(?:js|css)$/.test(url.pathname)) {
+                // The page's words and its scripts, by their names: never another file.
                 sendFile(response, here, url.pathname.slice(1));
             } else {
                 send(response, 404, "text/plain", "not found");
@@ -111,7 +112,7 @@ function changeBacklog(config, { command, id, priority, issue, title, text, goal
     // The project's own fields, only those its configuration names.
     const extra = Object.fromEntries(Object.entries(own && typeof own === "object" ? own : {}).filter(([key, value]) => key in config.fields && typeof value === "string"));
     // What it points to, the specs it does among them: names only, tasks, decisions and specs, checked by the backlog's command.
-    const links = typeof see === "string" ? see.split(/[,\s]+/).filter((one) => /^[\w]+-\d+$/.test(one)).join(", ") : undefined;
+    const links = typeof see === "string" ? see.split(/[,\s]+/).filter((one) => /^\w+-\d+$/.test(one)).join(", ") : undefined;
     // Each value after its option's =, and a new task's text after a lone --: a text that starts with -- (an issue's title, written by
     // anyone) never reads as an option.
     const fields = Object.entries({ text, goal, p: priority, type, to, due, effort, in: parent, see: links, ...extra }).filter(([, value]) => typeof value === "string").map(([name, value]) => `--${name}=${clean(value)}`);
@@ -272,6 +273,7 @@ function fileAnswer(folder, relativePath)
     return { status: 200, type: types[extname(path)] ?? "application/octet-stream", body: readFileSync(path) };
 }
 
+/** A file under a folder sent as it is; 404 when there is none. */
 function sendFile(response, folder, relativePath)
 {
     const answer = fileAnswer(folder, relativePath);
@@ -297,6 +299,7 @@ function body(request)
     });
 }
 
+/** An answer, never kept by the browser: the page always asks again. */
 function send(response, status, type, content)
 {
     response.writeHead(status, { "content-type": type, "cache-control": "no-store" });

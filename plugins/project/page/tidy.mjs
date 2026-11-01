@@ -53,12 +53,11 @@ function mechanical(config)
 /** Starts the run that writes the proposals, reading only, on the docs or on the backlog; false when a run is going. */
 export function propose(config, scope = "docs")
 {
-    const check = `node ${pluginRoot}/scripts/check.mjs`;
-
     if (scope === "backlog") {
         return proposeBacklog(config);
     }
 
+    const check = `node ${pluginRoot}/scripts/check.mjs`;
     const brief = `Run the tidy skill of the project plugin: read ${pluginRoot}/skills/tidy/SKILL.md and do only its section 2, the docs, as proposals. Change no file.
 Start from the report of \`${check}\`, whose files are relative to the project's root. Read with Read and Grep; Bash is only for that command. Read only the lines the findings point at (Read with offset and limit) and what you need to judge them.
 The docs' form only: links, the index, the folders. No decision, no point to decide, no task, no colleague's todo: those are the backlog's tidy. Every proposal changes something. The whitespace, the blank lines, the docs' frontmatter, the core's English names and format and the tasks' dates the page fixes itself: do not propose them.
@@ -101,7 +100,8 @@ Answer with a JSON object and nothing else, at most 25 proposals, the most usefu
 /** Starts the run that applies the proposals the user ticked, and only those; false when there is none or a run is going. */
 export function apply(config, ids)
 {
-    const chosen = (readState(config).proposals ?? []).filter((proposal) => ids.includes(proposal.id) && !proposal.waits);
+    const saved = readState(config);
+    const chosen = (saved.proposals ?? []).filter((proposal) => ids.includes(proposal.id) && !proposal.waits);
 
     if (chosen.length === 0) {
         return false;
@@ -110,20 +110,14 @@ export function apply(config, ids)
     const check = `node ${pluginRoot}/scripts/check.mjs`;
 
     // The backlog's proposals are applied through its command alone.
-    if (readState(config).scope === "backlog") {
+    if (saved.scope === "backlog") {
         const backlog = `node ${pluginRoot}/scripts/backlog.mjs`;
         const decisions = shown(config, config.files.decisions);
         const brief = `Apply these proposals on the backlog and on the decisions, approved by the user, and only these: a task's with the \`${backlog} …\` commands its "change" names, a decision's or a point to decide's with Edit in ${decisions}, exactly as its "change" says; an open point is never resolved:
 ${JSON.stringify(chosen, null, 2)}
 Follow ${pluginRoot}/skills/tidy/SKILL.md, section 3 and "The rules that stay". If a command is refused, read its message, fix the command once, or skip the proposal and say why. At the end run \`${check}\`.
 Answer with a JSON object and nothing else, its summary in the project's language (${config.language}): {"applied": ["p1"], "skipped": [{"id": "p3", "why": "..."}], "summary": "two or three sentences"}`;
-        return startRun(config, "apply", brief, ["Read", "Grep", `Edit(${decisions})`, `Bash(${backlog} *)`, `Bash(${check})`], (state, result) => {
-            const outcome = objectOf(result);
-            const applied = new Set(outcome.applied ?? []);
-            state.proposals = (state.proposals ?? []).filter((proposal) => !applied.has(proposal.id));
-            state.applied = { at: new Date().toISOString(), applied: [...applied], skipped: outcome.skipped ?? [], summary: outcome.summary ?? result.slice(0, 600) };
-            return outcome.summary ?? "";
-        });
+        return startRun(config, "apply", brief, ["Read", "Grep", `Edit(${decisions})`, `Bash(${backlog} *)`, `Bash(${check})`], appliedOf);
     }
 
     const docs = shown(config, config.docs);
@@ -136,15 +130,21 @@ Answer with a JSON object and nothing else, its summary in the project's languag
     // The colleagues' memory may sit past a link (.claude into a private repo): the rule names both paths.
     const realMemory = shown(config, realPath(config.memory).replaceAll("\\", "/"));
     const edits = [...new Set([`Edit(${docs}/**)`, `Edit(${memory}/**)`, `Edit(${realMemory}/**)`])];
-    return startRun(config, "apply", brief, ["Read", "Grep", "Glob", ...edits, `Bash(${check})`, `Bash(${check} --fix)`], (state, result) => {
-        const outcome = objectOf(result);
-        const applied = new Set(outcome.applied ?? []);
-        state.proposals = (state.proposals ?? []).filter((proposal) => !applied.has(proposal.id));
-        state.applied = { at: new Date().toISOString(), applied: [...applied], skipped: outcome.skipped ?? [], summary: outcome.summary ?? result.slice(0, 600) };
-        return outcome.summary ?? "";
-    });
+    return startRun(config, "apply", brief, ["Read", "Grep", "Glob", ...edits, `Bash(${check})`, `Bash(${check} --fix)`], appliedOf);
 }
 
+/** What a run that applied wrote in the state: the proposals it applied gone from the list, what it applied and skipped, its summary. */
+function appliedOf(state, result)
+{
+    const outcome = objectOf(result);
+    const applied = new Set(outcome.applied ?? []);
+    state.proposals = (state.proposals ?? []).filter((proposal) => !applied.has(proposal.id));
+    state.applied = { at: new Date().toISOString(), applied: [...applied], skipped: outcome.skipped ?? [], summary: outcome.summary ?? result.slice(0, 600) };
+    return outcome.summary ?? "";
+}
+
+/** Starts a run of Claude Code on a brief, with only the tools and permissions allowed, its state kept as it goes; finish writes its answer
+ * into the state and returns the run's message. False when a run is going. */
 function startRun(config, kind, brief, allowed, finish)
 {
     if (child) {
@@ -217,12 +217,14 @@ function stop(running)
     }
 }
 
+/** The proposals of a run's answer, its JSON array, each with its fields; one without an id or a title is left out. */
 function proposalsOf(text)
 {
     const list = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1));
     return list.filter((proposal) => proposal && proposal.id && proposal.title).map((proposal) => ({ id: String(proposal.id), kind: proposal.kind ?? "other", file: proposal.file ?? "", line: Number.isInteger(proposal.line) ? proposal.line : null, title: proposal.title, why: proposal.why ?? "", change: proposal.change ?? "", waits: proposal.waits || null }));
 }
 
+/** The JSON object of a run's answer; {} when it has none. */
 function objectOf(text)
 {
     try {
@@ -256,6 +258,7 @@ function denialsOf(answer)
     return (answer?.permission_denials ?? []).map((denial) => `${denial.tool_name} ${denial.tool_input?.file_path ?? denial.tool_input?.command ?? ""}`.trim());
 }
 
+/** The tokens a run used, cached ones included; null when its answer does not say. */
 function tokensOf(answer)
 {
     const usage = answer?.usage;
@@ -277,6 +280,7 @@ function stateFolder(config)
     return folder;
 }
 
+/** A project's cleanup state: its last run, the proposals and what was applied; {} before the first or when it does not read. */
 function readState(config)
 {
     const path = join(stateFolder(config), "state.json");
@@ -288,6 +292,7 @@ function readState(config)
     }
 }
 
+/** Writes a project's cleanup state whole. */
 function writeState(config, state)
 {
     writeFileSync(join(stateFolder(config), "state.json"), JSON.stringify(state, null, 2));

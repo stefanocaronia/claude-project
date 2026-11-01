@@ -1,5 +1,5 @@
 // Every word of the project's page, by language; the page takes pageWords[data.language], else English. A word is a string or a function of
-// what it says; t(key, ...values) in the page reads it, and extensions read the same words through kit.t.
+// what it says; t(key, ...values) reads it (app/helpers.js), and extensions read the same words through kit.t.
 const pageWords = {
     en: {
         locale: "en-GB",
@@ -70,7 +70,6 @@ const pageWords = {
         epicDoing: (count) => `${count} in progress`,
         epicAllDone: "all done",
         epicClosed: (day) => `✓ closed on ${day}`,
-        partsCount: (done, total) => `${done}/${total} parts`,
         partsTip: (done, total) => `A large task: ${done} of ${total} parts closed; press to show or fold them`,
         blockedTip: (list) => `Waits for ${list}, still open: it can start once they are done`,
         linkPartOf: "part of",
@@ -260,7 +259,6 @@ const pageWords = {
         keyTitle: "The key documents",
         keyHint: "The ones the project's configuration names, to read first.",
         docWords: (count) => `${count} words`,
-        docLines: (count) => `${count} lines`,
         otherDocumentsTitle: "The other documents",
         docMissing: "Not there yet: the path leads to no file.",
         docPlain: "Plain text",
@@ -344,7 +342,6 @@ const pageWords = {
         epicDoing: (count) => `${count} in corso`,
         epicAllDone: "tutti fatti",
         epicClosed: (day) => `✓ chiuso il ${day}`,
-        partsCount: (done, total) => `${done}/${total} parti`,
         partsTip: (done, total) => `Compito grosso: ${done} parti chiuse su ${total}; premi per vederle o nasconderle`,
         blockedTip: (list) => `Aspetta ${list}, ancora aperti: si può avviare quando sono fatti`,
         linkPartOf: "parte di",
@@ -534,7 +531,6 @@ const pageWords = {
         keyTitle: "I documenti chiave",
         keyHint: "Quelli che la configurazione del progetto nomina, da leggere per primi.",
         docWords: (count) => `${count} parole`,
-        docLines: (count) => `${count} righe`,
         otherDocumentsTitle: "Gli altri documenti",
         docMissing: "Non c'è ancora: il percorso non porta a un file.",
         docPlain: "Testo nudo",

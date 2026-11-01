@@ -1,5 +1,6 @@
 // Reads the project into one object for the page: the plan by phases and goals, the decisions and their days, the tasks of the backlog
-// and of the colleagues' todos, the docs, the health, the commits by day, and what each extension adds.
+// and of the colleagues' todos, the specs, the versions, the GitHub issues, the docs, the health, the commits by day, and what each
+// extension adds.
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { effortKey } from "../lib/backlog.mjs";
@@ -74,6 +75,7 @@ export async function collect(config, say, extensions = [])
     };
 }
 
+/** The plan for the page: its phases and goals, each goal with its tasks and counts; the goals a new task can take, the tasks done by day. */
 function readPlan(config)
 {
     const text = read(config.files.plan);
@@ -102,19 +104,21 @@ function readPlan(config)
 
     // The page shows the plan's goals, and the tasks without one while some are open: the goals of archived tasks that the plan no
     // longer has are history, counted in their phases only.
-    const shown = sections.filter((section) => !section.isUnplanned || (section.name === config.words.noGoal && section.items.some((item) => !item.done)));
+    const visible = sections.filter((section) => !section.isUnplanned || (section.name === config.words.noGoal && section.items.some((item) => !item.done)));
     return {
         updated: planUpdated(text, config.words),
         phases,
-        sections: shown,
+        sections: visible,
         // The goals a task can take: the plan's open ones, in its order.
         openGoals: goals.filter((goal) => !goal.closed).map((goal) => goal.name),
-        done: shown.reduce((sum, section) => sum + section.done, 0),
-        total: shown.reduce((sum, section) => sum + section.total, 0),
+        done: visible.reduce((sum, section) => sum + section.done, 0),
+        total: visible.reduce((sum, section) => sum + section.total, 0),
         finishedByDay,
     };
 }
 
+/** The decisions for the page: how many, the last ones, every one with its day and tasks, the points to decide as proposals; how many
+ * by day and by person, the numbers doubled or skipped. */
 function readDecisionsData(config)
 {
     const { decided, open } = readDecisions(config);
@@ -247,13 +251,14 @@ function decisionDays(config)
     return days;
 }
 
+/** The docs' folder's documents, the most recent first, each with its frontmatter's title and description, its size, and the address
+ * the page reads it at. */
 function readDocuments(config)
 {
     if (!existsSync(config.docs)) {
         return [];
     }
 
-    // Each with its frontmatter's title and description, and the address the page reads it at.
     return readdirSync(config.docs).filter((name) => name.endsWith(".md")).map((name) => {
         const path = `${config.docs}/${name}`;
         const { data, body } = splitFrontmatter(read(path));
@@ -271,6 +276,7 @@ function readInbox(config)
     return { name: config.files.inbox.split("/").at(-1), count: [...read(config.files.inbox).matchAll(/^- .+$/gm)].length };
 }
 
+/** The colleagues, each with their profile's name, role and color, their todo's open and ticked lines, and whether they have a portrait. */
 function readColleagues(config)
 {
     return colleagues(config).map(({ id, name }) => {
@@ -293,10 +299,11 @@ function readColleagues(config)
 function readTasks(config)
 {
     const ids = colleagues(config).map((colleague) => colleague.id);
-    const ownerOf = (to) => ids.find((id) => id.split("-")[0] === to.toLowerCase()) ?? to;
+    // A task's assignee as its owner: the colleague of that first name, else the name.
+    const holder = (to) => ids.find((id) => id.split("-")[0] === to.toLowerCase()) ?? to;
     const prefix = config.prefixes.task;
     const backlog = readBacklog(config).tasks.filter((task) => openStates.includes(task.state))
-        .map((task) => ({ owner: ownerOf(task.to), priority: task.priority, created: task.created, text: clean(`${prefix}-${task.id} · ${task.text}`).slice(0, 300), state: task.state, effort: task.effort }));
+        .map((task) => ({ owner: holder(task.to), priority: task.priority, created: task.created, text: clean(`${prefix}-${task.id} · ${task.text}`).slice(0, 300), state: task.state, effort: task.effort }));
     const todos = todoFiles(config).flatMap(({ id, file }) => read(file).split(/\r?\n/).map(parseTodo).filter((task) => task && !task.done).map((task) => ({ owner: id, priority: task.priority, created: task.created, text: clean(task.text).slice(0, 300) })));
     return [...backlog, ...todos];
 }
@@ -305,10 +312,10 @@ function readTasks(config)
 function activity(config)
 {
     const since = new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10);
-    const repos = projectRepos(config);
-    return repos.map((repo) => ({ name: repo.name, days: commitsPerDay(repo.path, since) }));
+    return projectRepos(config).map((repo) => ({ name: repo.name, days: commitsPerDay(repo.path, since) }));
 }
 
+/** How many commits a repo has each day since a day. */
 function commitsPerDay(root, since)
 {
     const counts = {};
