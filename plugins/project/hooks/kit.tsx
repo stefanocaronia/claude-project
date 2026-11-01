@@ -103,9 +103,14 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
             : <Box key={key} flexShrink={0}>{href ? label : <Text color={color} dimColor={!color}>{`[${text}]`}</Text>}</Box>;
         return hint ? tip(key, hint, drawn) : drawn;
     };
-    // A button that cannot be pressed now keeps its place and its size, the surface's own button drawn dim, a press doing nothing;
-    // its reason under the pointer.
-    const idleButton = (key: string, label: string, reason: string) => tip(key, reason, <Button key={key} label={label} onPress={() => undefined}><Text color={idleColor}>{label}</Text></Button>);
+    // A button that cannot be pressed now keeps its place, drawn as the surface draws a button, dim, but no Button at all: no pointer,
+    // no focus, no press; its reason, when it has one, under the pointer.
+    const idleButton = (key: string, label: string, reason?: string) => {
+        const drawn = isDesktop
+            ? <Box key={key} flexShrink={0} borderStyle="round" borderColor={outline} paddingX={1}><Text color={idleColor}>{label}</Text></Box>
+            : <Box key={key} flexShrink={0}><Text color={idleColor}>{`[ ${label} ]`}</Text></Box>;
+        return reason ? tip(key, reason, drawn) : drawn;
+    };
     // Who holds a task: Claude's critter, a colleague's portrait or initials, the owner's GitHub picture, a person's initials in gray.
     const face = (name: string, size: number) => {
         const member = byName.get(name) ?? (owner && name === owner.name ? { id: name, name, fullName: owner.fullName, role: "", color: "gray", portrait: owner.portrait } : undefined);

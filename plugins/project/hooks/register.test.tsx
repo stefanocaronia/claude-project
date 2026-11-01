@@ -256,6 +256,9 @@ test("the buttons above the links start the first task by priority and age, and 
     const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
     expect((await ui.find({ key: "next-task" }))?.props.label).toBe("▶ Prossimo compito (T-61)");
     await ui.press({ key: "next-task" });
+    // While the task starts, the button says so and cannot be pressed again.
+    expect(await ui.find({ type: "Text", text: "⏳ Avvio…" })).toBeDefined();
+    expect(await ui.find({ type: "Button", key: "next-task" })).toBeUndefined();
     await ui.press({ key: "next-decision" });
     await ui.press({ key: "tidy-docs" });
     expect(commands[0]).toBe("/crew:next Matteo -- T-61 · La plancia, in tre parti");
@@ -280,8 +283,10 @@ test("a task in progress: a colleague at work shows instead of ▶, the chat tha
     expect(await again.find({ key: "start-143" })).toBeUndefined();
     // A chat at work on a task starts no other: no next task, no ▶, a line that says where another one starts.
     expect(await again.find({ key: "next-task" })).toBeUndefined();
-    // The button stays in its place, gray, with why it cannot be pressed.
-    expect((await again.find({ key: "next-task-idle" }))?.props.label).toBe("▶ Prossimo compito");
+    // The button stays in its place, gray, with why it cannot be pressed: no button at all, which a click or the focus would reach.
+    expect(await again.find({ key: "next-task-idle" })).toBeDefined();
+    expect(await again.find({ type: "Text", text: "▶ Prossimo compito" })).toBeDefined();
+    expect(await again.find({ type: "Button", key: "next-task-idle" })).toBeUndefined();
     expect(await again.find({ key: "start-61" })).toBeUndefined();
     expect(await again.find({ type: "Text", text: "Questa chat lavora a T-143: un altro compito si avvia in una nuova sessione del progetto." })).toBeDefined();
     await again.unmount();

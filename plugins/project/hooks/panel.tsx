@@ -61,7 +61,7 @@ export async function drawPanel($: EngineInterface, e: RenderInput<"Pane">)
             {busy && !isDesktop ? <Text key="busy" dimColor>{busy}</Text> : null}
             {nextTask
                 ? isStarting(nextTask.id)
-                    ? <Button key="next-task" label={words("starting")} onPress={() => undefined} />
+                    ? idleButton("next-task", words("starting"))
                     : <Button key="next-task" variant="primary" label={words("nextTask", { id: idOf(nextTask) })} onPress={() => startTask($, snapshot, nextTask, byName.get(nextTask.to))} />
                 : idleButton("next-task-idle", words("nextTaskIdle"), busy ?? words("noneToStart"))}
             {nextProposal
