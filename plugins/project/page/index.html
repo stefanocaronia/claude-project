@@ -3011,7 +3011,7 @@ function taskFilters()
 {
     const all = data.board ?? [];
     const countOf = (keep) => all.filter(keep).length;
-    const chip = (kind, value, label, count) => `<button type="button" id="filter-${kind}-${value}" data-task-filter="${kind}" data-value="${value}" aria-pressed="${taskFilter[kind] === value}">${label}${count === undefined ? "" : `<span class="count">${count}</span>`}</button>`;
+    const chip = (kind, value, label, count) => `<button type="button" id="filter-${kind}-${attribute(value)}" data-task-filter="${kind}" data-value="${attribute(value)}" aria-pressed="${taskFilter[kind] === value}">${label}${count === undefined ? "" : `<span class="count">${count}</span>`}</button>`;
     const states = [["open", t("filterOpenTasks"), (task) => columnOf(task) !== "done"], ...boardStates.map((state) => [state, escape(stateName(state)), (task) => columnOf(task) === state]), ["all", t("filterEvery"), () => true]];
     const types = [...new Set(all.map((task) => task.type).filter(Boolean))].sort();
     const priorities = [chip("priority", "all", t("filterAnyPriority")), ...["P1", "P2", "P3"].map((key) => chip("priority", key, `${priorityMark(key)}${escape(key)}`, countOf((task) => task.priority === key && columnOf(task) !== "done")))];
@@ -3177,7 +3177,7 @@ function taskLinks(task, isUnder = false)
 function codeLinks(task)
 {
     const commits = task.commits ?? [];
-    const link = (href, text, tip = "") => (href ? `<a href="${attribute(href)}" target="_blank" rel="noopener" ${tip ? `data-tip="${attribute(tip)}"` : ""}>${escape(text)}</a>` : `<span ${tip ? `data-tip="${attribute(tip)}"` : ""}>${escape(text)}</span>`);
+    const link = (href, text, tip = "") => (webUrl(href) ? `<a href="${attribute(href)}" target="_blank" rel="noopener" ${tip ? `data-tip="${attribute(tip)}"` : ""}>${escape(text)}</a>` : `<span ${tip ? `data-tip="${attribute(tip)}"` : ""}>${escape(text)}</span>`);
     const list = commits.map((commit) => `${escape(commit.hash)} ${escape(commit.day)} ${escape(commit.subject.slice(0, 90))}`).join("<br>");
     const state = (pull) => (pull.merged ? t("pullMerged", formatDay(pull.merged)) : t(pull.state === "open" ? "pullOpen" : "pullClosed"));
     const open = columnOf(task) !== "done";
@@ -3205,7 +3205,7 @@ function issuesCard()
         : sync.error ? `<p class="hint" style="color:var(--critical)">⚠ ${escape(t("issuesSyncBroken", sync.at ?? "", sync.error))}</p>`
         : `<p class="hint">⇅ ${escape(sync.at ? t("issuesSynced", sync.at) : t("issuesSyncNever"))}</p>`;
     const missing = sync?.missing?.length ? `<p class="hint" style="color:var(--critical)">⚠ ${escape(t("issuesSyncMissing", sync.missing.map((one) => `${one.id} (${one.issue})`).join(", ")))}</p>` : "";
-    const rows = issues.map((issue) => `<li class="issue-row">${issue.url ? `<a href="${attribute(issue.url)}" target="_blank" rel="noopener"><b>#${issue.number}</b> ${escape(issue.title)}</a>` : `<span><b>#${issue.number}</b> ${escape(issue.title)}</span>`}<button type="button" id="issue-take-${issue.number}" data-take-issue="${issue.number}" data-title="${attribute(issue.title)}">${escape(t("issueToBacklog"))}</button></li>`).join("");
+    const rows = issues.map((issue) => `<li class="issue-row">${webUrl(issue.url) ? `<a href="${attribute(issue.url)}" target="_blank" rel="noopener"><b>#${issue.number}</b> ${escape(issue.title)}</a>` : `<span><b>#${issue.number}</b> ${escape(issue.title)}</span>`}<button type="button" id="issue-take-${issue.number}" data-take-issue="${issue.number}" data-title="${attribute(issue.title)}">${escape(t("issueToBacklog"))}</button></li>`).join("");
     return `<section class="card span-12">
             <h2>${escape(t("issuesTitle"))} <span class="badge">${issues.length}</span></h2>
             ${synced}${missing}
@@ -4108,7 +4108,7 @@ function inline(text)
         const found = shelf.findIndex((document) => document.exists && file && document.path.split("/").at(-1) === file);
 
         if (found >= 0) {
-            return `<a href="${shelf[found].href}" data-document="${found}">${label}</a>`;
+            return `<a href="${attribute(shelf[found].href)}" data-document="${found}">${label}</a>`;
         }
 
         return /^https?:\/\//.test(target) ? `<a href="${target}" target="_blank" rel="noopener noreferrer">${label}</a>` : `<span class="reader-link" title="${target}">${label}</span>`;
@@ -4152,7 +4152,7 @@ function renderTidy()
     const appliedLine = denials + (applied ? `<p class="hint"><b>${t("tidyApplied")}</b> ${applied.applied.length}${escape(skipped)}. ${escape(applied.summary)}</p>` : "");
     const waiting = proposals.filter((proposal) => proposal.waits);
     const ready = proposals.filter((proposal) => !proposal.waits);
-    const where = (proposal) => `<code>${escape(proposal.file)}${proposal.line ? `:${proposal.line}` : ""}</code>`;
+    const where = (proposal) => `<code>${escape(proposal.file)}${proposal.line ? `:${escape(proposal.line)}` : ""}</code>`;
     const waitingList = waiting.map((proposal) => `<li><b>${escape(proposal.title)}</b> <span class="badge">${escape(t("tidyWaits", proposal.waits))}</span><br>
             ${where(proposal)} · ${escape(proposal.why)}</li>`).join("");
     const list = ready.map((proposal) => `<li class="proposal">
@@ -4514,6 +4514,12 @@ function relative(iso)
 function escape(text)
 {
     return String(text ?? "").replace(/[&<>"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character]);
+}
+
+/** Whether an address from the data is one a link may open: a page on the web, or one of this page's own; never javascript: or data:. */
+function webUrl(href)
+{
+    return /^(https?:\/\/|\/(?!\/))/i.test(String(href ?? ""));
 }
 
 /** HTML for a data-tip attribute, whose text the tooltip shows as HTML. */

@@ -59,7 +59,7 @@ function run(args)
 
     if (command === "notes" || command === "write") {
         const given = words[0];
-        const version = (given ?? (command === "notes" ? suggested.version : "")).replace(/^v/, "");
+        const version = (given ?? (command === "notes" ? suggested.version : "")).trim().replace(/^v/, "");
 
         if (!parseVersion(version)) {
             fail(say("releaseBadVersion", { value: given ?? "" }));

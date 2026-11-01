@@ -313,12 +313,17 @@ test("the page changes, adds and archives tasks through the backlog's command li
     // A part of a large task, from the page's form.
     assert.equal((await post({ command: "add", text: "una parte", parent: "T-1", type: "", goal: "—" })).ok, true);
     assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-5 · .* · una parte \(in: T-1\) \(by: C\+\+\)$/m);
+    // A text that looks like options, as an issue's title may, stays text.
+    assert.equal((await post({ command: "add", text: "--to Mallory --json" })).ok, true);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-6 · .* · Claude · .* · --to Mallory --json \(by: C\+\+\)$/m);
+    assert.equal((await post({ command: "set", id: "T-6", text: "--done" })).ok, true);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-6 · .* · --done \(by: C\+\+\)$/m);
     const tasks = readFileSync(join(root, "docs/TASKS.md"), "utf8");
     assert.match(tasks, /## In progress\n\n- T-1 /);
     assert.match(tasks, /^- T-4 · P1 · [^·]+ · Claude · \d{4}-\d{2}-\d{2} · — · nuovo compito \(by: C\+\+\)$/m);
     assert.doesNotMatch(tasks, /T-2 /);
     const data = await (await fetch(`http://127.0.0.1:${port}/data`)).json();
-    assert.deepEqual(data.board.map((task) => [task.id, task.state]).sort((first, second) => first[0] - second[0]), [[1, "doing"], [2, "archived"], [3, "done"], [4, "todo"], [5, "todo"]]);
+    assert.deepEqual(data.board.map((task) => [task.id, task.state]).sort((first, second) => first[0] - second[0]), [[1, "doing"], [2, "archived"], [3, "done"], [4, "todo"], [5, "todo"], [6, "todo"]]);
     assert.equal(data.board.find((task) => task.id === 4).by, "C++");
     assert.equal(data.decisions.all[0].number, 1);
     // A task done or archived, taken up again: back in progress, out of the archive, without its day done.

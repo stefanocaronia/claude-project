@@ -112,11 +112,14 @@ function changeBacklog(config, { command, id, priority, issue, title, text, goal
     const extra = Object.fromEntries(Object.entries(own && typeof own === "object" ? own : {}).filter(([key, value]) => key in config.fields && typeof value === "string"));
     // What it points to, the specs it does among them: names only, tasks, decisions and specs, checked by the backlog's command.
     const links = typeof see === "string" ? see.split(/[,\s]+/).filter((one) => /^[\w]+-\d+$/.test(one)).join(", ") : undefined;
-    const fields = Object.entries({ text, goal, p: priority, type, to, due, effort, in: parent, see: links, ...extra }).filter(([, value]) => typeof value === "string").flatMap(([name, value]) => [`--${name}`, clean(value)]);
+    // Each value after its option's =, and a new task's text after a lone --: a text that starts with -- (an issue's title, written by
+    // anyone) never reads as an option.
+    const fields = Object.entries({ text, goal, p: priority, type, to, due, effort, in: parent, see: links, ...extra }).filter(([, value]) => typeof value === "string").map(([name, value]) => `--${name}=${clean(value)}`);
+    const by = creator ? [`--by=${creator}`] : [];
     const args = ["start", "done", "postpone", "todo", "archive"].includes(command) && task ? [command, task]
         : command === "set" && task && fields.length > 0 ? ["set", task, ...fields]
-        : command === "add" && typeof text === "string" && clean(text) ? ["add", clean(text), ...fields.filter((_, index, all) => all[index - (index % 2)] !== "--text"), ...(creator ? ["--by", creator] : [])]
-        : command === "issue" && /^\d+$/.test(String(issue)) ? ["add", ...(typeof title === "string" && clean(title) ? [clean(title)] : []), "--issue", String(issue), ...(creator ? ["--by", creator] : [])]
+        : command === "add" && typeof text === "string" && clean(text) ? ["add", ...fields.filter((field) => !field.startsWith("--text=")), ...by, "--", clean(text)]
+        : command === "issue" && /^\d+$/.test(String(issue)) ? ["add", `--issue=${issue}`, ...by, ...(typeof title === "string" && clean(title) ? ["--", clean(title)] : [])]
         : null;
 
     if (!args) {

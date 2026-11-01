@@ -157,6 +157,16 @@ function startRun(config, kind, brief, allowed, finish)
         + `--setting-sources "" --strict-mcp-config --no-session-persistence --disable-slash-commands`;
     const state = readState(config);
     state.run = { kind, state: "running", started: new Date().toISOString(), finished: null, message: null, tokens: null, cost: null };
+    // The rules reach a shell between double quotes, with paths from the configuration: one that holds a quote or a character
+    // the shell expands would change the command, so the run does not start.
+    const unsafe = allowed.find((rule) => /["`$%\r\n]/.test(rule));
+
+    if (unsafe) {
+        state.run = { ...state.run, state: "failed", finished: state.run.started, message: `A path holds a character the shell would read, so the run did not start: ${unsafe}` };
+        writeState(config, state);
+        return true;
+    }
+
     writeState(config, state);
 
     child = spawn(command, { shell: true, windowsHide: true, cwd: config.root, env: ownEnvironment(), stdio: ["pipe", "pipe", "pipe"] });
@@ -210,7 +220,7 @@ function stop(running)
 function proposalsOf(text)
 {
     const list = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1));
-    return list.filter((proposal) => proposal && proposal.id && proposal.title).map((proposal) => ({ id: String(proposal.id), kind: proposal.kind ?? "other", file: proposal.file ?? "", line: proposal.line ?? null, title: proposal.title, why: proposal.why ?? "", change: proposal.change ?? "", waits: proposal.waits || null }));
+    return list.filter((proposal) => proposal && proposal.id && proposal.title).map((proposal) => ({ id: String(proposal.id), kind: proposal.kind ?? "other", file: proposal.file ?? "", line: Number.isInteger(proposal.line) ? proposal.line : null, title: proposal.title, why: proposal.why ?? "", change: proposal.change ?? "", waits: proposal.waits || null }));
 }
 
 function objectOf(text)

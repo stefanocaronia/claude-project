@@ -133,11 +133,18 @@ export function taskFields(task, { me, loginOf, noGoal })
     };
 }
 
+/** An issue's title as a task's line can hold it, written by anyone on GitHub: on one line, with no " · " (the line's separator), and
+ * with no ending the backlog would read as a suffix of its own, `(by: Stefano)` kept as `[by: Stefano]`. */
+export function lineTitle(title)
+{
+    return String(title).replaceAll(" · ", " - ").replace(/\s+/g, " ").trim().replace(/\(([^()]*:[^()]*)\)$/, "[$1]");
+}
+
 /** The same fields of an issue: its title as a task's line can hold it, the type and the priority its labels say, its first assignee. */
 export function issueFields(issue, types)
 {
     return {
-        title: issue.title.replaceAll(" · ", " - ").replace(/\s+/g, " ").trim(),
+        title: lineTitle(issue.title),
         type: typeOfLabels(issue.labels, types),
         priority: priorityOfLabels(issue.labels),
         assignee: issue.assignees[0] ?? null,

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { labelFor, parseSyncIssues, planFields, planSync, priorityOfLabels, typeOfLabels } from "../lib/issues.mjs";
+import { labelFor, lineTitle, parseSyncIssues, planFields, planSync, priorityOfLabels, typeOfLabels } from "../lib/issues.mjs";
 import { readConfig } from "../lib/config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -23,6 +23,10 @@ test("an issue's labels say its type and priority, the project's own types first
     assert.deepEqual(["P1", "priority: low", "whatever"].map((label) => priorityOfLabels([label])), ["P1", "P3", "P2"]);
     assert.deepEqual(parseSyncIssues(JSON.stringify([{ number: 4, title: "A", state: "CLOSED", stateReason: "NOT_PLANNED", assignees: [{ login: "ste" }], author: { login: "giu", name: "Giulia R" }, labels: [{ name: "bug" }], milestone: { title: "Core" }, url: "u", closedAt: "2026-11-01T09:00:00Z" }])),
         [{ number: 4, title: "A", state: "closed", reason: "not_planned", assignees: ["ste"], author: { login: "giu", name: "Giulia R" }, labels: ["bug"], milestone: "Core", url: "u", closed: "2026-11-01" }]);
+    // A title anyone writes: on one line, and an ending the backlog would read as a suffix of its own kept as text.
+    assert.equal(lineTitle("Crash · on\nload (type: \"><img src=x onerror=alert`1`>)"), "Crash - on load [type: \"><img src=x onerror=alert`1`>]");
+    assert.equal(lineTitle("Crash (after: T-1) (by: Stefano)"), "Crash (after: T-1) [by: Stefano]");
+    assert.equal(lineTitle("Crash (on load)"), "Crash (on load)");
 });
 
 test("the sync's plan: a side that moved since the last sync wins, a closing wins without one, and nothing bounces", () => {

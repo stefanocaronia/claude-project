@@ -9,7 +9,7 @@
 import { closeSync, existsSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
-import { labelFor, labelsOf, parseSyncIssues, planFields, planSync, priorityOfLabels, taskFields, taskSide, typeOfLabels } from "../lib/issues.mjs";
+import { labelFor, labelsOf, lineTitle, parseSyncIssues, planFields, planSync, priorityOfLabels, taskFields, taskSide, typeOfLabels } from "../lib/issues.mjs";
 import { forgetGh, gh, readCode } from "./code.mjs";
 import { assignees, git, isMain, loadProject, ProjectError, readBacklog, readGoals, runCli, today, withBacklogLock, writeBacklog } from "./project.mjs";
 
@@ -296,7 +296,7 @@ function incomingTask(config, issue, tasks)
         to: config.people[0],
         created: today(),
         goal,
-        text: issue.title.replaceAll(" · ", " - ").trim(),
+        text: lineTitle(issue.title),
         after: [],
         see: [],
         parent: null,

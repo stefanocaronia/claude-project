@@ -19,6 +19,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { parseCsv, toCsv } from "../lib/csv.mjs";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
 import { codeView, issueOf } from "../lib/code.mjs";
+import { lineTitle } from "../lib/issues.mjs";
 import { listOf, nestedParts, splitLinks, todoLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { formatTodo, parseTodo } from "../lib/todos.mjs";
@@ -244,7 +245,7 @@ function execute(command, options, words, config, say)
         console.log(`${prefix}-${nextId(tasks)}`);
     } else if (command === "add") {
         // A task made from a GitHub issue takes the issue's title, when it is given no text of its own.
-        const given = words.join(" ").trim() || (typeof options.issue === "string" ? readIssue(config, issueNumber()).title.replaceAll(" · ", " - ") : fail(say("noText")));
+        const given = words.join(" ").trim() || (typeof options.issue === "string" ? lineTitle(readIssue(config, issueNumber()).title) : fail(say("noText")));
         const state = options.state ?? "todo";
         const task = checked({
             id: nextId(tasks),
@@ -543,7 +544,8 @@ function print(tasks, json, line, footer)
     }
 }
 
-/** The options and the words of a command line: --json and --done take no value, the others the word after them. */
+/** The options and the words of a command line: --json and --done take no value, the others the word after them, or the one after
+ * their = (--text=…), which may start with -- too; after a lone --, every word is text, so that a text never reads as an option. */
 function optionsOf(args)
 {
     const options = {};
@@ -552,7 +554,12 @@ function optionsOf(args)
     for (let index = 0; index < args.length; index++) {
         const arg = args[index];
 
-        if (arg.startsWith("--")) {
+        if (arg === "--") {
+            words.push(...args.slice(index + 1));
+            break;
+        } else if (/^--[^=]+=/.test(arg)) {
+            options[arg.slice(2, arg.indexOf("="))] = arg.slice(arg.indexOf("=") + 1);
+        } else if (arg.startsWith("--")) {
             const name = arg.slice(2);
             const value = args[index + 1];
             options[name] = flags.includes(name) || value === undefined || value.startsWith("--") ? true : (index++, value);

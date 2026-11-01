@@ -54,12 +54,12 @@ export function githubState(config)
     const ghVersion = exec(root, "gh", ["--version"]);
     const account = ghVersion ? /Logged in to github\.com (?:account|as) (\S+)/.exec(exec(root, "gh", ["auth", "status"], true) ?? "")?.[1] ?? null : null;
     const top = gitVersion ? exec(root, "git", ["rev-parse", "--show-toplevel"])?.trim().replaceAll("\\", "/") ?? null : null;
-    const remote = top ? exec(root, "git", ["remote", "get-url", "origin"])?.trim() || null : null;
+    const remote = top ? withoutCredentials(exec(root, "git", ["remote", "get-url", "origin"])) : null;
     const branch = top ? exec(root, "git", ["branch", "--show-current"])?.trim() || "main" : null;
     // The docs, in a repo of their own when their top is not the project's.
     const docsTop = gitVersion && existsSync(config.docs) ? exec(config.docs, "git", ["rev-parse", "--show-toplevel"])?.trim().replaceAll("\\", "/") ?? null : null;
     const docsRepo = docsTop && docsTop.toLowerCase() !== (top ?? "").toLowerCase() ? docsTop : null;
-    const docsRemote = docsRepo ? exec(docsRepo, "git", ["remote", "get-url", "origin"])?.trim() || null : null;
+    const docsRemote = docsRepo ? withoutCredentials(exec(docsRepo, "git", ["remote", "get-url", "origin"])) : null;
     const repo = gitHubRepo(remote);
     const site = siteOf(root);
     const workflow = pagesWorkflow(root);
@@ -81,6 +81,12 @@ export function githubState(config)
         pages,
         platform: process.platform,
     };
+}
+
+/** A remote's address without the user and token an https address may carry, so that status never prints a secret. */
+export function withoutCredentials(remote)
+{
+    return remote?.trim().replace(/^(https?:\/\/)[^@/\s]*@/, "$1") || null;
 }
 
 /** A remote's owner and name on GitHub, `owner/name`, from its https or ssh address; null for another host or none. */

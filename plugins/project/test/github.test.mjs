@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { gitHubRepo, pagesYaml, siteOf } from "../scripts/github.mjs";
+import { gitHubRepo, pagesYaml, siteOf, withoutCredentials } from "../scripts/github.mjs";
 import { onPath } from "../scripts/project.mjs";
 
 const scripts = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts");
@@ -17,6 +17,10 @@ test("a remote's repo on GitHub, a site and how it builds, the Pages workflow, a
     assert.equal(gitHubRepo("https://github.com/a/b"), "a/b");
     assert.equal(gitHubRepo("https://gitlab.com/a/b.git"), null);
     assert.equal(gitHubRepo(null), null);
+    // A token in an https remote is never shown.
+    assert.equal(withoutCredentials("https://x-access-token:ghp_secret@github.com/a/b.git\n"), "https://github.com/a/b.git");
+    assert.equal(withoutCredentials("git@github.com:a/b.git"), "git@github.com:a/b.git");
+    assert.equal(withoutCredentials(""), null);
 
     const root = mkdtempSync(join(tmpdir(), "claude-project-site-"));
     assert.equal(siteOf(root), null);
