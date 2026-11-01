@@ -785,8 +785,11 @@ export const register: Register = (on) => {
                 ]) : null}
                 {/* The versions, the repo's tags, the newest first, each opening its notes in the page; what waits for the next; the whole
                     history in the page when there are more. */}
-                {section("releases", "🏷︎", `${words("sectionReleases")} · ${releases.total ?? releases.list.length}`, [
-                    <Text key="releases-pending" dimColor>{releases.pending > 0 ? words("releasesPending", { count: releases.pending, next: releases.next }) : words("releasesNothing")}</Text>,
+                {snapshot.releases ? section("releases", "🏷︎", `${words("sectionReleases")} · ${releases.total ?? releases.list.length}`, [
+                    <Text key="releases-pending" dimColor>{releases.pending > 0 ? words("releasesPending", { count: releases.pending, next: releases.next })
+                        : (releases.raised ?? []).length > 0 ? words("releasesRaised", { list: (releases.raised ?? []).join(", "), next: releases.next }) : words("releasesNothing")}</Text>,
+                    // The contracts that moved since the last release.
+                    ...(releases.contracts ?? []).map((contract) => <Text key={`contract-${contract.name}`} dimColor>{`${contract.name}: ${contract.before} → ${contract.current}`}</Text>),
                     ...releases.list.map((release) => (
                         <Box key={`release-${release.version}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
                             <Box flexShrink={0}><Link key={`release-link-${release.version}`} href={`${snapshot.page}/#releases/${release.version}`}>{`v${release.version}`}</Link></Box>
@@ -797,7 +800,7 @@ export const register: Register = (on) => {
                     ...((releases.total ?? 0) > releases.list.length
                         ? [<Link key="releases-all" href={`${snapshot.page}/#releases`}>{words("releasesAll", { count: releases.total })}</Link>]
                         : []),
-                ])}
+                ]) : null}
             </Box>
         );
     });

@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { readConfig } from "../lib/config.mjs";
+import { compareContract, contractState, contractValue, pointerValue } from "../lib/contracts.mjs";
 import { compareVersions, messageSummary, nextVersion, parseRelease, renderRelease, unreleased } from "../lib/release.mjs";
 import { splitFrontmatter } from "../lib/frontmatter.mjs";
 
@@ -30,9 +32,100 @@ test("the notes list the work by kind, and a release read back says which tasks 
     assert.deepEqual(unreleased([{ id: 1, done: "2026-10-01" }, { id: 2, done: "2026-10-02" }, { id: 5, done: null }, { id: 6, done: "2026-10-01" }], [{ tasks: [2] }]).map((task) => task.id), [1, 6]);
 });
 
+test("a contract is a number read from a file, by a JSON pointer or a regex's group; one gone up asks a minor version, after 1.0 too", () => {
+    assert.equal(contractValue('{ "engine": { "api": 3 } }', { file: "package.json", pointer: "/engine/api" }), "3");
+    assert.equal(contractValue("engine:\n  api: 2.1\n", { file: "engine.yaml", pointer: "/engine/api" }), "2.1");
+    assert.equal(contractValue("export const SAVE_FORMAT = 7;\n", { file: "src/save.js", pattern: "SAVE_FORMAT = (\\d+)" }), "7");
+    assert.equal(contractValue('{ "engine": { "api": "next" } }', { file: "package.json", pointer: "/engine/api" }), null);
+    assert.equal(contractValue("{ broken", { file: "package.json", pointer: "/engine/api" }), null);
+    assert.equal(contractValue("", { file: "src/save.js", pattern: "(\\d+)" }), null);
+    assert.equal(pointerValue({ "a/b": { "~c": 1 } }, "/a~1b/~0c"), 1);
+    assert.equal(pointerValue({ a: 1 }, "/a/b"), undefined);
+    assert.ok(compareContract("2.10", "2.9") > 0 && compareContract("3", "3.0") === 0 && compareContract("1", "2") < 0);
+    assert.deepEqual(["4", "2", "3", null].map((current) => contractState({ name: "API", file: "x" }, current, "3").state), ["raised", "lowered", "same", "unread"]);
+    assert.equal(contractState({ name: "API", file: "x" }, "3", null).state, "new");
+    assert.deepEqual(nextVersion("1.4.2", [{ type: "bug" }], false, true), { version: "1.5.0", kind: "contract" });
+    assert.deepEqual(nextVersion("0.4.2", [{ type: "feature" }], false, true), { version: "0.5.0", kind: "minor" });
+    const names = { breaking: "Breaking", contracts: "Compatibility", added: "Added", fixed: "Fixed", maintenance: "Maintenance", other: "Other" };
+    const contracts = [{ name: "API", before: "3", current: "4", state: "raised" }, { name: "Save", before: "2", current: "2", state: "same" }];
+    assert.equal(renderRelease({ version: "1.5.0", day: "2026-11-02", summary: "", contracts, tasks: [{ id: 1, type: "bug", text: "the fix" }], names }), "# v1.5.0 · 2026-11-02\n\n## Compatibility\n\n- API: 3 → 4\n\n## Fixed\n\n- T-1 · the fix\n");
+});
+
+test("the configuration says whether the project releases, the checks before one and its contracts; a wrong shape is told", () => {
+    const empty = readConfig("", "/p");
+    assert.deepEqual([empty.release, empty.contracts], [{ show: null, run: [], remember: [] }, []]);
+    assert.equal(readConfig("release: false\n", "/p").release.show, false);
+    assert.deepEqual(readConfig("release:\n  run: npm test\n  remember: [Read the changelog]\n", "/p").release, { show: null, run: ["npm test"], remember: ["Read the changelog"] });
+    assert.deepEqual(readConfig("contracts:\n  - { name: API, file: package.json, pointer: /engine/api }\n", "/p").contracts, [{ name: "API", file: "/p/package.json", pointer: "/engine/api", pattern: null }]);
+    assert.throws(() => readConfig("release: [npm test]\n", "/p"), /release is true, false or a map/);
+    assert.throws(() => readConfig("contracts: { name: API }\n", "/p"), /contracts must be a list/);
+    assert.throws(() => readConfig("contracts:\n  - { name: API, file: a.json, pointer: /a, pattern: (x) }\n", "/p"), /one of pointer/);
+});
+
+test("a project that does not release shows no versions until its first release or release: true; the checks before one are listed", async () => {
+    const book = mkdtempSync(join(tmpdir(), "claude-project-book-"));
+    const write = (path, text) => {
+        mkdirSync(dirname(join(book, path)), { recursive: true });
+        writeFileSync(join(book, path), text);
+    };
+    const release = (...args) => spawnSync(process.execPath, [join(scripts, "release.mjs"), ...args], { cwd: book, encoding: "utf8", env: env() });
+    write(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\n");
+    write("docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n## Postponed\n\n## Done\n\n- T-1 · P2 · medium · Claude · 2026-10-01 · — · chapter one (type: feature) · done 2026-10-10\n");
+    assert.match(release("status").stdout, /This project shows no releases/);
+    const { loadProject, showsReleases } = await import("../scripts/project.mjs");
+    assert.equal(showsReleases(loadProject(book).config), false);
+    write(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\nrelease: true\n");
+    assert.match(release("status").stdout, /No release yet[\s\S]*Suggested: v0\.1\.0/);
+    // The checks before a release declare that the project releases.
+    write(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\nrelease:\n  run: [npm test]\n  remember: [Read the changelog]\n");
+    assert.match(release("status").stdout, /No release yet[\s\S]*Before the release, Claude runs: npm test\. A failure stops the release\.\nAnd asks the user: Read the changelog\./);
+    write(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\nrelease:\n  show: false\n  run: [npm test]\n");
+    assert.match(release("status").stdout, /This project shows no releases/);
+    rmSync(book, { recursive: true, force: true });
+});
+
+test("a contract gone up makes a release due and a minor version, its number kept in the notes; the check flags one unread or gone down", () => {
+    const engine = mkdtempSync(join(tmpdir(), "claude-project-contracts-"));
+    const write = (path, text) => {
+        mkdirSync(dirname(join(engine, path)), { recursive: true });
+        writeFileSync(join(engine, path), text);
+    };
+    const release = (...args) => spawnSync(process.execPath, [join(scripts, "release.mjs"), ...args], { cwd: engine, encoding: "utf8", env: env() });
+    const check = () => JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: engine, encoding: "utf8", env: env() }).stdout).filter((finding) => finding.kind === "contracts");
+    write(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\ncontracts:\n  - { name: API, file: engine.json, pointer: /engine/api }\n  - { name: Saves, file: src/save.js, pattern: 'SAVE_FORMAT = (\\d+)' }\n");
+    write("docs/README.md", "# Docs\n\n- [Plan](PLAN.md)\n- [Tasks](TASKS.md)\n- [Decisions](DECISIONS.md)\n");
+    write("docs/PLAN.md", "# Plan\n\n## Goals\n");
+    write("docs/DECISIONS.md", "# Decisions\n\n| # | Decision | Why |\n|---|---|---|\n\n## To decide\n");
+    write("docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n## Postponed\n\n## Done\n\n- T-1 · P2 · medium · Claude · 2026-10-01 · — · the dice (type: feature) · done 2026-10-10\n");
+    write("engine.json", JSON.stringify({ engine: { api: 3 } }));
+    write("src/save.js", "export const SAVE_FORMAT = 2;\n");
+    assert.match(release("status").stdout, /No release yet[^\n]*\nAPI: 3, recorded at the next release\.\nSaves: 2, recorded/);
+    assert.match(release("write", "0.1.0", "--summary", "The dice.").stdout, /v0\.1\.0/);
+    assert.deepEqual(splitFrontmatter(readFileSync(join(engine, "docs/releases/v0.1.0.md"), "utf8")).data.contracts, { API: 3, Saves: 2 });
+    assert.match(release("status").stdout, /Last release: v0\.1\.0[\s\S]*Nothing done since the last release/);
+
+    // The API goes up with no task done: a minor version, due for it alone, and the notes say it.
+    write("engine.json", JSON.stringify({ engine: { api: 4 } }));
+    assert.match(release("status").stdout, /API: 3 → 4, since the last release[\s\S]*Suggested: v0\.2\.0, a minor version: a contract went up\.[\s\S]*A release is due: API went up\./);
+    assert.match(release("notes").stdout, /## Compatibility\n\n- API: 3 → 4/);
+    assert.deepEqual(check(), []);
+
+    // A contract gone down, or no longer read, is flagged; a release is not written while one does not read.
+    write("src/save.js", "export const SAVE_FORMAT = 1;\n");
+    assert.match(check().map((finding) => finding.message).join("\n"), /«Saves» went down since the last release, 2 → 1/);
+    write("src/save.js", "export const FORMAT = 2;\n");
+    assert.match(check().map((finding) => finding.message).join("\n"), /«Saves» does not read in src\/save\.js/);
+    assert.match(release("write", "0.2.0").stderr, /«Saves» does not read in src\/save\.js/);
+    write("src/save.js", "export const SAVE_FORMAT = 2;\n");
+    assert.match(release("write", "0.2.0", "--summary", "The API grows.").stdout, /v0\.2\.0/);
+    assert.deepEqual(splitFrontmatter(readFileSync(join(engine, "docs/releases/v0.2.0.md"), "utf8")).data.contracts, { API: 4, Saves: 2 });
+    assert.match(release("status").stdout, /Last release: v0\.2\.0[\s\S]*Nothing done since the last release/);
+    rmSync(engine, { recursive: true, force: true });
+});
+
 before(() => {
     root = mkdtempSync(join(tmpdir(), "claude-project-release-"));
-    put(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\n");
+    put(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\nrelease: true\n");
     put("docs/README.md", "# Docs\n\n- [Plan](PLAN.md)\n- [Tasks](TASKS.md)\n- [Decisions](DECISIONS.md)\n");
     put("docs/PLAN.md", "# Plan\n\n## Goals\n\n### Core (phase 1) · done 2026-10-20\n\n### Next (phase 2)\n");
     put("docs/DECISIONS.md", "# Decisions\n\n| # | Decision | Why |\n|---|---|---|\n\n## To decide\n");

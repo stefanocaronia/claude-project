@@ -12,7 +12,7 @@ import { backlogProblems } from "./backlog.mjs";
 import { extensionChecks, loadExtensions } from "./extensions.mjs";
 import { readable } from "../lib/words.mjs";
 import { betterDescription, joinFrontmatter, splitFrontmatter } from "../lib/frontmatter.mjs";
-import { citingFiles, docFiles, isMain, legacyFormat, stampDoc, loadProject, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, readTodos, runCli, shown, specCitations, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
+import { citingFiles, docFiles, isMain, legacyFormat, stampDoc, loadProject, read, readBacklog, readDecisions, readContracts, readDependencies, readGoals, readSpecs, readTodos, runCli, shown, specCitations, taskLinks, today, todoFiles, todoIdsEver } from "./project.mjs";
 
 /** Every finding about the docs, from errors that must be fixed to notes for the cleanup: { severity, kind, file, line, message }. */
 export function check(config, say)
@@ -24,6 +24,7 @@ export function check(config, say)
     checkNumbering(config, say, decisions, add);
     checkReferences(config, say, decisions, add);
     checkSpecs(config, say, add);
+    checkContracts(config, say, add);
     checkRevisions(config, say, decisions, add);
     checkTodos(config, say, add);
     checkBacklog(config, say, add);
@@ -163,6 +164,18 @@ function checkSpecs(config, say, add)
 
     for (const cited of specCitations(config).filter((one) => !seen.has(one.number))) {
         add("error", "references", `${config.root}/${cited.file}`, cited.line, say("unknownSpec", { id: `${prefix}-${cited.number}`, file: name }));
+    }
+}
+
+/** The contracts: one whose file does not hold its number, or whose number went down since the last release. */
+function checkContracts(config, say, add)
+{
+    for (const contract of readContracts(config)) {
+        if (contract.state === "unread") {
+            add("error", "contracts", `${config.root}/${contract.file}`, null, say("contractUnread", { name: contract.name, file: contract.file }));
+        } else if (contract.state === "lowered") {
+            add("error", "contracts", `${config.root}/${contract.file}`, null, say("contractLowered", { name: contract.name, before: contract.before, current: contract.current }));
+        }
     }
 }
 

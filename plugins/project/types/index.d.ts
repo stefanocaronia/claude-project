@@ -79,8 +79,9 @@ export type Snapshot = {
     doneParts?: DonePart[];
     /** Whether git and gh are here, and the project's repo on GitHub, owner/name, or null. */
     github?: { tools: boolean; repo: string | null };
-    /** The last versions, the newest first, and how many tasks wait for the next one, with the number it suggests. */
-    releases?: { list: { version: string; day: string; summary: string; count: number | null }[]; total?: number; pending: number; next: string };
+    /** The last versions, the newest first, how many tasks wait for the next one, with the number it suggests, and the contracts that
+     * moved; null where the project shows no releases (none yet and none declared, or release: false). */
+    releases?: { list: { version: string; day: string; summary: string; count: number | null }[]; total?: number; pending: number; next: string; raised?: string[]; contracts?: { name: string; before: string | null; current: string | null }[] } | null;
     /** The specifications, where the project keeps them: the counts by coverage, and those open tasks are doing, with those tasks. */
     specs?: { total: number; done: number; doing: number; open: number; inProgress: { id: string; number: number; text: string; tasks: string[] }[] } | null;
     /** The project's own fields on a task, by key: their name, and the values allowed when the configuration lists them. */

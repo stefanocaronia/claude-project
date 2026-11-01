@@ -16,6 +16,7 @@ import { planGoals } from "../lib/plan.mjs";
 import { decisionLinks, dependencies, partsOf, seenFrom, todoLinks } from "../lib/links.mjs";
 import { dueOf, isStale } from "../lib/schedule.mjs";
 import { compareVersions, messageSummary, parseRelease } from "../lib/release.mjs";
+import { contractState, contractValue } from "../lib/contracts.mjs";
 import { firstName, parseTodo } from "../lib/todos.mjs";
 
 const lockWait = 10_000;
@@ -470,7 +471,9 @@ export function readReleases(config)
         .map((name) => {
             const text = read(join(config.files.releases, name));
             const release = parseRelease(text, config.prefixes.task);
-            return release ? [release.version, { ...release, text }] : null;
+            // The contracts' numbers the release recorded, by name.
+            const contracts = splitFrontmatter(text).data.contracts;
+            return release ? [release.version, { ...release, text, contracts: contracts && typeof contracts === "object" ? contracts : null }] : null;
         })
         .filter(Boolean));
     // Each tag with its day, its own message (an annotated tag's) and its commit's, fields and tags apart by the ASCII separators.
@@ -492,6 +495,33 @@ export function readReleases(config)
     const packaged = releases.length === 0 ? packageVersion(config) : null;
     return [...releases, ...(packaged ? [{ version: packaged, day: "", summary: "", tasks: [], text: "", tagged: false, tagOnly: true, source: "package" }] : [])]
         .sort((first, second) => compareVersions(first.version, second.version));
+}
+
+/** Whether the project shows its versions: where it has a release already (a tag, notes or a package's version), or declares contracts
+ * or the checks before one, unless its configuration says (`release: true | false`, or `show:`). A book that never releases is not
+ * asked to. */
+export function showsReleases(config, releases = readReleases(config))
+{
+    const declared = (config.contracts ?? []).length > 0 || (config.release?.run ?? []).length > 0 || (config.release?.remember ?? []).length > 0;
+    return config.release?.show ?? (releases.length > 0 || declared);
+}
+
+/** The project's contracts now and at its last release, each { name, file, current, before, state }: the number the last release's
+ * notes recorded, else the one its tag holds. */
+export function readContracts(config, releases = readReleases(config))
+{
+    const last = releases.at(-1);
+    const atTag = (contract) => {
+        const path = relativeTo(config.root, contract.file);
+        const text = last?.tagged ? [`v${last.version}`, last.version].map((tag) => git(config.root, ["show", `${tag}:${path}`])).find(Boolean) : "";
+        return text ? contractValue(text, contract) : null;
+    };
+
+    return (config.contracts ?? []).map((contract) => {
+        const recorded = last?.contracts?.[contract.name];
+        const before = recorded !== undefined && recorded !== null ? String(recorded) : last && last.source !== "package" ? atTag(contract) : null;
+        return { ...contractState(contract, contractValue(read(contract.file), contract), before), file: shown(config, contract.file) };
+    });
 }
 
 /** The version of the project's package.json, when it has one as MAJOR.MINOR.PATCH; else null. */

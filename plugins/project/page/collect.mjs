@@ -16,7 +16,7 @@ import { specsState } from "../scripts/specs.mjs";
 import { context, extensionChecks } from "../scripts/extensions.mjs";
 import { releaseState } from "../lib/release.mjs";
 import { readablePattern } from "../lib/words.mjs";
-import { colleagues, git, profileOf, projectName, read, readBacklog, readReleases, readDecisions, projectRepos, readGoals, readHolds, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
+import { colleagues, git, profileOf, projectName, read, readBacklog, readContracts, readReleases, readDecisions, showsReleases, projectRepos, readGoals, readHolds, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 const lastDecisions = 8;
@@ -196,11 +196,17 @@ function readSpecsData(config)
 }
 
 /** The releases for the page, the newest first, each with its notes; the work done since the last one, the version it suggests and
- * what makes one due. */
+ * what makes one due; the contracts that moved. Null where the project shows no releases. */
 function readReleasesData(config)
 {
     const releases = readReleases(config);
-    const state = releaseState(releases, readBacklog(config).tasks, readGoals(config), config.prefixes.task);
+
+    if (!showsReleases(config, releases)) {
+        return null;
+    }
+
+    const contracts = readContracts(config, releases);
+    const state = releaseState(releases, readBacklog(config).tasks, readGoals(config), config.prefixes.task, contracts);
     return {
         list: [...releases].reverse().map(({ version, day, summary, tasks, text, tagOnly, source }) => ({ version, day, summary, count: tasks.length, text, tagOnly: Boolean(tagOnly), source })),
         pending: state.pending.map((task) => ({ id: task.id, text: clean(task.text), type: task.type, done: task.done })),
@@ -208,6 +214,8 @@ function readReleasesData(config)
         suggested: state.suggested,
         closedGoals: state.closedGoals,
         urgent: state.urgent,
+        raised: state.raised,
+        contracts: contracts.filter((contract) => contract.state !== "same"),
     };
 }
 

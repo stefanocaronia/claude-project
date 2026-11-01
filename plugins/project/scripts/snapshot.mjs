@@ -13,7 +13,7 @@ import { specsState } from "./specs.mjs";
 import { check } from "./check.mjs";
 import { readCode, readIssues, readOwner } from "./code.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
-import { colleagues, findRoot, git, isMain, onPath, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readGoals, readReleases, runCli, taskLinks, today, todoFiles } from "./project.mjs";
+import { colleagues, findRoot, git, isMain, onPath, loadProject, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 // The most a portrait may weigh in the panel's drawing, which the desktop drops past about 100 KB: Crew's small ones are under 2 KB.
@@ -152,12 +152,23 @@ function specsOf(config)
 function releasesOf(config, tasks, goals)
 {
     const releases = readReleases(config);
-    const { pending, suggested } = releaseState(releases, tasks, goals, config.prefixes.task);
+
+    // A project that does not release, a book, has no versions to show.
+    if (!showsReleases(config, releases)) {
+        return null;
+    }
+
+    const contracts = readContracts(config, releases);
+    const { pending, suggested, raised } = releaseState(releases, tasks, goals, config.prefixes.task, contracts);
     return {
         list: [...releases].reverse().slice(0, 10).map(({ version, day, summary, tasks: listed, tagOnly }) => ({ version, day, summary, count: tagOnly ? null : listed.length })),
         total: releases.length,
         pending: pending.length,
         next: suggested.version,
+        // The contracts gone up: a version waits for them alone.
+        raised,
+        // The contracts that went up or down since the last release, each «API 7 → 8».
+        contracts: contracts.filter((contract) => contract.state === "raised" || contract.state === "lowered").map(({ name, before, current }) => ({ name, before, current })),
     };
 }
 

@@ -2402,7 +2402,8 @@ function render()
         { id: "tasks", label: t("tabTasks"), badge: `${(data.board ?? []).filter((task) => columnOf(task) !== "done").length}`, panel: tasksPanel },
         { id: "health", label: t("tabHealth"), badge: errors ? t("errorsBadge", errors) : "✓", panel: healthPanel },
         { id: "documents", label: t("tabDocuments"), badge: `${documents.length}`, panel: documentsPanel },
-        { id: "releases", label: t("tabReleases"), badge: data.releases?.list.length ? `v${data.releases.list[0].version}` : "", panel: releasesPanel },
+        // The versions, where the project releases.
+        ...(data.releases ? [{ id: "releases", label: t("tabReleases"), badge: data.releases.list.length ? `v${data.releases.list[0].version}` : "", panel: releasesPanel }] : []),
     ];
 
     for (const extension of extensions) {
@@ -2515,12 +2516,14 @@ function overviewPanel()
 /** The releases: what waits for the next one and why one is due, then each version, the newest first, with its notes. */
 function releasesPanel()
 {
-    const { list = [], pending = [], counts = {}, suggested = {}, closedGoals = [], urgent = [] } = data.releases ?? {};
+    const { list = [], pending = [], counts = {}, suggested = {}, closedGoals = [], urgent = [], raised = [], contracts = [] } = data.releases ?? {};
     const name = (id) => `${data.prefixes.task}-${id}`;
-    const due = closedGoals.length ? t("releaseDueGoals", closedGoals.join(", ")) : urgent.length ? t("releaseDueFix", urgent.join(", ")) : t("releaseJudge");
-    const waiting = pending.length
+    const due = closedGoals.length ? t("releaseDueGoals", closedGoals.join(", ")) : urgent.length ? t("releaseDueFix", urgent.join(", ")) : raised.length ? t("releaseDueContract", raised.join(", ")) : t("releaseJudge");
+    // The contracts that moved since the last release, or that do not read.
+    const moved = contracts.length ? `<ul class="list">${contracts.map((contract) => `<li>${escape(contract.name)}: ${escape(contract.state === "unread" ? t("contractUnreadShort") : contract.before ? `${contract.before} → ${contract.current}` : contract.current)}</li>`).join("")}</ul>` : "";
+    const waiting = pending.length || raised.length
         ? `<p>${escape(t("releasePending", pending.length, counts))} ${escape(t("releaseSuggested", suggested.version))}</p>
-            <p class="hint">${escape(due)}</p>
+            <p class="hint">${escape(due)}</p>${moved}
             <ul class="list">${pending.map((task) => `<li><span class="id">${escape(name(task.id))}</span> ${escape(task.text)}</li>`).join("")}</ul>`
         : `<p class="hint">${escape(t("releaseNothing"))}</p>`;
     const notes = (release) => markdown(withoutFrontmatter(release.text).replace(/^#[^\n]*\n/, ""));

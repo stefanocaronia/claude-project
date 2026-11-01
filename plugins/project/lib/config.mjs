@@ -79,9 +79,50 @@ export function readConfig(text, root)
         fields,
         // The project's key documents (a game's GDD, a business plan, a specification), the first to read: { name, path }.
         documents: (Array.isArray(given.documents) ? given.documents : []).map((document) => ({ name: String(document.name ?? document.path), path: resolve(root, String(document.path)) })),
+        // The releases: shown where the project has one already, unless `release: true | false` (or its `show:`) says; the checks before
+        // one, `run:` the commands Claude runs, `remember:` what it asks the user.
+        release: releaseOf(given.release),
+        // The numbers others read of the project, apart from its version: `contracts: [{ name, file, pointer: /a/b }]`, or `pattern:`.
+        contracts: contractsOf(given.contracts, root),
     };
 
     return config;
+}
+
+/** The release settings: { show: true | false | null, run: [], remember: [] }, null showing the versions once there is a release. */
+function releaseOf(given)
+{
+    if (given === undefined || given === null || typeof given === "boolean") {
+        return { show: typeof given === "boolean" ? given : null, run: [], remember: [] };
+    }
+
+    if (!isMap(given)) {
+        throw new Error(`release is true, false or a map of the checks before a release (release: { run: [npm test], remember: [Read the changelog] }), not ${Array.isArray(given) ? "a list" : typeof given}.`);
+    }
+
+    return { show: typeof given.show === "boolean" ? given.show : null, run: list(given.run, []), remember: list(given.remember, []) };
+}
+
+/** The contracts: each { name, file, pointer, pattern }, a JSON pointer into a JSON or YAML file, or a regex whose one group is the number. */
+function contractsOf(given, root)
+{
+    if (given === undefined || given === null) {
+        return [];
+    }
+
+    if (!Array.isArray(given)) {
+        throw new Error("contracts must be a list (contracts: [{ name: Plugins' API, file: package.json, pointer: /engine/api }]).");
+    }
+
+    return given.map((contract) => {
+        const { name, file, pointer, pattern } = isMap(contract) ? contract : {};
+
+        if (!name || !file || (pointer === undefined) === (pattern === undefined)) {
+            throw new Error(`contracts: each has a name, a file and one of pointer (/engine/api, into a JSON or YAML file) or pattern (a regex with one group), not ${JSON.stringify(contract)}.`);
+        }
+
+        return { name: String(name), file: resolve(root, String(file)), pointer: pointer === undefined ? null : String(pointer), pattern: pattern === undefined ? null : String(pattern) };
+    });
 }
 
 /** The page's port when the configuration names none: one of 5800–5999, the same for a folder every time, so that two projects open
