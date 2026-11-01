@@ -1,7 +1,7 @@
-// The code that cites a task: commits whose message names it, pull requests whose title or body names it. Pure: git's and gh's output
-// in, the citations by task out.
+// The code that does a task: commits whose message cites it, pull requests whose title or body cites it, as `(T-12)` or `closes T-12`.
+// Pure: git's and gh's output in, the citations by task out.
 import { citedTasks } from "./backlog.mjs";
-import { jsonList } from "./text.mjs";
+import { escapeRegex, jsonList } from "./text.mjs";
 
 /** The commits of `git log --format=%H%x1f%ad%x1f%s%x1f%b%x1e --date=short`, each { hash, day, subject, body }. */
 export function parseLog(text)
@@ -25,7 +25,21 @@ export function parseIssues(json)
     return jsonList(json, (issue) => ({ number: issue.number, title: issue.title ?? "", state: String(issue.state ?? "").toLowerCase(), url: issue.url ?? null, closed: issue.closedAt ? String(issue.closedAt).slice(0, 10) : null, author: issue.author?.login ? String(issue.author.login) : null }));
 }
 
-/** By task number, the commits and the pull requests that cite it: { commits: [{ hash, day, subject, repo, url }], pulls: [{ number, title,
+/** The tasks a message says it does: those in brackets of their own, `(T-12)`, `(T-3, T-5 to T-7)`, and those after closes, fixes or
+ * resolves; a task only named in passing, as a plan's commit names the tasks it adds, is not done there. */
+export function doneTasks(text, prefix = "T", own = [])
+{
+    const id = String.raw`(?:[\w.-]+(?:['’]s\s+|#))?${escapeRegex(prefix)}-\d+`;
+    const group = new RegExp(String.raw`\((${id}(?:\s*(?:,|;|&|and|e|to|a|-|–)\s*${id})*)\)`, "gi");
+    const closing = new RegExp(String.raw`\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(${id})`, "gi");
+    // A range, T-5 to T-7, is every task in it.
+    const range = new RegExp(String.raw`${escapeRegex(prefix)}-(\d+)\s*(?:to|a|-|–)\s*${escapeRegex(prefix)}-(\d+)`, "gi");
+    const spread = (cited) => cited.replace(range, (_, from, to) => Array.from({ length: Math.max(0, Math.min(Number(to) - Number(from), 99)) + 1 }, (__, at) => `${prefix}-${Number(from) + at}`).join(", "));
+    const found = [...String(text).matchAll(group), ...String(text).matchAll(closing)].map((match) => spread(match[1])).join(", ");
+    return citedTasks(found, prefix, own);
+}
+
+/** By task number, the commits and the pull requests that do it: { commits: [{ hash, day, subject, repo, url }], pulls: [{ number, title,
  * state, url, merged }] }, the newest first. A commit's url when its repo has a page for it (`repoUrl`). A task named after another
  * project (`rpg-engine's T-8`) is not this one's: `own` and the repos' names on their pages are the project's names. */
 export function citationsOf(repos, pulls, prefix = "T", own = [])
@@ -33,7 +47,7 @@ export function citationsOf(repos, pulls, prefix = "T", own = [])
     const byTask = new Map();
     const entry = (id) => byTask.get(id) ?? byTask.set(id, { commits: [], pulls: [] }).get(id);
     const names = [...own, ...repos.map((repo) => repo.url?.split("/").at(-1))];
-    const cited = (text) => citedTasks(text, prefix, names);
+    const cited = (text) => doneTasks(text, prefix, names);
 
     for (const repo of repos) {
         for (const commit of repo.commits) {

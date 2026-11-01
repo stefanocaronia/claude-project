@@ -111,13 +111,13 @@ test("the panel shows the project's numbers, the tasks in progress and the P1 to
 
     for (const surface of surfaces) {
         const ui = await $.ui.mount({ plugin, surface, component: "Pane", requestId: "project", props });
-        expect(await ui.find({ type: "Text", text: "demo" })).toBeDefined();
-        expect((await ui.find({ key: "toggle-documents" }))?.props.label).toBe("▾ 📄 Documenti");
-        expect((await ui.find({ key: "toggle-doing" }))?.props.label).toBe("▾ ⚒︎ In corso · 2");
-        expect((await ui.find({ key: "toggle-goals" }))?.props.label).toBe("▾ ⚑︎ Piano · 2");
-        expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 4");
+        expect((await ui.find({ type: "Link", text: "Dashboard" }))?.props.href).toBe("http://localhost:5790");
+        expect((await headingOf(ui, "toggle-documents"))).toBe("▾ 📄 Documenti");
+        expect((await headingOf(ui, "toggle-doing"))).toBe("▾ ⚒︎ In corso (2)");
+        expect((await headingOf(ui, "toggle-goals"))).toBe("▾ ⚑︎ Piano (2)");
+        expect((await headingOf(ui, "toggle-rest"))).toBe("▾ ☰ Da fare (4)");
         // Only what waits to be decided, open from the start; the decisions taken are the page's.
-        expect((await ui.find({ key: "toggle-decisions" }))?.props.label).toBe("▾ ⚖︎ Da decidere · 2");
+        expect((await headingOf(ui, "toggle-decisions"))).toBe("▾ ⚖︎ Da decidere (2)");
         expect(await ui.find({ type: "Text", text: /Decise di recente/ })).toBeUndefined();
         expect(await ui.find({ type: "Text", text: "▸ I pacchetti nei loro repo" })).toBeDefined();
         expect(await ui.find({ type: "Text", text: "T-62" })).toBeDefined();
@@ -134,7 +134,7 @@ test("the panel shows the project's numbers, the tasks in progress and the P1 to
         expect(await ui.find({ key: "start-70" })).toBeUndefined();
         expect(await ui.find({ type: "Text", text: "▸ I temi da installare" })).toBeDefined();
         // The postponed in a section of their own after the tasks to do, closed at the start.
-        expect((await ui.find({ key: "toggle-postponed" }))?.props.label).toBe("▸ ⏸ Rimandati · 1");
+        expect((await headingOf(ui, "toggle-postponed"))).toBe("▸ ⏸ Rimandati (1)");
         await ui.unmount();
     }
 });
@@ -240,7 +240,7 @@ test("a reading that fails after a good one keeps the panel and says why, under 
 
     for (const surface of surfaces) {
         const ui = await $.ui.mount({ plugin, surface, component: "Pane", requestId: "project", props });
-        expect(await ui.find({ type: "Text", text: "demo" })).toBeDefined();
+        expect((await ui.find({ type: "Link", text: "Dashboard" }))?.props.href).toBe("http://localhost:5790");
         expect(await ui.find({ type: "Text", text: /⚠ .*line 6: Map keys must be unique/ })).toBeDefined();
         await ui.unmount();
     }
@@ -307,14 +307,15 @@ test("a blocked task shows what it waits for in place of its age, its ▶ asks f
         // On the desktop a hint says it in words.
         expect(await ui.find({ type: "Text", text: "Aspetta T-62, #giulia-1, ancora aperti: si può avviare quando sono fatti" })).toEqual(surface === "desktop" ? expect.anything() : undefined);
         await ui.press({ key: "open-72" });
-        expect(await ui.find({ type: "Text", text: "aspetta" })).toBeDefined();
-        expect(await chipOf(ui, surface, "#giulia-1")).toBeDefined();
+        // Each tie a chip after the others, its kind a mark, its words under the pointer on the desktop.
+        expect(await ui.find({ type: "Text", text: "aspetta" })).toEqual(surface === "desktop" ? expect.anything() : undefined);
+        expect(await chipOf(ui, surface, "⏳ #giulia-1")).toBeDefined();
         expect(await chipOf(ui, surface, "⛓ #giulia-1 → T-62 → T-72")).toBeDefined();
         await ui.press({ key: "open-72" });
         await ui.press({ key: "open-143" });
-        expect(await ui.find({ type: "Text", text: "vedi" })).toBeDefined();
-        expect(await chipOf(ui, surface, "D-541")).toBeDefined();
-        expect(await ui.find({ type: "Text", text: "citato da" })).toBeDefined();
+        expect(await ui.find({ type: "Text", text: "vedi" })).toEqual(surface === "desktop" ? expect.anything() : undefined);
+        expect((await chipOf(ui, surface, "↗ D-541")) ?? (await chipOf(ui, surface, "⚖︎ D-541"))).toBeDefined();
+        expect(await ui.find({ type: "Text", text: "citato da" })).toEqual(surface === "desktop" ? expect.anything() : undefined);
         expect((await linkOf(ui, "📄 Nota ↗"))?.props.href).toBe("http://localhost:5790/note/143");
         // The code that cites it: the commits, the latest a link; the pull request, merged, and that the task can close.
         expect((await linkOf(ui, "⎇ 3 commit, l'ultimo il 2026-10-30"))?.props.href).toBe("https://github.com/a/b/commit/759cf6f");
@@ -398,7 +399,7 @@ test("a large task shows its parts closed in place of its age, its ▶ starts th
     await ui.press({ key: "parts-80" });
     expect(await ui.find({ type: "Text", text: "[▾ 1/2]" })).toBeDefined();
     // The part is drawn under its large task, not on its own: To do counts the large task only.
-    expect((await ui.find({ key: "toggle-rest" }))?.props.label).toBe("▾ ☰ Da fare · 4");
+    expect((await headingOf(ui, "toggle-rest"))).toBe("▾ ☰ Da fare (4)");
     expect(await ui.find({ key: "part-81" })).toBeDefined();
     // A part closed while its large task is open: under it, checked, without ▶.
     expect(await ui.find({ key: "done-part-82" })).toBeDefined();
@@ -422,7 +423,7 @@ test("the open GitHub issues no task does yet show apart and go into the backlog
     const { runs, prompts } = world(on);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
     const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
-    expect((await ui.find({ key: "toggle-issues" }))?.props.label).toBe("▾ ◉ Issue di GitHub · 1");
+    expect((await headingOf(ui, "toggle-issues"))).toBe("▾ ◉ Issue di GitHub (1)");
     runs.length = 0;
     await ui.press({ key: "issue-take-40" });
     await ui.press({ key: "open-70" });
@@ -481,7 +482,7 @@ test("where the issues are in sync, their section shows the last sync, or its er
     world(on, [{ ...good, stdout: JSON.stringify({ ...snapshot, issues: [], issuesSync }) }]);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
     const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
-    expect((await ui.find({ key: "toggle-issues" }))?.props.label).toBe("▾ ◉ Issue di GitHub · 0");
+    expect((await headingOf(ui, "toggle-issues"))).toBe("▾ ◉ Issue di GitHub (0)");
     expect(await ui.find({ key: "issues-hint" })).toBeUndefined();
     expect(await ui.find({ type: "Text", text: "⚠ Sincronia fallita · 2026-11-01 10:05: gh api user failed" })).toBeDefined();
     expect(await ui.find({ type: "Text", text: "⚠ Compiti la cui issue GitHub non elenca più: T-70 (#33)" })).toBeDefined();
@@ -673,7 +674,7 @@ test("the versions at the bottom, the newest first, each opening its notes in th
     world(on, [{ ...good, stdout: JSON.stringify(released) }]);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
     const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
-    expect((await ui.find({ key: "toggle-releases" }))?.props.label).toBe("▾ 🏷︎ Versioni · 2");
+    expect((await headingOf(ui, "toggle-releases"))).toBe("▾ 🏷︎ Versioni (2)");
     expect(await ui.find({ type: "Text", text: "2 compiti fatti dall'ultima versione · prossima v0.8.1" })).toBeDefined();
     expect((await ui.find({ type: "Link", text: "v0.8.0" }))?.props.href).toBe("http://localhost:5790/#releases/0.8.0");
     expect(await ui.find({ type: "Text", text: "Extensions grow." })).toBeDefined();
@@ -685,7 +686,7 @@ test("the specifications: how many are covered, those in progress with their tas
     world(on, [{ ...good, stdout: JSON.stringify(kept) }]);
     await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
     const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
-    expect((await ui.find({ key: "toggle-specs" }))?.props.label).toBe("▾ ▤ Specifiche · 2/55");
+    expect((await headingOf(ui, "toggle-specs"))).toBe("▾ ▤ Specifiche (2/55)");
     expect(await ui.find({ type: "Text", text: "2 coperte · 1 in corso · 52 non coperte" })).toBeDefined();
     expect((await ui.find({ type: "Link", text: "S-4" }))?.props.href).toBe("http://localhost:5790/#specs");
     expect(await ui.find({ type: "Text", text: "T-3" })).toBeDefined();
@@ -761,4 +762,11 @@ async function chipOf(ui: { find: (query: object) => Promise<unknown>; findAll: 
 async function linkOf(ui: { find: (query: object) => Promise<{ props: { href?: string } } | undefined> }, text: string)
 {
     return ui.find({ type: "Link", text });
+}
+
+/** A section's heading: its drawing's words on the desktop, its button's label on the terminal. */
+async function headingOf(ui: { find: (query: object) => Promise<{ props: Record<string, unknown> } | undefined>; findAll: (query: object) => Promise<{ props: Record<string, unknown> }[]> }, key: string)
+{
+    const label = String((await ui.find({ key }))?.props.label ?? "");
+    return label.trim() !== "" ? label : (await ui.findAll({ type: "Svg" })).find((one) => String(one.props.source ?? "").includes(`<desc>${key}</desc>`))?.props.alt;
 }

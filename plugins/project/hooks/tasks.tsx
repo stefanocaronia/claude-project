@@ -208,8 +208,9 @@ export function taskLists($: EngineInterface, p: Panel)
             ...open.map((part) => <Box key={`part-${part.id}`} flexDirection="column" paddingLeft={indent}>{taskLines(part, true)}</Box>),
         ]);
     };
-    // A new task, written in the list to do with its priority, its type and the large task it is a part of: its creator is the person
-    // the panel is for, as the page's owner. A large task takes parts one level deep: the open tasks that are no part themselves.
+    // A new task, written in the list to do in a card of its own, as a task is: its text first, the whole width, then its priority, its
+    // type and the large task it is a part of, the cancel at the end of their row. Its creator is the person the panel is for, as the
+    // page's owner. A large task takes parts one level deep: the open tasks that are no part themselves.
     const draft = { priority: "P2", type: "", parent: "", ...view.draft };
     const closeNew = () => {
         newText = "";
@@ -227,22 +228,26 @@ export function taskLists($: EngineInterface, p: Panel)
     // Where the surface draws no form (the mobile app), no button opens one.
     const newTask = () => (!hasForms ? null : view.editing === "new"
         ? (
-            <Box key="new-task-form" flexDirection="column" gap={1}>
-                <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
-                    <Select key="new-priority" label={words("fieldPriority")} value={draft.priority} options={(["P1", "P2", "P3"] as const).map((key) => ({ value: key, label: `${key} · ${snapshot.words.priorities[key] ?? key}` }))} onSelect={pick("priority")} />
-                    <Select key="new-type" label={words("fieldType")} value={draft.type} options={[noChoice, ...Object.entries(snapshot.types ?? {}).map(([key, name]) => ({ value: key, label: name }))]} onSelect={pick("type")} />
-                    <Select key="new-parent" label={words("fieldParent")} value={draft.parent} options={[noChoice, ...snapshot.tasks.filter((task) => !task.parent).sort(byOrder).map((task) => ({ value: idOf(task), label: `${idOf(task)} · ${task.text.length > 40 ? `${task.text.slice(0, 40)}…` : task.text}` }))]} onSelect={pick("parent")} />
-                </Box>
-                <Input key="new-task" value={newText} placeholder={words("newTaskHint")} autoFocus submitLabel={addMark} onInput={(value) => { newText = value; }} onSubmit={addTask} />
-                {iconButton("new-task-cancel", words("cancelEdit"), closeNew, true)}
-            </Box>
+            card("new-task-form", [
+                <Input key="new-task" value={newText} placeholder={words("newTaskHint")} rows={2} autoFocus submitLabel={addMark} onInput={(value) => { newText = value; }} onSubmit={addTask} />,
+                <Box key="new-task-fields" flexDirection="row" flexWrap="nowrap" justifyContent="space-between" alignItems="center" columnGap={2} marginTop={1}>
+                    <Box flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={1} flexShrink={1} minWidth={0}>
+                        <Select key="new-priority" label={words("fieldPriority")} value={draft.priority} options={(["P1", "P2", "P3"] as const).map((key) => ({ value: key, label: `${key} · ${snapshot.words.priorities[key] ?? key}` }))} onSelect={pick("priority")} />
+                        <Select key="new-type" label={words("fieldType")} value={draft.type} options={[noChoice, ...Object.entries(snapshot.types ?? {}).map(([key, name]) => ({ value: key, label: name }))]} onSelect={pick("type")} />
+                        <Select key="new-parent" label={words("fieldParent")} value={draft.parent} options={[noChoice, ...snapshot.tasks.filter((task) => !task.parent).sort(byOrder).map((task) => ({ value: idOf(task), label: `${idOf(task)} · ${task.text.length > 40 ? `${task.text.slice(0, 40)}…` : task.text}` }))]} onSelect={pick("parent")} />
+                    </Box>
+                    {iconButton("new-task-cancel", words("cancelEdit"), closeNew, true)}
+                </Box>,
+            ])
         )
-        : <Button key="new-task" plain dimColor label={words("newTask")} onPress={() => void change((old) => ({ ...old, editing: "new" }))} />);
-    const taskSection = (key: "doing" | "rest" | "postponed", icon: string, title: string, tasks: Task[], none: string) => section(key, icon, `${title} · ${tasks.length}`, [
+        : null);
+    // The button that opens it, on the heading of the list to do, at its right.
+    const newTaskButton = () => (!hasForms || view.editing === "new" ? null : <Button key="new-task" plain dimColor label={words("newTask")} onPress={() => void change((old) => ({ ...old, editing: "new" }))} />);
+    const taskSection = (key: "doing" | "rest" | "postponed", icon: string, title: string, tasks: Task[], none: string) => section(key, icon, `${title} (${tasks.length})`, [
         ...(key === "rest" ? [newTask()] : []),
         ...(tasks.length === 0 ? [<Text key={`none-${key}`} dimColor>{none}</Text>] : limited(key, tasks).map(taskRow)),
         more(key, tasks.length, "showAllTasks"),
-    ]);
+    ], key === "rest" ? newTaskButton() : null);
 
     return { doing, rest, postponed, busyWith, nextTask, start, taskSection };
 }

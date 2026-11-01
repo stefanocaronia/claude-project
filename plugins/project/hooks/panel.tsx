@@ -73,27 +73,16 @@ export async function drawPanel($: EngineInterface, e: RenderInput<"Pane">)
                 : null}
             {chatButton("tidy-backlog", words("tidyBacklog"), () => submit($, words("promptTidyBacklog")))}
             {chatButton("tidy-docs", words("tidyDocs"), () => submit($, words("promptTidy")))}
+            {chatButton("reload-plugins", words("reloadPlugins"), () => reloadPlugins($), { plain: true, dimColor: true })}
         </Box>
     );
     const [links, documents] = linkSections($, p);
 
     return (
         <Box flexDirection="column" gap={1}>
-            <Box flexDirection="row" flexWrap="nowrap" justifyContent="space-between" alignItems="center" columnGap={2}>
-                <Box flexDirection="row" flexShrink={1} minWidth={0} overflow="hidden">
-                    <Text bold wrap="truncate-end">{snapshot.project}</Text>
-                    <Text dimColor wrap="truncate-end">{` · ${words("projectWord")}`}</Text>
-                </Box>
-                <Box flexDirection="row" flexShrink={0} columnGap={2} alignItems="center">
-                    {chatButton("reload-plugins", words("reloadPlugins"), () => reloadPlugins($), { plain: true, dimColor: true })}
-                    <Link href={snapshot.page}>{words("openPage")}</Link>
-                </Box>
-            </Box>
             {[board.problem, ...(snapshot.problems ?? [])].filter((problem): problem is string => Boolean(problem)).map((problem, index) => <Text key={`problem-${index}`} color={errorColor}>{`⚠ ${problem}`}</Text>)}
             <Box key="tiles" flexDirection="row" flexWrap="wrap" gap={1}>{tiles}</Box>
             {actions}
-            {links}
-            {documents}
             {taskSection("doing", workMark, words("sectionDoing"), doing, words("noneDoing"))}
             {taskSection("rest", "☰", words("sectionRest"), rest, words("noneRest"))}
             {postponed.length > 0 ? taskSection("postponed", "⏸", snapshot.words.states.postponed ?? "", postponed, "") : null}
@@ -102,6 +91,8 @@ export async function drawPanel($: EngineInterface, e: RenderInput<"Pane">)
             {decisionSection($, p, proposals)}
             {specSection(p)}
             {releaseSection(p)}
+            {links}
+            {documents}
         </Box>
     );
 }

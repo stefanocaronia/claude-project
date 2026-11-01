@@ -5,11 +5,14 @@ import type { Elements, EngineInterface, RenderInput } from "claude-code";
 import { linksIn } from "../lib/text.mjs";
 import type { Board, Snapshot, Task, View } from "../types";
 
-import { cardTint, chipSvg, claudeSvg, faceSvg, idleButtonSvg, idleColor, linkColor, markOf, outline, prioritySvg, quietColor, stateLayer, tooltipBackground, tooltipText } from "./draw.ts";
+import { cardTint, chipSvg, claudeSvg, faceSvg, headingSvg, linkGroundSvg, idleButtonSvg, idleColor, linkColor, markOf, outline, prioritySvg, quietColor, stateLayer, tooltipBackground, tooltipText } from "./draw.ts";
 import { startingFor } from "./start.ts";
 import { changeView, say } from "./state.ts";
 
 // The sections open at the start: all but the postponed tasks.
+// A button's label of blanks, about as wide as the drawing it lies over and never wider, with the room the button keeps around its label:
+// a label too wide for its room ends in an ellipsis, so the button is given no width of its own.
+const blanks = (width: number) => " ".repeat(Math.max(1, Math.floor((width - 24) / 5)));
 const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, goals: true, decisions: true, specs: true, releases: true };
 // How many rows a list shows before "show all".
 const rows: Record<string, number> = { doing: 5, rest: 10, postponed: 5, issues: 5, goals: 5, open: 3 };
@@ -78,16 +81,31 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
             {children}
         </Box>
     );
-    // A section: its heading, which opens and closes it, and what it holds, one row of room between them.
-    const section = (key: string, icon: string, title: string, items: (JSX.Element | null)[], after: JSX.Element | null = null) => (
-        <Box key={key} flexDirection="column" gap={1}>
-            <Box flexDirection="row" flexWrap="nowrap" justifyContent="space-between" alignItems="center">
-                <Button key={`toggle-${key}`} plain label={`${isOpen(key) ? "▾" : "▸"} ${icon} ${title}`} onPress={() => change((old) => ({ ...old, sections: { ...old.sections, [key]: !openIn(old, key) } }))} />
-                {after}
+    // A section: its heading, which opens and closes it, and what it holds, one row of room between them. On the desktop the heading is a
+    // drawing, larger and bold, so that it stands apart from what the section holds, with a button of blanks over it.
+    const section = (key: string, icon: string, title: string, items: (JSX.Element | null)[], after: JSX.Element | null = null) => {
+        const label = `${isOpen(key) ? "▾" : "▸"} ${icon} ${title}`;
+        const toggle = () => change((old) => ({ ...old, sections: { ...old.sections, [key]: !openIn(old, key) } }));
+        const heading = Svg ? headingSvg(label, `toggle-${key}`) : null;
+        return (
+            <Box key={key} flexDirection="column" gap={1}>
+                <Box flexDirection="row" flexWrap="nowrap" justifyContent="space-between" alignItems="center">
+                    {Svg && heading
+                        ? (
+                            <Box key={`heading-${key}`} flexShrink={1} minWidth={0}>
+                                <Svg source={heading.source} alt={label} width={heading.width} height={heading.height} />
+                                <Box position="absolute" top={0} left={0}>
+                                    <Button key={`toggle-${key}`} plain label={blanks(heading.width)} onPress={() => void toggle()} />
+                                </Box>
+                            </Box>
+                        )
+                        : <Button key={`toggle-${key}`} plain label={label} onPress={() => void toggle()} />}
+                    {after}
+                </Box>
+                {isOpen(key) ? items : null}
             </Box>
-            {isOpen(key) ? items : null}
-        </Box>
-    );
+        );
+    };
     const more = (list: string, count: number, label: "showAllTasks" | "showAllDecisions") => (count > (rows[list] ?? 3) && !view.whole[list]
         ? <Button key={`more-${list}`} plain dimColor label={words(label, { count })} onPress={() => change((old) => ({ ...old, whole: { ...old.whole, [list]: !old.whole[list] } }))} />
         : null);
@@ -102,18 +120,30 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
             </Box>
         )
         : control);
-    // A chip drawn on the desktop: its text small on a tint with round corners, as much room beside it as above and below. A link or a
-    // button lies over the drawing, its text clear, as neither holds a drawing; a link's text in the color of links.
+    // A chip drawn on the desktop: its text small on a tint with round corners, as much room beside it as above and below; a button of
+    // blanks over it, as a Button holds no drawing and draws its label in its own color. A link's chip is its ground drawn and the link
+    // over it, its text the panel's size: a link underlines its text under the pointer, which only its own text can carry.
     const pill = (key: string, text: string, tint: string, color: string, press?: { href?: string; onPress?: () => unknown; key?: string }) => {
+        if (press?.href) {
+            const ground = linkGroundSvg(text, tint);
+            return (
+                <Box key={key} flexShrink={0} alignSelf="center">
+                    {Svg ? <Svg source={ground.source} alt={text} width={ground.width} height={ground.height} /> : null}
+                    <Box position="absolute" top={0} left={0} width="100%" height="100%" flexDirection="row" justifyContent="center" alignItems="center">
+                        <Link key={press.key ?? `${key}-link`} href={press.href}>{text}</Link>
+                    </Box>
+                </Box>
+            );
+        }
+
         const drawn = chipSvg(text, tint, color);
-        const clear = <Text color="#00000000">{`${text}${" ".repeat(4)}`}</Text>;
         return (
             <Box key={key} flexShrink={0} alignSelf="center">
                 {Svg ? <Svg source={drawn.source} alt={text} width={drawn.width} height={drawn.height} /> : null}
                 {press
                     ? (
-                        <Box position="absolute" top={0} left={0} width="100%" height="100%" overflow="hidden">
-                            {press.href ? <Link key={press.key ?? `${key}-link`} href={press.href}>{clear}</Link> : <Button key={press.key ?? `${key}-press`} plain onPress={() => void press.onPress?.()}>{clear}</Button>}
+                        <Box position="absolute" top={0} left={0}>
+                            <Button key={press.key ?? `${key}-press`} plain label={blanks(drawn.width)} onPress={() => void press.onPress?.()} />
                         </Box>
                     )
                     : null}

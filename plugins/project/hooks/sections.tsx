@@ -19,16 +19,16 @@ export function linkSections($: EngineInterface, p: Panel)
 {
     const { Box, Text, Button, Link, isDesktop, snapshot, words, section, pill } = p;
     // Each a chip drawn on the desktop, a link or a button laid over it; as it was on the terminal.
-    type Item = { text: string; href?: string; onPress?: () => unknown };
+    type Item = { text: string; href?: string; onPress?: () => unknown; key?: string };
     const chips = (key: string, name: string, icon: string, title: string, items: Item[]) => (items.length > 0
         ? section(key, icon, title, [
             <Box key={`${key}-row`} flexDirection="row" flexWrap="wrap" gap={1}>
                 {items.map((item, index) => (isDesktop
-                    ? pill(`${name}-box-${index}`, item.text, stateLayer, item.href || item.onPress ? linkColor : quietColor, item.href || item.onPress ? { ...item, key: `${name}-${index}` } : undefined)
+                    ? pill(`${name}-box-${index}`, item.text, stateLayer, item.href || item.onPress ? linkColor : quietColor, item.href || item.onPress ? { ...item, key: item.key ?? `${name}-${index}` } : undefined)
                     : (
                         <Box key={`${name}-box-${index}`} paddingX={1}>
-                            {item.href ? <Link key={`${name}-${index}`} href={item.href}>{item.text}</Link>
-                                : item.onPress ? <Button key={`${name}-${index}`} plain label={item.text} onPress={() => void item.onPress?.()} />
+                            {item.href ? <Link key={item.key ?? `${name}-${index}`} href={item.href}>{item.text}</Link>
+                                : item.onPress ? <Button key={item.key ?? `${name}-${index}`} plain label={item.text} onPress={() => void item.onPress?.()} />
                                 : <Text key={`${name}-${index}`} dimColor>{item.text}</Text>}
                         </Box>
                     )))}
@@ -36,7 +36,11 @@ export function linkSections($: EngineInterface, p: Panel)
         ])
         : null);
     return [
-        chips("links", "link", "↗", words("sectionLinks"), (snapshot.links ?? []).map((link) => (link.href ? { text: link.label, href: link.href } : { text: link.label, onPress: () => postLink($, link.post ?? "") }))),
+        // The project's page first, then the extensions' links.
+        chips("links", "link", "↗", words("sectionLinks"), [
+            { text: words("openPage"), href: snapshot.page, key: "open-page" },
+            ...(snapshot.links ?? []).map((link, index) => (link.href ? { text: link.label, href: link.href, key: `link-${index}` } : { text: link.label, onPress: () => postLink($, link.post ?? ""), key: `link-${index}` })),
+        ]),
         chips("documents", "document", "📄", words("sectionDocuments"), (snapshot.documents ?? []).map((document) => (document.exists ? { text: document.name, href: document.href } : { text: document.name }))),
     ];
 }
@@ -54,7 +58,7 @@ export function issueSection($: EngineInterface, p: Panel)
         return null;
     }
 
-    return section("issues", "◉", `${words("sectionIssues")} · ${issues.length}`, [
+    return section("issues", "◉", `${words("sectionIssues")} (${issues.length})`, [
         ...(sync
             ? [
                 sync.error
@@ -134,7 +138,7 @@ export function decisionSection($: EngineInterface, p: Panel, proposals: Proposa
         ]);
     };
 
-    return section("decisions", scales, `${words("toDecide")} · ${proposals.length}`, [
+    return section("decisions", scales, `${words("toDecide")} (${proposals.length})`, [
         ...(proposals.length === 0 ? [<Text key="none-open" dimColor>{words("noneOpen")}</Text>] : limited("open", proposals).map(proposalRow)),
         more("open", proposals.length, "showAllDecisions"),
     ]);
@@ -151,7 +155,7 @@ export function specSection(p: Panel)
         return null;
     }
 
-    return section("specs", "▤", `${words("sectionSpecs")} · ${specs.done}/${specs.total}`, [
+    return section("specs", "▤", `${words("sectionSpecs")} (${specs.done}/${specs.total})`, [
         <Text key="specs-counts" dimColor>{words("specsCounts", specs)}</Text>,
         ...specs.inProgress.slice(0, 5).map((spec) => (
             <Box key={`spec-${spec.id}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
@@ -175,7 +179,7 @@ export function releaseSection(p: Panel)
         return null;
     }
 
-    return section("releases", versionMark, `${words("sectionReleases")} · ${releases.total ?? releases.list.length}`, [
+    return section("releases", versionMark, `${words("sectionReleases")} (${releases.total ?? releases.list.length})`, [
         <Text key="releases-pending" dimColor>
             {releases.pending > 0 ? words("releasesPending", { count: releases.pending, next: releases.next })
                 : (releases.raised ?? []).length > 0 ? words("releasesRaised", { list: (releases.raised ?? []).join(", "), next: releases.next }) : words("releasesNothing")}

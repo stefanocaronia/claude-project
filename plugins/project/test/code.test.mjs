@@ -6,23 +6,27 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { citationsOf, codeView, freeIssues, issueOf, parseIssues, parseLog, parsePulls, repoUrl } from "../lib/code.mjs";
+import { citationsOf, codeView, doneTasks, freeIssues, issueOf, parseIssues, parseLog, parsePulls, repoUrl } from "../lib/code.mjs";
 
 const scripts = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts");
 let root;
 
 test("git's log and gh's pull requests read, and the code that cites each task, the newest first", () => {
-    const log = "aaaaaaa1111\x1f2026-10-29\x1fThe dice (T-1)\x1f\x1e\nbbbbbbb2222\x1f2026-10-30\x1fThe log\x1fFor T-1 and T-2.\x1e\n";
+    const log = "aaaaaaa1111\x1f2026-10-29\x1fThe dice (T-1)\x1f\x1e\nbbbbbbb2222\x1f2026-10-30\x1fThe log (T-1, T-2)\x1fAfter T-9, which it names in passing.\x1e\n";
     const commits = parseLog(log);
-    assert.deepEqual(commits.map((commit) => [commit.hash, commit.day, commit.subject, commit.body]), [["aaaaaaa1111", "2026-10-29", "The dice (T-1)", ""], ["bbbbbbb2222", "2026-10-30", "The log", "For T-1 and T-2."]]);
-    const pulls = parsePulls(JSON.stringify([{ number: 4, title: "Dice", body: "Closes T-1", state: "MERGED", url: "https://github.com/a/b/pull/4", mergedAt: "2026-10-30T10:00:00Z" }, { number: 5, title: "T-2 log", body: "", state: "OPEN", url: null, mergedAt: null }]));
+    assert.deepEqual(commits.map((commit) => [commit.hash, commit.day, commit.subject, commit.body]), [["aaaaaaa1111", "2026-10-29", "The dice (T-1)", ""], ["bbbbbbb2222", "2026-10-30", "The log (T-1, T-2)", "After T-9, which it names in passing."]]);
+    const pulls = parsePulls(JSON.stringify([{ number: 4, title: "Dice", body: "Closes T-1", state: "MERGED", url: "https://github.com/a/b/pull/4", mergedAt: "2026-10-30T10:00:00Z" }, { number: 5, title: "The log (T-2)", body: "", state: "OPEN", url: null, mergedAt: null }]));
     assert.deepEqual(pulls.map((pull) => [pull.number, pull.state, pull.merged]), [[4, "merged", "2026-10-30"], [5, "open", null]]);
     assert.deepEqual(parsePulls("not json"), []);
 
-    const cited = citationsOf([{ name: "project", url: "https://github.com/a/b", commits: [...commits, { hash: "ccccccc3333", day: "2026-10-31", subject: "As in rpg-engine's T-1, and my-b's T-2", body: "" }] }], pulls, "T", ["my-b"]);
+    const cited = citationsOf([{ name: "project", url: "https://github.com/a/b", commits: [...commits, { hash: "ccccccc3333", day: "2026-10-31", subject: "As in rpg-engine's T-1 (my-b's T-2, rpg-engine's T-1)", body: "" }] }], pulls, "T", ["my-b"]);
     assert.deepEqual(cited.get(1).commits.map((commit) => [commit.hash, commit.url]), [["bbbbbbb", "https://github.com/a/b/commit/bbbbbbb2222"], ["aaaaaaa", "https://github.com/a/b/commit/aaaaaaa1111"]]);
     assert.deepEqual(cited.get(2).pulls.map((pull) => pull.number), [5]);
     assert.deepEqual(cited.get(2).commits.map((commit) => commit.hash), ["ccccccc", "bbbbbbb"]);
+    // A task named in passing is not done there.
+    assert.equal(cited.get(9), undefined);
+    assert.deepEqual(doneTasks("Project 0.13.0: comments (T-95, T-96); the review (T-70, T-73 to T-76); T-81 and T-82 added; (after: T-5)"), [95, 96, 70, 73, 74, 75, 76]);
+    assert.deepEqual(doneTasks("Closes T-4, fixes T-6"), [4, 6]);
     const view = codeView(cited.get(1), 1);
     assert.deepEqual([view.commits.length, view.commitCount, view.mergedPull?.number], [1, 2, 4]);
     assert.deepEqual(codeView(undefined), { commits: [], commitCount: 0, pulls: [], mergedPull: null });
@@ -42,11 +46,11 @@ before(() => {
     const gitIn = (...args) => execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], { stdio: "ignore" });
     gitIn("init", "-q");
     gitIn("add", "-A");
-    gitIn("commit", "-q", "-m", "The dice, T-1");
+    gitIn("commit", "-q", "-m", "The dice (T-1)");
     // The pull requests as gh gave them a moment ago: the reading kept in the temporary folder, so that gh is not asked.
     const cache = join(tmpdir(), "claude-project", `pulls-${root.replaceAll("\\", "/").replace(/[^\w-]/g, "_")}.json`);
     mkdirSync(dirname(cache), { recursive: true });
-    writeFileSync(cache, JSON.stringify([{ number: 7, title: "The dice", body: "Does T-1.", state: "MERGED", url: "https://example.com/pull/7", mergedAt: "2026-10-30T09:00:00Z" }]));
+    writeFileSync(cache, JSON.stringify([{ number: 7, title: "The dice", body: "Closes T-1.", state: "MERGED", url: "https://example.com/pull/7", mergedAt: "2026-10-30T09:00:00Z" }]));
     writeFileSync(cache.replace(/pulls-([^\/]+)$/, "issues-$1"), JSON.stringify([{ number: 40, title: "Login fails", state: "OPEN", url: "https://example.com/issues/40", closedAt: null }, { number: 41, title: "Export", state: "OPEN", url: null, closedAt: null }, { number: 39, title: "Old", state: "CLOSED", url: null, closedAt: "2026-10-20T00:00:00Z" }]));
 });
 
@@ -54,7 +58,7 @@ after(() => rmSync(root, { recursive: true, force: true }));
 
 test("show names the commits and the pull requests that cite a task, and the check says a merged one cites a task still open", () => {
     const shown = run("backlog.mjs", "show", "T-1");
-    assert.match(shown, /commits: 1, the latest [0-9a-f]{7} of \d{4}-\d{2}-\d{2}: The dice, T-1/);
+    assert.match(shown, /commits: 1, the latest [0-9a-f]{7} of \d{4}-\d{2}-\d{2}: The dice \(T-1\)/);
     assert.match(shown, /pull request #7, merged on 2026-10-30: The dice/);
     assert.doesNotMatch(run("backlog.mjs", "show", "T-2"), /commits|pull request/);
     const findings = JSON.parse(run("check.mjs", "--json"));

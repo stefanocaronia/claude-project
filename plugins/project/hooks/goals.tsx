@@ -98,7 +98,7 @@ export function goalSection(p: Panel, start: (task: Task) => JSX.Element | null)
         );
     };
 
-    return section("goals", goalMark, `${words("sectionGoals")} · ${openGoals.length}`, [
+    return section("goals", goalMark, `${words("sectionGoals")} (${openGoals.length})`, [
         card("goals-card", [
             ...phases.flatMap((phase) => {
                 if (phase.isClosed) {

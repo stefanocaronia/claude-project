@@ -29,6 +29,8 @@ export const workMark = "⚒︎";
 export const goalMark = "⚑︎";
 export const scales = "⚖︎";
 export const versionMark = "🏷︎";
+// The mark of each tie of a task, on its chip: its large task, a wait (an hourglass), who waits for it, a link both ways, a decision, a spec.
+export const tieMarks = { partOf: "▲", waits: "⏳", waitedBy: "⏭", see: "↗", seenFrom: "↙", decision: "⚖︎", spec: "§" };
 // The marks on a field's button: a text saved, a comment sent, a task added.
 export const saveMark = "✓";
 export const sendMark = "➤";
@@ -124,6 +126,26 @@ export function idleButtonSvg(label: string): { source: string; width: number; h
 // A chip's text, smaller than the panel's, and the room around it, the same on its four sides.
 const chipFont = 12;
 const chipPad = 4;
+
+/** A section's heading, as a drawing, named in its description: larger than the panel's text, bold, near black on the light theme and near white on the dark. */
+export function headingSvg(label: string, name: string): { source: string; width: number; height: number }
+{
+    const size = 17;
+    const height = 26;
+    const width = Math.ceil(labelWidth(label) * size * 1.08) + 4;
+    const style = "<style>.h{fill:#1f1f1d}@media (prefers-color-scheme: dark){.h{fill:#f1f1ee}}</style>";
+    const body = `<desc>${xml(name)}</desc>${style}<text class="h" x="0" y="${height / 2}" dominant-baseline="central" font-family="${font}" font-size="${size}" font-weight="600">${xml(label)}</text>`;
+    return { source: svg(width, height, body, false), width, height };
+}
+
+/** A link's chip, its ground alone: the tint with round corners, as wide as the link's text at the panel's size and a cell each side,
+ * one line high; the link itself lies over it, as a Link holds no drawing and underlines its text under the pointer. */
+export function linkGroundSvg(label: string, tint: string): { source: string; width: number; height: number }
+{
+    const height = 22;
+    const width = Math.ceil(labelWidth(label) * 15) + 18;
+    return { source: svg(width, height, `<rect width="${width}" height="${height}" rx="4" fill="${tint}"/>`, false), width, height };
+}
 
 /** A chip whole, as a drawing: its text at 12 px in its color, on its tint, corners of 4, as much room beside the text as above and
  * below it; a Box could have neither the smaller text nor the round corners. */

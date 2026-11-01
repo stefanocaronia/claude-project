@@ -1,13 +1,13 @@
 // A task opened in its row: its whole text, then chips for what the row does not show (its goal, its days, its fields, its issue and
-// note), then a labeled row of chips for each tie (parts, waits, links both ways, decisions, specs, code), then the comments left on it
-// and a field for another. What the row shows already, who holds it, its type, priority, effort and number, is not said again. Below,
+// note) and, after them, one for each tie, its kind a mark with its words under the pointer (its large task, waits, links both ways,
+// decisions, specs, the code that does it), then the comments left on it and a field for another. What the row shows already, who holds it, its type, priority, effort and number, is not said again. Below,
 // what can be done with it, on the desktop each a mark with its words under the pointer: done, postponed or back to do, its text and
 // fields written again, archived.
 import type { EngineInterface } from "claude-code";
 
 import type { Pull, Task } from "../types";
 
-import { decisionColor, errorColor, saveMark, sendMark, taskColor, warningColor, workColor } from "./draw.ts";
+import { decisionColor, errorColor, saveMark, sendMark, taskColor, tieMarks, warningColor, workColor } from "./draw.ts";
 import { noChoice, oneLine } from "./kit.tsx";
 import type { Panel } from "./kit.tsx";
 import { backlog } from "./project.ts";
@@ -18,28 +18,17 @@ const archiveAskFor = 4000;
 
 export function taskDetails($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Link, Input, Select, hasForms, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, iconButton, dueWords, linkedText, face, decider } = p;
+    const { Box, Text, Button, Input, Select, hasForms, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, iconButton, dueWords, linkedText, face, decider } = p;
     const choices = (values: string[]) => values.map((value) => ({ value, label: value }));
     const refColor = (id: string) => (id.startsWith(`${snapshot.prefixes.decision}-`) ? decisionColor : id.startsWith(`${prefix}-`) ? taskColor : undefined);
-    // A labeled row of chips, none without one.
-    const field = (key: string, label: string, chips: (JSX.Element | null)[]) => {
-        const shown = chips.filter((one): one is JSX.Element => one !== null);
-        return shown.length > 0
-            ? (
-                <Box key={key} flexDirection="row" flexWrap="wrap" gap={1} alignItems="center">
-                    <Box width={13} flexShrink={0}><Text dimColor>{label}</Text></Box>
-                    {shown}
-                </Box>
-            )
-            : null;
-    };
     // A part drawn under its large task does not name it again.
     const facts = (task: Task, isPart: boolean) => {
         const due = task.dueInfo;
         const issue = task.issueInfo;
         const latest = (task.commits ?? [])[0];
         const pullState = (pull: Pull) => (pull.merged ? words("pullMerged", { day: pull.merged }) : words(pull.state === "open" ? "pullOpen" : "pullClosed"));
-        const ties = (name: string, label: string, ids: string[]) => field(`${name}-${task.id}`, label, ids.map((id) => chip(`${name}-${task.id}-${id}`, id, refColor(id))));
+        // A tie: its mark and the other's number, in the other's color, what the tie is under the pointer.
+        const ties = (name: string, mark: string, label: string, ids: string[]) => ids.map((id) => chip(`${name}-${task.id}-${id}`, `${mark} ${id}`, refColor(id), null, label));
         const what = [
             task.goal === snapshot.words.noGoal ? null : chip(`goal-chip-${task.id}`, `⚑ ${task.goal}`),
             task.due ? chip(`due-chip-${task.id}`, due && (due.isLate || due.isNear) ? `⏰ ${dueWords(due)}` : words("dueLabel", { day: task.due }), due?.isLate ? errorColor : due?.isNear ? warningColor : undefined, null, words("dueTip", { day: task.due })) : null,
@@ -49,24 +38,23 @@ export function taskDetails($: EngineInterface, p: Panel)
             // An issue another wrote, in the color of a warning: the task's text is theirs (D-16).
             issue ? chip(`issue-chip-${task.id}`, `◉ #${issue.number} ${words(issue.state === "open" ? "issueStateOpen" : "issueStateClosed")}${issue.another && issue.author ? ` · ${words("issueBy", { author: issue.author })}` : ""}`, issue.another ? warningColor : undefined, issue.url, issue.title) : null,
             task.noteHref ? chip(`note-chip-${task.id}`, words("openNote"), undefined, task.noteHref) : null,
+            ...ties("part-of", tieMarks.partOf, words("labelPartOf"), task.parent && !isPart ? [task.parent] : []),
+            ...ties("waits", tieMarks.waits, words("labelWaits"), task.after ?? []),
+            (task.chain ?? []).length > 0 ? chip(`chain-chip-${task.id}`, `⛓ ${[...task.chain, idOf(task)].join(" → ")}`, warningColor, null, words("labelChain")) : null,
+            ...ties("waited", tieMarks.waitedBy, words("labelWaitedBy"), task.waitedBy ?? []),
+            // A decision it points to is among its decisions: «see» keeps the rest.
+            ...ties("see", tieMarks.see, words("labelSee"), (task.see ?? []).filter((one) => !(task.decisions ?? []).includes(one))),
+            ...ties("seen", tieMarks.seenFrom, words("labelSeenFrom"), task.seenFrom ?? []),
+            ...ties("decisions", tieMarks.decision, words("labelDecisions"), task.decisions ?? []),
+            // The specs it does, each a link to the specifications' tab of the page.
+            ...(task.specs ?? []).map((spec) => chip(`spec-${task.id}-${spec}`, `${tieMarks.spec} ${spec}`, undefined, `${snapshot.page}/#specs`, words("labelSpecs"))),
+            // The code that does it: its commits, the latest a link, and its pull requests.
+            latest ? chip(`commits-${task.id}`, words("commitsCount", { count: task.commitCount, day: latest.day }), undefined, latest.url, latest.subject) : null,
+            ...(task.pulls ?? []).map((pull) => chip(`pull-${task.id}-${pull.number}`, `#${pull.number} ${pullState(pull)}`, pull.merged ? workColor : undefined, pull.url, pull.title)),
         ].filter((one): one is JSX.Element => one !== null);
         return [
             linkedText(`text-${task.id}`, task.text),
             <Box key={`what-${task.id}`} flexDirection="row" flexWrap="wrap" gap={1}>{what}</Box>,
-            ties("part-of", words("labelPartOf"), task.parent && !isPart ? [task.parent] : []),
-            ties("waits", words("labelWaits"), task.after ?? []),
-            field(`chain-${task.id}`, words("labelChain"), (task.chain ?? []).length > 0 ? [chip(`chain-chip-${task.id}`, `⛓ ${[...task.chain, idOf(task)].join(" → ")}`, warningColor)] : []),
-            ties("waited", words("labelWaitedBy"), task.waitedBy ?? []),
-            // A decision it points to is among its decisions: «see» keeps the rest.
-            ties("see", words("labelSee"), (task.see ?? []).filter((one) => !(task.decisions ?? []).includes(one))),
-            ties("seen", words("labelSeenFrom"), task.seenFrom ?? []),
-            ties("decisions", words("labelDecisions"), task.decisions ?? []),
-            // The specs it does, each a link to the specifications' tab of the page.
-            field(`specs-${task.id}`, words("labelSpecs"), (task.specs ?? []).map((spec) => <Link key={`spec-${task.id}-${spec}`} href={`${snapshot.page}/#specs`}>{spec}</Link>)),
-            field(`code-${task.id}`, words("labelCode"), [
-                latest ? chip(`commits-${task.id}`, words("commitsCount", { count: task.commitCount, day: latest.day }), undefined, latest.url, latest.subject) : null,
-                ...(task.pulls ?? []).map((pull) => chip(`pull-${task.id}-${pull.number}`, `#${pull.number} ${pullState(pull)}`, pull.merged ? workColor : undefined, pull.url, pull.title)),
-            ]),
             task.mergedPull ? <Text key={`merged-${task.id}`} color={workColor}>{`✓ ${words("mergedCanClose", { number: task.mergedPull.number })}`}</Text> : null,
             ...comments(task),
         ];
