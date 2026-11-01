@@ -19,10 +19,12 @@ Run `init.mjs adopt`. It writes nothing. It finds the folder that holds a plan, 
 
 Ask once, in the choice form, with the recommendation first, what the request leaves open:
 - the docs' language (`en`, `it`; another one starts from `en` with its words overridden under `words:`);
-- where the docs live: in the repo (`project/`, the default), or in a **private repo of their own**, nested and ignored by the project's (`private/`, docs in `private/project/`), for a public project whose plan stays private. A submodule or a folder outside the repo is a path in `docs:` the user sets up;
+- where the docs live: in the repo (`project/`, the default), or, for a public project whose plan stays private, in a **private repo of their own**, ignored by the project's: the docs' folder itself (`project/`, recommended), or a `private/` repo that holds them in `private/project/` beside other private things, such as manuals or assets. A submodule or a folder outside the repo is a path in `docs:` the user sets up;
 - who besides Claude holds tasks (`people:`). Crew's colleagues, if the project has them, count by themselves.
 
-Then run `init.mjs --language it [--private private] [--docs <folder>] [--people "Claude,Ann"] [--name "<project>"]`. It writes the configuration and the docs that are missing, and never overwrites one. With `--private` it makes the folder a git repo and adds it to the project's `.gitignore`. Then fill the plan with the user: the phases and the first goals.
+Then run `init.mjs --language it [--private project|private] [--docs <folder>] [--people "Claude,Ann"] [--name "<project>"]`. It writes the configuration and the docs that are missing, and never overwrites one. With `--private` it makes that folder a git repo on `main` and adds it to the project's `.gitignore`. Then fill the plan with the user: the phases and the first goals.
+
+A project already set up, whose docs its repo keeps, makes them private later with `init.mjs private [--in private] [--write]`: the github skill's private docs.
 
 Once it is written, look at GitHub with `github.mjs status`: when git or gh is missing or the project is not on GitHub, offer the `github` skill, which does each step on the user's yes.
 

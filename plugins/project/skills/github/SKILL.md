@@ -45,7 +45,7 @@ After it, the panel and the page show the project's pull requests, the commits t
 
 ## 3. The private docs, a repo of their own
 
-A public project can keep its plan, backlog and decisions private: a folder made a git repo of its own, ignored by the project's (`init.mjs --private private` does it for a new project: `private/project/`). `connect --docs` puts it on GitHub as a private repo, `<project>-docs` by default. Each repo commits and pushes on its own: say which one a change goes to. For a project whose docs are already in the main repo, moving them is a change of history: propose it, with what it means (the old commits keep the docs), and do it only on a yes.
+A public project can keep its plan, backlog and decisions private: the docs' folder made a git repo of its own, ignored by the project's (`init.mjs --private project` for a new project), or a `private/` repo that holds them in `private/project/` beside other private things (`--private private`). For a project whose docs its repo already keeps, `init.mjs private [--in private]` does the same, their history with them: without `--write` it says what would change; it commits nothing, and the project's old commits still hold the docs. `connect --docs` puts the docs' repo on GitHub as a private repo, `<project>-docs` by default. Each repo commits and pushes on its own: say which one a change goes to. Taking the docs out of the project's old commits writes its history again (new hashes, a force push, every other clone made again): propose it, with what it means, and do it only on a yes.
 
 ## 4. A site on GitHub Pages
 

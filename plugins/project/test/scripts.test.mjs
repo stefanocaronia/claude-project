@@ -165,6 +165,88 @@ test("init sets a project up in its language, never overwrites, and a fresh proj
     rmSync(fresh, { recursive: true, force: true });
 });
 
+test("the docs made private: --private project makes a new project's docs' folder a repo of its own; private does it for a project's docs kept in its repo, their history with them, in their folder or moved into another", () => {
+    const env = { ...environment(), GIT_AUTHOR_NAME: "Ann", GIT_AUTHOR_EMAIL: "ann@example.com", GIT_COMMITTER_NAME: "Ann", GIT_COMMITTER_EMAIL: "ann@example.com" };
+    const git = (folder, ...args) => execFileSync("git", ["-C", folder, "-c", "commit.gpgSign=false", ...args], { encoding: "utf8", env, stdio: ["ignore", "pipe", "ignore"] }).trim();
+    const project = (name) => {
+        const folder = mkdtempSync(join(tmpdir(), `claude-project-${name}-`));
+        git(folder, "init", "-q");
+        return folder;
+    };
+    const script = (folder, name, ...args) => execFileSync(process.execPath, [join(scripts, name), ...args], { cwd: folder, encoding: "utf8", env: { ...env, CLAUDE_PROJECT_DIR: folder } });
+    // A project whose docs, in project/, its repo has kept: two commits touch them, one does not, and one change is not committed yet.
+    const kept = (name) => {
+        const folder = project(name);
+        script(folder, "init.mjs", "--language", "en", "--name", "Kept");
+        writeFileSync(join(folder, "README.md"), "See project/PLAN.md, not plugins/project/x.\n");
+        git(folder, "add", "-A");
+        git(folder, "commit", "-q", "-m", "The docs");
+        script(folder, "backlog.mjs", "add", "one");
+        writeFileSync(join(folder, "code.txt"), "code\n");
+        git(folder, "add", "-A");
+        git(folder, "commit", "-q", "-m", "A task and code");
+        writeFileSync(join(folder, "code.txt"), "more code\n");
+        git(folder, "commit", "-q", "-am", "Code only");
+        writeFileSync(join(folder, ".claude/project.yaml"), `${readFileSync(join(folder, ".claude/project.yaml"), "utf8")}repos: [{ name: app, path: . }]   # the repos\n`);
+        script(folder, "backlog.mjs", "add", "two");
+        return folder;
+    };
+
+    const fresh = project("fresh");
+    const made = script(fresh, "init.mjs", "--language", "en", "--private", "project", "--name", "Fresh");
+    assert.match(made, /\+ project\/ \(git init\)/);
+    assert.match(made, /\+ project\/PLAN\.md/);
+    assert.equal(git(join(fresh, "project"), "symbolic-ref", "HEAD"), "refs/heads/main");
+    assert.match(readFileSync(join(fresh, ".gitignore"), "utf8"), /^# The project's private docs, a git repo of their own\n\/project\/\n$/);
+    assert.match(readFileSync(join(fresh, ".claude/project.yaml"), "utf8"), /^docs: project$/m);
+
+    const here = kept("here");
+    const dry = script(here, "init.mjs", "private");
+    assert.match(dry, /- project: a git repo of its own, the docs' history with it \(2 commits of the project touch them\)/);
+    assert.match(dry, /Nothing changed yet/);
+    assert.equal(existsSync(join(here, "project/.git")), false);
+    assert.match(script(here, "init.mjs", "private", "--write"), /the docs' repo has 2 commits/);
+    const docs = join(here, "project");
+    assert.deepEqual(git(docs, "log", "--format=%an %s").split("\n"), ["Ann A task and code", "Ann The docs"]);
+    assert.deepEqual(git(docs, "ls-tree", "--name-only", "HEAD").split("\n"), ["DECISIONS.md", "PLAN.md", "README.md", "TASKS.md", "archive"]);
+    // What the project had not committed yet is a change of the docs' repo, the docs out of the project's index, their files where they were.
+    assert.match(git(docs, "status", "--short"), /M TASKS\.md/);
+    assert.equal(git(here, "ls-files", "--", "project"), "");
+    assert.match(readFileSync(join(docs, "TASKS.md"), "utf8"), / · two/);
+    assert.match(readFileSync(join(here, ".gitignore"), "utf8"), /^\/project\/$/m);
+    assert.match(readFileSync(join(here, ".claude/project.yaml"), "utf8"), /^repos: \[\{ name: app, path: \. \}, \{ name: docs, path: project \}\]   # the repos$/m);
+    assert.equal(git(here, "for-each-ref", "refs/project-plugin"), "");
+    assert.match(script(here, "init.mjs", "private"), /already in a git repo of their own: project/);
+
+    const moved = kept("moved");
+    const out = script(moved, "init.mjs", "private", "--in", "private", "--write");
+    assert.match(out, /- project → private\/project/);
+    assert.match(out, /Still naming the docs' old folder, outside them: README\.md\./);
+    assert.equal(existsSync(join(moved, "project")), false);
+    assert.deepEqual(git(join(moved, "private"), "ls-tree", "-r", "--name-only", "HEAD").split("\n"), ["project/DECISIONS.md", "project/PLAN.md", "project/README.md", "project/TASKS.md", "project/archive/TASKS-archive.md"]);
+    const config = readFileSync(join(moved, ".claude/project.yaml"), "utf8");
+    assert.match(config, /^docs: private\/project$/m);
+    assert.match(config, /^cites: \[private\/project, \.claude\]$/m);
+    assert.match(config, /\{ name: docs, path: private \}\]   # the repos$/m);
+    assert.match(readFileSync(join(moved, ".gitignore"), "utf8"), /^\/private\/$/m);
+    const findings = JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: moved, encoding: "utf8", env: { ...env, CLAUDE_PROJECT_DIR: moved } }).stdout);
+    assert.deepEqual(findings.filter((finding) => finding.severity !== "note"), []);
+    assert.match(script(moved, "backlog.mjs", "show", "T-2"), / · two/);
+
+    // A folder that is already a repo, or one inside the docs, takes no docs; nothing changes.
+    const blocked = kept("blocked");
+    git(blocked, "init", "-q", "private");
+    const refuse = (...args) => spawnSync(process.execPath, [join(scripts, "init.mjs"), "private", ...args, "--write"], { cwd: blocked, encoding: "utf8", env: { ...env, CLAUDE_PROJECT_DIR: blocked } });
+    assert.match(refuse("--in", "private").stderr, /private is already a git repo/);
+    assert.match(refuse("--in", "project/inner").stderr, /cannot go to project\/inner\/project/);
+    assert.equal(existsSync(join(blocked, "project/.git")), false);
+    assert.notEqual(git(blocked, "ls-files", "--", "project"), "");
+
+    for (const folder of [fresh, here, moved, blocked]) {
+        rmSync(folder, { recursive: true, force: true });
+    }
+});
+
 test("adopt finds a project's own docs and language, writes the configuration that reads them, and moves the plan's steps into the backlog", () => {
     const old = mkdtempSync(join(tmpdir(), "claude-project-adopt-"));
     const env = { ...environment(), CLAUDE_PROJECT_DIR: old };
