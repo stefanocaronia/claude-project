@@ -285,7 +285,7 @@ test("a task in progress: a colleague at work shows instead of ▶, the chat tha
     expect(await again.find({ key: "next-task" })).toBeUndefined();
     // The button stays in its place, gray, with why it cannot be pressed: no button at all, which a click or the focus would reach.
     expect(await again.find({ key: "next-task-idle" })).toBeDefined();
-    expect(await again.find({ type: "Text", text: "▶ Prossimo compito" })).toBeDefined();
+    expect((await again.findAll({ type: "Svg" })).some((one) => (one.props as { alt?: string }).alt === "▶ Prossimo compito")).toBe(true);
     expect(await again.find({ type: "Button", key: "next-task-idle" })).toBeUndefined();
     expect(await again.find({ key: "start-61" })).toBeUndefined();
     expect(await again.find({ type: "Text", text: "Questa chat lavora a T-143: un altro compito si avvia in una nuova sessione del progetto." })).toBeDefined();
@@ -590,9 +590,10 @@ test("while this chat's turn runs, the buttons that write to it wait, low and gr
         expect(await ui.find({ key: `${key}-idle` })).toBeDefined();
     }
 
-    // One line high: a gray ground, no border, which would draw it three lines high.
-    expect((await ui.find({ key: "tidy-docs-idle" }))?.props).toMatchObject({ backgroundColor: expect.any(String) });
+    // As high and as round as the desktop's buttons: a drawing, no border, which would draw it three lines high.
     expect((await ui.find({ key: "tidy-docs-idle" }))?.props.borderStyle).toBeUndefined();
+    const pill = (await ui.findAll({ type: "Svg" })).find((one) => (one.props as { alt?: string }).alt === "✦ Riordina i documenti");
+    expect(pill?.props).toMatchObject({ height: 28, source: expect.stringContaining(`rx="4"`) });
     expect(await ui.find({ type: "Text", text: "Claude sta lavorando in questa chat: torna alla fine del turno" })).toBeDefined();
     expect(await ui.find({ type: "Button", key: "start-61" })).toBeUndefined();
     expect(await ui.find({ key: "idle-61" })).toBeDefined();

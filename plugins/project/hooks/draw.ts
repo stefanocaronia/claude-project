@@ -106,6 +106,17 @@ export function effortSvg(level: string): string | undefined
     return svg(16, 12, [0, 1, 2, 3].map((index) => `<rect x="${index * 4}" y="1" width="3" height="10" rx="1" fill="#8a8a86" fill-opacity="${index < filled ? 1 : 0.3}"/>`).join(""), false);
 }
 
+/** A button that cannot be pressed now, in the shape the desktop draws its buttons, 28 px high with corners of 4, on a gray ground,
+ * its label gray in the middle at the panel's 15 px; as wide as the label comes to with 12 px on either side, so a wrong guess moves
+ * only the margins. */
+export function idleButtonSvg(label: string): { source: string; width: number; height: number }
+{
+    const height = 28;
+    const width = Math.ceil(labelWidth(label) * 15) + 24;
+    const body = `<rect width="${width}" height="${height}" rx="4" fill="${stateLayer}"/><text x="${width / 2}" y="${height / 2}" dominant-baseline="central" text-anchor="middle" font-family="${font}" font-size="15" fill="${idleColor}">${xml(label)}</text>`;
+    return { source: svg(width, height, body, false), width, height };
+}
+
 /** A wide bar's square middle, filled or the track, stretched to the room it is given: its rounded ends are `barEndSvg`. */
 export function wideBarSvg(color: string | undefined, isFilled: boolean): string
 {
@@ -124,6 +135,15 @@ export function barEndSvg(side: "start" | "end", color: string | undefined, isFi
 function svg(width: number, height: number, body: string, isThemed = true): string
 {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${isThemed ? theme : ""}${body}</svg>`;
+}
+
+// Roughly how wide a label is in the system's sans-serif, in em: a mark that only picks a glyph's look takes none, narrow letters, wide
+// ones, capitals, figures and the rest of the letters; a symbol or an emoji about a square.
+const widths: [RegExp, number][] = [[/[​-‏︀-️]/, 0], [/[ ilIj'.,:;!|]/, 0.27], [/[frt]/, 0.36], [/[mwMW]/, 0.86], [/[A-Z]/, 0.64], [/[0-9]/, 0.55]];
+
+function labelWidth(label: string): number
+{
+    return [...label].reduce((sum, character) => sum + (widths.find(([pattern]) => pattern.test(character))?.[1] ?? ((character.codePointAt(0) ?? 0) > 0x2000 ? 1 : 0.55)), 0);
 }
 
 function xml(text: string): string

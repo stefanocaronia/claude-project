@@ -5,7 +5,7 @@ import type { Elements, EngineInterface, RenderInput } from "claude-code";
 import { linksIn } from "../lib/text.mjs";
 import type { Board, Snapshot, Task, View } from "../types";
 
-import { cardTint, claudeSvg, faceSvg, idleColor, markOf, outline, prioritySvg, stateLayer, tooltipBackground, tooltipText } from "./draw.ts";
+import { cardTint, claudeSvg, faceSvg, idleButtonSvg, idleColor, markOf, outline, prioritySvg, stateLayer, tooltipBackground, tooltipText } from "./draw.ts";
 import { startingFor } from "./start.ts";
 import { changeView, say } from "./state.ts";
 
@@ -111,13 +111,14 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
         return hint ? tip(key, hint, drawn) : drawn;
     };
     // A button that cannot be pressed now keeps its place, dim, but no Button at all: no pointer, no focus, no press; its reason, when it
-    // has one, under the pointer. On the desktop one line high, as its buttons are, on a gray ground (a border would draw it three lines
-    // high); `[ label ]` on the terminal; a plain one its label alone.
+    // has one, under the pointer. On the desktop a drawing of its buttons, as high and as round, on a gray ground (a Box with a border
+    // would be three lines high, one without has square corners); `[ label ]` on the terminal; a plain one its label alone.
     const idleButton = (key: string, label: string, reason?: string, isPlain = false) => {
+        const pill = Svg && !isPlain ? idleButtonSvg(label) : null;
         const drawn = isPlain
             ? <Box key={key} flexShrink={0}><Text color={idleColor}>{label}</Text></Box>
-            : isDesktop
-                ? <Box key={key} flexShrink={0} paddingX={1} backgroundColor={stateLayer}><Text color={idleColor}>{label}</Text></Box>
+            : Svg && pill
+                ? <Box key={key} flexShrink={0}><Svg source={pill.source} alt={label} width={pill.width} height={pill.height} /></Box>
                 : <Box key={key} flexShrink={0}><Text color={idleColor}>{`[ ${label} ]`}</Text></Box>;
         return reason ? tip(key, reason, drawn) : drawn;
     };
