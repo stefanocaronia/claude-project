@@ -92,8 +92,8 @@ words: {}                    # any heading or marker, overridden: { states: { po
 plugins/project/
     lib/            the formats, pure: the backlog's lines, the plan, the decisions, the specs, the todos, the releases, the issues, the words, the configuration
     scripts/        the commands: backlog, plan, decisions, specs, release, check, issues, github, init, adopt, snapshot (the panel's data)
-    page/           the page's server, its data, the cleanup, the page
-    hooks/          the panel (a Claude Code mod) and the hook that serves the page
+    page/           the page's server, its data, the cleanup, the page (index.html, its scripts in app/)
+    hooks/          the panel (a Claude Code mod, register.tsx and its parts) and the hook that serves the page
     skills/         project, init, tidy, github
 ```
 
