@@ -109,12 +109,13 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
     const more = (list: string, count: number, label: "showAllTasks" | "showAllDecisions") => (count > (rows[list] ?? 3) && !view.whole[list]
         ? <Button key={`more-${list}`} plain dimColor label={words(label, { count })} onPress={() => change((old) => ({ ...old, whole: { ...old.whole, [list]: !old.whole[list] } }))} />
         : null);
-    // A hint under the pointer, above the control so that the card does not cut it; the terminal draws none.
-    const tip = (key: string, hint: string, control: JSX.Element) => (isDesktop
+    // A hint under the pointer, above the control so that the card does not cut it, from its right edge or, for a control at the start
+    // of its row, from its left; the terminal draws none.
+    const tip = (key: string, hint: string, control: JSX.Element, from: "left" | "right" = "right") => (isDesktop
         ? (
             <Box key={`tip-${key}`} flexShrink={0}>
                 {control}
-                <Box position="absolute" bottom={1} right={0} display="none" hover={{ display: "flex" }} backgroundColor={tooltipBackground} borderStyle="round" borderColor={outline} paddingX={1}>
+                <Box position="absolute" bottom={1} {...(from === "left" ? { left: 0 } : { right: 0 })} display="none" hover={{ display: "flex" }} backgroundColor={tooltipBackground} borderStyle="round" borderColor={outline} paddingX={1}>
                     <Text color={tooltipText}>{hint}</Text>
                 </Box>
             </Box>
@@ -182,7 +183,8 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
     const chatButton = (key: string, label: string, onPress: () => unknown, look: { variant?: "primary"; plain?: true; dimColor?: boolean } = {}) => (isWorking
         ? idleButton(`${key}-idle`, label, words("busyTurn"), Boolean(look.plain))
         : <Button key={key} label={label} onPress={() => void onPress()} {...look} />);
-    // Who holds a task: Claude's critter, a colleague's portrait or initials, the owner's GitHub picture, a person's initials in gray.
+    // Who holds a task: Claude's critter, a colleague's portrait or initials, the owner's GitHub picture, a person's initials in gray;
+    // the name under the pointer.
     const face = (name: string, size: number) => {
         const member = byName.get(name) ?? (owner && name === owner.name ? { id: name, name, fullName: owner.fullName, role: "", color: "gray", portrait: owner.portrait } : undefined);
 
@@ -191,7 +193,8 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
         }
 
         const source = name === "Claude" ? claudeSvg(size) : faceSvg(member ?? { id: name, name, fullName: name, role: "", color: "gray" }, member?.portrait, size);
-        return <Svg key={`face-${name}`} source={source} alt={member?.fullName ?? name} width={size} height={size} />;
+        const fullName = member?.fullName ?? name;
+        return tip(`face-${name}`, fullName, <Svg key={`face-${name}`} source={source} alt={fullName} width={size} height={size} />, "left");
     };
     // A priority's mark, drawn on the desktop, its glyph on the terminal.
     const priorityIcon = (priority: string) => {

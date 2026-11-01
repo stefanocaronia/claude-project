@@ -148,8 +148,8 @@ test("a task opens in place; Done and Postpone and the priority go through the b
         const ui = await $.ui.mount({ plugin, surface, component: "Pane", requestId: "project", props });
         await ui.press({ key: "open-61" });
         // Opened: chips for its goal and the day it was born, a chip on the desktop, in brackets on the terminal; who holds it, its
-        // priority and effort are only in the row.
-        expect(await ui.find({ type: "Text", text: /^\[?Matteo Conti\]?$/ })).toBeUndefined();
+        // priority and effort are only in the row, the name under the pointer on the face.
+        expect((await ui.findAll({ type: "Text", text: /^\[?Matteo Conti\]?$/ })).filter((one) => one.props.color !== "#f4f4f1")).toHaveLength(0);
         expect(await chipOf(ui, surface, "⚑ Revisione")).toBeDefined();
         expect(await chipOf(ui, surface, "nato il 2026-10-28")).toBeDefined();
         expect(await ui.find({ type: "Text", text: /impegno/ })).toBeUndefined();
