@@ -13,7 +13,7 @@ import { releaseState } from "../lib/release.mjs";
 import { gitHubRepo } from "./github.mjs";
 import { specsState } from "./specs.mjs";
 import { check } from "./check.mjs";
-import { readCode, readIssues, readLogin, readOwner } from "./code.mjs";
+import { readCode, readFreePulls, readIssues, readLogin, readOwner } from "./code.mjs";
 import { syncStateFile, syncSummary } from "./issues.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
 import { colleagues, findRoot, git, isClosed, isMain, onPath, loadProject, openStates, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
@@ -56,6 +56,9 @@ export async function snapshot(config, say, withHealth = true)
         fields: config.fields,
         // The open GitHub issues no task does yet, to take into the backlog, each marked when its title reads like an instruction.
         issues: freeIssues(issues, tasks).map(({ number, title, url }) => ({ number, title, url, instruction: readsAsInstruction(title) })),
+        // The open pull requests no task does yet, to take into the backlog or close (D-17), each marked when its title reads like an
+        // instruction: another's text is data (D-16).
+        pulls: readFreePulls(config).map(({ number, title, url, author, bot }) => ({ number, title, url, author, bot, instruction: readsAsInstruction(title) })),
         // Where the issues are in sync with the backlog: the last sync, what failed, the tasks whose issue is gone.
         issuesSync: syncSummary(config),
         // The key documents, each opened through the project's page.

@@ -12,10 +12,11 @@ export function parseLog(text)
     }).filter((commit) => /^[0-9a-f]{7,}$/.test(commit.hash));
 }
 
-/** The pull requests of `gh pr list --json number,title,body,state,url,mergedAt`, each { number, title, body, state, url, merged }. */
+/** The pull requests of `gh pr list --json number,title,body,state,url,mergedAt,author`, each { number, title, body, state, url, merged,
+ * author, bot }: the author a login, bot whether GitHub says it is one (Dependabot). */
 export function parsePulls(json)
 {
-    return jsonList(json, (pull) => ({ number: pull.number, title: pull.title ?? "", body: pull.body ?? "", state: String(pull.state ?? "").toLowerCase(), url: pull.url ?? null, merged: pull.mergedAt ? String(pull.mergedAt).slice(0, 10) : null }));
+    return jsonList(json, (pull) => ({ number: pull.number, title: pull.title ?? "", body: pull.body ?? "", state: String(pull.state ?? "").toLowerCase(), url: pull.url ?? null, merged: pull.mergedAt ? String(pull.mergedAt).slice(0, 10) : null, author: pull.author?.login ? String(pull.author.login) : null, bot: Boolean(pull.author?.is_bot) }));
 }
 
 /** The issues of `gh issue list --json number,title,state,url,closedAt[,author]`, each { number, title, state, url, closed, author }, the
@@ -92,6 +93,14 @@ export function freeIssues(issues, tasks)
 {
     const taken = new Set(tasks.map((task) => task.issue).filter(Boolean));
     return issues.filter((issue) => issue.state === "open" && !taken.has(`#${issue.number}`)).sort((first, second) => second.number - first.number);
+}
+
+/** The open pull requests no task does yet, the newest first: none cites a task as the code that does it (doneTasks), and none was taken
+ * into the backlog, `taken` the numbers its tasks' notes keep (`Origin: pull #12`). To take into the backlog or to close (D-17). */
+export function freePulls(pulls, taken = [], prefix = "T", own = [])
+{
+    const kept = new Set(taken.map(Number));
+    return pulls.filter((pull) => pull.state === "open" && !kept.has(pull.number) && doneTasks(`${pull.title}\n${pull.body}`, prefix, own).length === 0).sort((first, second) => second.number - first.number);
 }
 
 /** The web page of a repo from its remote, GitHub's or any host that writes `host:owner/name` or `https://host/owner/name`; null for none. */

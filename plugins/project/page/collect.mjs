@@ -13,7 +13,7 @@ import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
 import { readsAsInstruction } from "../lib/issues.mjs";
 import { decisionLinks } from "../lib/links.mjs";
 import { check } from "../scripts/check.mjs";
-import { readCode, readIssues, readLogin, readOwner } from "../scripts/code.mjs";
+import { readCode, readFreePulls, readIssues, readLogin, readOwner } from "../scripts/code.mjs";
 import { syncSummary } from "../scripts/issues.mjs";
 import { specsState } from "../scripts/specs.mjs";
 import { context, extensionChecks } from "../scripts/extensions.mjs";
@@ -65,6 +65,7 @@ export async function collect(config, say, extensions = [])
         releases: readReleasesData(config),
         specs: readSpecsData(config),
         issues: freeIssues(readIssues(config), readBacklog(config).tasks).map(({ number, title, url }) => ({ number, title, url, instruction: readsAsInstruction(title) })),
+        pulls: readFreePulls(config).map(({ number, title, url, author, bot }) => ({ number, title, url, author, bot, instruction: readsAsInstruction(title) })),
         issuesSync: syncSummary(config),
         boardDays,
         holds: readHolds(config),

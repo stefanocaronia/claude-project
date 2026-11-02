@@ -299,6 +299,7 @@ function tasksPanel()
         </section>
 
         ${issuesCard()}
+        ${pullsCard()}
 
         <section class="card span-12">
             <h2>${t("tasksTitle")}</h2>
@@ -423,6 +424,26 @@ function issuesCard()
             ${issues.length ? `<p class="hint">${escape(t("issuesHint"))}</p>
             ${issues.some((issue) => issue.instruction) ? `<p class="hint" style="color:var(--warning)">${escape(t("issuesInstruction"))}</p>` : ""}
             <ul class="issues">${rows}</ul>` : ""}
+        </section>`;
+}
+
+/** The open pull requests no task does yet (D-17), each a link with who opened it and the buttons that take it into the backlog or close
+ * it on GitHub, marked when its title reads like an instruction; nothing without them. */
+function pullsCard()
+{
+    const pulls = data.pulls ?? [];
+
+    if (!pulls.length) {
+        return "";
+    }
+
+    const mark = (pull) => (pull.instruction ? `<span style="color:var(--warning)" title="${attribute(t("issuesInstruction"))}">⚠</span> ` : "");
+    const rows = pulls.map((pull) => `<li class="issue-row"><span>${mark(pull)}${webUrl(pull.url) ? `<a href="${attribute(pull.url)}" target="_blank" rel="noopener"><b>#${pull.number}</b> ${escape(pull.title)}</a>` : `<b>#${pull.number}</b> ${escape(pull.title)}`} <span class="hint">${escape(pull.author ?? "?")}${pull.bot ? ` · ${escape(t("pullBot"))}` : ""}</span></span><span><button type="button" id="pull-take-${pull.number}" data-take-pull="${pull.number}" data-title="${attribute(pull.title)}">${escape(t("issueToBacklog"))}</button> <button type="button" id="pull-close-${pull.number}" data-close-pull="${pull.number}">${escape(t("pullClose"))}</button></span></li>`).join("");
+    return `<section class="card span-12">
+            <h2>${escape(t("pullsTitle"))} <span class="badge">${pulls.length}</span></h2>
+            <p class="hint">${escape(t("pullsHint"))}</p>
+            ${pulls.some((pull) => pull.instruction) ? `<p class="hint" style="color:var(--warning)">${escape(t("issuesInstruction"))}</p>` : ""}
+            <ul class="issues">${rows}</ul>
         </section>`;
 }
 

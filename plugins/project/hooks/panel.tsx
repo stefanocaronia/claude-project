@@ -6,7 +6,7 @@ import type { EngineInterface, RenderInput } from "claude-code";
 import { decisionColor, errorColor, priorities, quietColor, scales, workColor, workMark } from "./draw.ts";
 import { goalSection } from "./goals.tsx";
 import { panelOf } from "./kit.tsx";
-import { askChoice, decisionSection, issueSection, linkSections, proposalsOf, releaseSection, specSection } from "./sections.tsx";
+import { askChoice, decisionSection, issueSection, linkSections, proposalsOf, pullSection, releaseSection, specSection } from "./sections.tsx";
 import { startTask, submit } from "./start.ts";
 import { readBoard, readView, say } from "./state.ts";
 import { taskLists } from "./tasks.tsx";
@@ -86,6 +86,7 @@ export async function drawPanel($: EngineInterface, e: RenderInput<"Pane">)
             {taskSection("rest", "☰", words("sectionRest"), rest, words("noneRest"))}
             {postponed.length > 0 ? taskSection("postponed", "⏸", snapshot.words.states.postponed ?? "", postponed, "") : null}
             {issueSection($, p)}
+            {pullSection($, p)}
             {goalSection(p, start)}
             {decisionSection($, p, proposals)}
             {specSection(p)}

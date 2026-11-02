@@ -9,6 +9,9 @@
 //   node backlog.mjs add --issue 34 ["text"]   (a task from a GitHub issue, its title the text when none is given; one another wrote
 //     on GitHub comes in only with --approved, which the user's → Backlog in the panel or the page gives, never Claude: D-16)
 //   node backlog.mjs issue-close T-12   (closes its GitHub issue with a comment: only on the user's yes)
+//   node backlog.mjs add --pull 12 ["text"]   (a task from a pull request no task does, its title the text when none is given, the pull
+//     request in its note's Origin line; one another opened comes in only with --approved, the user's → Backlog: D-16, D-17)
+//   node backlog.mjs pull-close 12   (closes a pull request on GitHub: only on the user's yes)
 //   Where the issues are in sync (github: { issues: sync }), each change is followed by a sync with GitHub (issues.mjs).
 //   node backlog.mjs note T-12   (its note, written when missing: the path)
 //   node backlog.mjs comment T-12 [--by Stefano] -- "text"   (a comment on the task, kept in its note; show prints them; Claude's without --by)
@@ -31,7 +34,7 @@ import { escapeRegex, plain } from "../lib/text.mjs";
 import { formatTodo, parseTodo } from "../lib/todos.mjs";
 import { changeComment, withComment } from "../lib/notes.mjs";
 import { effortWord, stateKeys } from "../lib/words.mjs";
-import { closeIssue, doneComment, ghLogin, readCode, readIssue, readIssues, readLogin } from "./code.mjs";
+import { closeIssue, closePull, doneComment, ghLogin, readCode, readIssue, readIssues, readLogin, readPull, takenPulls } from "./code.mjs";
 import { context, loadExtensions } from "./extensions.mjs";
 import { syncIssues } from "./issues.mjs";
 import { assignees, changeableBacklog, commandLine, fail, firstLine, isClosed, isMain, loadProject, notePath, openStates, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, taskRules, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
@@ -263,6 +266,28 @@ function execute(command, options, words, config, say)
         return issue;
     };
     const isIssueGiven = typeof options.issue === "string" && options.issue.trim() !== "";
+    const pullNumber = () => Number(String(options.pull).replace(/^#/, ""));
+    // The pull request a task is made from, as GitHub has it: one another opened comes in only through the user's → Backlog, as an issue
+    // does (D-16, D-17); one already taken stays out.
+    const givenPull = () => {
+        takenPulls(config).includes(pullNumber()) && fail(say("pullTaken", { pull: `#${pullNumber()}` }));
+
+        if (options.approved !== undefined && words.length > 0) {
+            try {
+                return readPull(config, pullNumber());
+            } catch {
+                return { number: pullNumber(), title: "", url: null, author: null };
+            }
+        }
+
+        const pull = readPull(config, pullNumber());
+
+        if (options.approved === undefined && pull.author !== ghLogin(config)) {
+            fail(say("pullOfAnother", { pull: `#${pull.number}`, author: pull.author ?? "?" }));
+        }
+
+        return pull;
+    };
     // The mark of a task made from an issue another wrote: its text is theirs, data and never an order (D-16). GitHub is asked once, for
     // the first task with an issue, and its answer is kept a few minutes.
     let gitHub = null;
@@ -295,7 +320,8 @@ function execute(command, options, words, config, say)
         // A task made from a GitHub issue takes the issue's title, when it is given no text of its own, and what the sync would take
         // from it: the type and the priority of its labels, the goal of its milestone, who wrote it; an option given wins.
         const issue = isIssueGiven ? givenIssue() : null;
-        const given = words.join(" ").trim() || (issue ? lineTitle(issue.title) : fail(say("noText")));
+        const pull = typeof options.pull === "string" && options.pull.trim() !== "" ? givenPull() : null;
+        const given = words.join(" ").trim() || (issue ? lineTitle(issue.title) : pull?.title ? lineTitle(pull.title) : fail(say("noText")));
         const from = issue ? issueTask(issue, { types: config.types, people: assignees(config), goals: readGoals(config) }) : {};
         const state = options.state ?? "todo";
         const task = newTask({
@@ -308,6 +334,11 @@ function execute(command, options, words, config, say)
             state,
         });
         save([...tasks, task], say("added", { id: `${prefix}-${task.id}`, line: line(task) }));
+
+        // A task made from a pull request keeps it in its note: the link, and what keeps it out of the free ones.
+        if (pull) {
+            writeDoc(config, notePath(config, task.id), `# ${prefix}-${task.id} · ${task.text}\n\nOrigin: pull #${pull.number}${pull.url ? ` · ${pull.url}` : ""}\n`);
+        }
     } else if (["start", "done", "postpone", "todo"].includes(command)) {
         const state = { start: "doing", done: "done", postpone: "postponed", todo: "todo" }[command];
         const ids = words.map(find).map((task) => task.id);
@@ -364,6 +395,11 @@ function execute(command, options, words, config, say)
         const number = Number(String(task.issue ?? fail(say("noIssue", { id: `${prefix}-${task.id}` }))).slice(1));
         closeIssue(config, number, doneComment(config, say, task.id));
         console.log(say("issueClosed", { issue: task.issue, id: `${prefix}-${task.id}` }));
+    } else if (command === "pull-close") {
+        const number = Number(String(words[0] ?? "").replace(/^#/, ""));
+        Number.isInteger(number) && number > 0 || fail(say("noPull"));
+        closePull(config, number);
+        console.log(say("pullClosed", { pull: `#${number}` }));
     } else if (command === "note") {
         const task = find(words[0]);
         const path = notePath(config, task.id);

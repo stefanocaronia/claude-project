@@ -14,9 +14,9 @@ import { changeView, say } from "./state.ts";
 // a label too wide for its room ends in an ellipsis, so the button is given no width of its own. A blank of the desktop's button is
 // about 3.6 px and it keeps 24 around its label: its ground, under the pointer, then covers the drawing.
 const blanks = (width: number) => " ".repeat(Math.max(1, Math.floor((width - 24) / 3.8)));
-const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, goals: true, decisions: true, specs: true, releases: true };
+const openAtStart: Record<string, boolean> = { links: true, documents: true, doing: true, rest: true, postponed: false, issues: true, pulls: true, goals: true, decisions: true, specs: true, releases: true };
 // How many rows a list shows before "show all".
-const rows: Record<string, number> = { doing: 5, rest: 10, postponed: 5, issues: 5, goals: 5, open: 3 };
+const rows: Record<string, number> = { doing: 5, rest: 10, postponed: 5, issues: 5, pulls: 5, goals: 5, open: 3 };
 /** A picker's choice of none. */
 export const noChoice = { value: "", label: "—" };
 

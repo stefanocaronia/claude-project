@@ -2,9 +2,9 @@
 // issues. What gh says is asked at most every few minutes, the answer kept in the system's temporary folder; without gh, or offline,
 // there are no pull requests and no issues.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { citationsOf, parseIssues, parseLog, parsePulls, repoUrl } from "../lib/code.mjs";
+import { citationsOf, freePulls, parseIssues, parseLog, parsePulls, repoUrl } from "../lib/code.mjs";
 import { parseSyncIssues } from "../lib/issues.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { fail, git, projectRepos, tempFolder } from "./project.mjs";
@@ -12,6 +12,8 @@ import { fail, git, projectRepos, tempFolder } from "./project.mjs";
 // How many commits of each repo are read, the newest; how long a reading of gh holds.
 const commitLimit = 3000;
 const ghFor = 5 * 60_000;
+// What gh is asked of the pull requests: the code that cites a task, and the open ones that cite none.
+const pullArgs = ["pr", "list", "--state", "all", "--limit", "200", "--json", "number,title,body,state,url,mergedAt,author"];
 
 /** By task number, the commits and the pull requests that cite it. */
 export function readCode(config)
@@ -21,7 +23,41 @@ export function readCode(config)
         url: repoUrl(git(repo.path, ["remote", "get-url", "origin"])),
         commits: parseLog(git(repo.path, ["log", `-${commitLimit}`, "--format=%H%x1f%ad%x1f%s%x1f%b%x1e", "--date=short"])),
     }));
-    return citationsOf(repos, parsePulls(ghCached(config, "pulls", ["pr", "list", "--state", "all", "--limit", "200", "--json", "number,title,body,state,url,mergedAt"])), config.prefixes.task, [basename(config.root)]);
+    return citationsOf(repos, readPulls(config), config.prefixes.task, [basename(config.root)]);
+}
+
+/** The project's pull requests, open and closed, as parsePulls reads them; none without gh. */
+export function readPulls(config)
+{
+    return parsePulls(ghCached(config, "pulls", pullArgs));
+}
+
+/** The open pull requests no task does yet, to take into the backlog or close (D-17): newest first. */
+export function readFreePulls(config)
+{
+    return freePulls(readPulls(config), takenPulls(config), config.prefixes.task, [basename(config.root)]);
+}
+
+/** The numbers of the pull requests taken into the backlog, from the Origin line of their tasks' notes. */
+export function takenPulls(config)
+{
+    const folder = config.files.notes;
+    const names = folder && existsSync(folder) ? readdirSync(folder).filter((name) => name.endsWith(".md")) : [];
+    return names.map((name) => readFileSync(join(folder, name), "utf8").match(/^Origin: pull #(\d+)/m)?.[1]).filter(Boolean).map(Number);
+}
+
+/** One pull request as GitHub has it now: { number, title, url, author }; a message that says why when gh cannot read it. */
+export function readPull(config, number)
+{
+    const pull = JSON.parse(gh(config, ["pr", "view", String(number), "--json", "number,title,url,author,state"]));
+    return { number: pull.number, title: String(pull.title ?? ""), url: pull.url ?? null, author: pull.author?.login ?? null };
+}
+
+/** Closes a pull request on GitHub, and forgets the last reading of the pull requests. */
+export function closePull(config, number)
+{
+    gh(config, ["pr", "close", String(number)]);
+    forgetGh(config, "pulls");
 }
 
 // What gh is asked of the user it is signed in as.

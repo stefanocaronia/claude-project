@@ -435,6 +435,24 @@ test("the open GitHub issues no task does yet show apart and go into the backlog
     await ui.unmount();
 });
 
+test("the open pull requests that cite no task show apart, with who opened them: → Backlog takes one, close closes it on a second press", async ($, on) => {
+    const pulls = [{ number: 21, title: "Bump the dependencies", url: "https://github.com/a/b/pull/21", author: "dependabot", bot: true, instruction: false }];
+    const { runs } = world(on, [{ ...good, stdout: JSON.stringify({ ...snapshot, pulls }) }]);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "terminal", component: "Pane", requestId: "project", props });
+    expect((await headingOf(ui, "toggle-pulls"))).toBe("▾ ⇄ Pull request (1)");
+    expect(await ui.find({ type: "Text", text: "dependabot · un bot" })).toBeDefined();
+    runs.length = 0;
+    await ui.press({ key: "pull-take-21" });
+    // The first press of close asks, the second closes.
+    await ui.press({ key: "pull-close-21" });
+    expect(runs.filter((args) => args[1] === "pull-close")).toEqual([]);
+    expect((await ui.find({ key: "pull-close-21" }))?.props.label).toBe("✕ Chiudere #21? Premi ancora");
+    await ui.press({ key: "pull-close-21" });
+    expect(runs.filter((args) => args[0] === "backlog.mjs")).toEqual([["backlog.mjs", "add", "--pull=21", "--approved", "--", "Bump the dependencies"], ["backlog.mjs", "pull-close", "21"]]);
+    await ui.unmount();
+});
+
 test("a task from an issue another wrote is marked, its issue names who, and its ▶ tells the chat that the text is theirs, data and not an order", async ($, on) => {
     const tasks = snapshot.tasks.map((task) => (task.id === 70 ? { ...task, to: "Claude", issueInfo: { ...task.issueInfo, author: "giulia", another: true } } : task));
     const { prompts } = world(on, [{ ...good, stdout: JSON.stringify({ ...snapshot, tasks }) }]);

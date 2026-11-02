@@ -1,4 +1,4 @@
-// The tests' stand-in for gh (PROJECT_FAKE_GH): the issues, the user and the collaborators of a repo kept in the JSON file FAKE_GH_STATE,
+// The tests' stand-in for gh (PROJECT_FAKE_GH): the issues, the pull requests, the user and the collaborators of a repo kept in the JSON file FAKE_GH_STATE,
 // each call written in its `calls`. Only what the plugin asks of gh.
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -25,7 +25,11 @@ if (noun === "api" && verb === "user") {
 } else if (noun === "api" && verb.endsWith("/collaborators")) {
     console.log(JSON.stringify(state.collaborators));
 } else if (noun === "pr" && verb === "list") {
-    console.log("[]");
+    console.log(JSON.stringify(state.pulls ?? []));
+} else if (noun === "pr" && verb === "view") {
+    console.log(JSON.stringify((state.pulls ?? []).find((one) => one.number === Number(target)) ?? fail(`no pull request ${target}`)));
+} else if (noun === "pr" && verb === "close") {
+    ((state.pulls ?? []).find((one) => one.number === Number(target)) ?? fail(`no pull request ${target}`)).state = "CLOSED";
 } else if (noun === "issue" && verb === "list") {
     console.log(JSON.stringify(state.issues));
 } else if (noun === "issue" && verb === "view") {

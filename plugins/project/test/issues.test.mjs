@@ -291,6 +291,32 @@ test("the check, the panel and the page tell a task whose issue is gone, and a s
     assert.match(issues("sync").stdout, /github: \{ issues: sync \} in \.claude\/project\.yaml turns it on/);
 });
 
+test("the open pull requests that cite no task show apart; Claude's take of another's is refused, the user's → Backlog takes it, once; close closes it", () => {
+    edit((state) => {
+        state.pulls = [
+            { number: 21, title: "Bump the dependencies", body: "", state: "OPEN", url: "https://github.com/a/b/pull/21", mergedAt: null, author: { login: "dependabot", is_bot: true } },
+            { number: 22, title: "Fix the dice (T-1)", body: "", state: "OPEN", url: "https://github.com/a/b/pull/22", mergedAt: null, author: { login: "giulia", is_bot: false } },
+            { number: 23, title: "Mine, citing nothing", body: "", state: "OPEN", url: "https://github.com/a/b/pull/23", mergedAt: null, author: { login: "scaronia", is_bot: false } },
+            { number: 20, title: "Old", body: "", state: "MERGED", url: null, mergedAt: "2026-10-01T00:00:00Z", author: { login: "giulia", is_bot: false } },
+        ];
+    });
+    // The last reading of gh is kept a few minutes: forgotten, as a new one would be after them.
+    writeFileSync(join(tmpdir(), "claude-project", `pulls-${root.replace(/[^\w-]/g, "_")}.json`), "");
+    const free = () => JSON.parse(script("snapshot.mjs", "--no-health").stdout).pulls.map((one) => [one.number, one.author, one.bot]);
+    // One that cites a task does it already, one merged is no longer open.
+    assert.deepEqual(free(), [[23, "scaronia", false], [21, "dependabot", true]]);
+    assert.match(backlog("add", "--pull", "21").stderr, /^Pull request #21 was opened by dependabot on GitHub, not by the user of gh: .* Nothing was changed\./);
+    const taken = backlog("add", "--pull=21", "--approved", "--", "Bump the dependencies").stdout;
+    const id = taken.match(/^(T-\d+) added/m)[1];
+    assert.match(readFileSync(join(root, `docs/tasks/${id}.md`), "utf8"), /^Origin: pull #21 · https:\/\/github\.com\/a\/b\/pull\/21$/m);
+    assert.deepEqual(free(), [[23, "scaronia", false]]);
+    assert.match(backlog("add", "--pull=21", "--approved", "--", "Again").stderr, /Pull request #21 is in the backlog already/);
+    // The user's own comes in with its title; close closes it on GitHub, on the user's yes.
+    assert.match(backlog("add", "--pull", "23").stdout, / · Mine, citing nothing/);
+    assert.match(backlog("pull-close", "22").stdout, /Pull request #22 closed on GitHub/);
+    assert.equal(gh().pulls.find((one) => one.number === 22).state, "CLOSED");
+});
+
 function env()
 {
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, PROJECT_NO_GH, ...rest } = process.env;

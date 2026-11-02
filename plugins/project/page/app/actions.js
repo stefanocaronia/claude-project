@@ -68,6 +68,12 @@ function setupActions()
             // The backlog's tidying runs from the cleanup, in the Health tab, where its proposals show.
             selectTab(document.getElementById("tab-health"));
             tidyAction("backlog", { cost: null });
+        } else if (target.dataset.takePull) {
+            changeTask({ command: "pull", pull: target.dataset.takePull, title: target.dataset.title }, t("pullTaken", target.dataset.takePull));
+        } else if (target.dataset.closePull) {
+            if (confirm(t("pullCloseConfirm", target.dataset.closePull))) {
+                changeTask({ command: "pull-close", pull: target.dataset.closePull }, t("pullClosed", target.dataset.closePull));
+            }
         } else if (target.dataset.takeIssue) {
             changeTask({ command: "issue", issue: target.dataset.takeIssue, title: target.dataset.title }, t("issueTaken", target.dataset.takeIssue));
         } else if (target.dataset.takeTitle) {

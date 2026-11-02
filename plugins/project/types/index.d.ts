@@ -105,6 +105,7 @@ export type Snapshot = {
     /** The open GitHub issues no task does yet, to take into the backlog, `instruction` when the title reads like one (D-16); none
      * without gh. */
     issues?: { number: number; title: string; url: string | null; instruction?: boolean }[];
+    pulls?: { number: number; title: string; url: string | null; author: string | null; bot: boolean; instruction?: boolean }[];
     /** Where the issues are in sync with the backlog (D-13): the last sync, this machine's time, null before the first; its error; the open
      * tasks whose issue GitHub no longer lists; the titles others gave their issues, waiting for the user's yes (D-16). Null where they
      * are not in sync. */

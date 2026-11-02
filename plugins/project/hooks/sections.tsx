@@ -1,4 +1,4 @@
-// The panel's sections besides the tasks and the goals: the extensions' links and the key documents, the GitHub issues, the points to
+// The panel's sections besides the tasks and the goals: the extensions' links and the key documents, the GitHub issues and pull requests, the points to
 // decide, the specifications and the versions.
 import type { EngineInterface } from "claude-code";
 
@@ -12,6 +12,8 @@ import { submit } from "./start.ts";
 
 // How much of a point to decide its card shows; the page has the rest.
 const proposalLength = 400;
+// How long «Close» waits for its second press.
+const closeAskFor = 4000;
 
 /** The extensions' links, a page to open or an action to post, and the key documents, each opened through the project's page: chips
  * drawn small with round corners. */
@@ -90,6 +92,50 @@ export function issueSection($: EngineInterface, p: Panel)
             </Box>,
         ])),
         more("issues", issues.length, "showAllTasks"),
+    ]);
+}
+
+/** The open pull requests no task does yet (D-17), each a link with who opened it, a bot or another: taken into the backlog with a press,
+ * the user's yes to another's too (--approved, which Claude never gives), or closed on GitHub on a second press. None without them. */
+export function pullSection($: EngineInterface, p: Panel)
+{
+    const { Box, Text, Button, Link, view, snapshot, words, section, card, limited, more, change } = p;
+    const pulls = snapshot.pulls ?? [];
+
+    if (pulls.length === 0) {
+        return null;
+    }
+
+    const asking = (number: number) => `close-pull-${number}`;
+    const askClose = (number: number) => {
+        void change((old) => ({ ...old, editing: asking(number) }));
+        $.clock.after(closeAskFor, () => void change((old) => (old.editing === asking(number) ? { ...old, editing: null } : old)));
+    };
+    const close = (number: number) => {
+        void change((old) => ({ ...old, editing: null }));
+        void backlog($, ["pull-close", String(number)]);
+    };
+    return section("pulls", "⇄", `${words("sectionPulls")} (${pulls.length})`, [
+        <Text key="pulls-hint" dimColor>{words("pullsHint")}</Text>,
+        pulls.some((pull) => pull.instruction) ? <Text key="pulls-instruction" color={warningColor}>{words("issuesInstruction")}</Text> : null,
+        ...limited("pulls", pulls).map((pull) => card(`pull-${pull.number}`, [
+            <Box key={`pull-row-${pull.number}`} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
+                {pull.instruction ? <Text key={`pull-instruction-${pull.number}`} color={warningColor}>⚠</Text> : null}
+                <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
+                    {pull.url ? <Link href={pull.url}>{`#${pull.number} ${pull.title}`}</Link> : <Text wrap="truncate-end">{`#${pull.number} ${pull.title}`}</Text>}
+                </Box>
+            </Box>,
+            <Box key={`pull-actions-${pull.number}`} flexDirection="row" flexWrap="wrap" justifyContent="space-between" alignItems="center" columnGap={2}>
+                <Text dimColor>{`${pull.author ?? "?"}${pull.bot ? ` · ${words("pullBot")}` : ""}`}</Text>
+                <Box flexDirection="row" columnGap={2}>
+                    <Button key={`pull-take-${pull.number}`} plain dimColor label={words("issueToBacklog")} onPress={() => backlog($, ["add", `--pull=${pull.number}`, "--approved", "--", lineTitle(pull.title)])} />
+                    {view.editing === asking(pull.number)
+                        ? <Button key={`pull-close-${pull.number}`} plain label={words("pullCloseSure", { number: pull.number })} onPress={() => close(pull.number)} />
+                        : <Button key={`pull-close-${pull.number}`} plain dimColor label={words("pullClose")} onPress={() => askClose(pull.number)} />}
+                </Box>
+            </Box>,
+        ])),
+        more("pulls", pulls.length, "showAllTasks"),
     ]);
 }
 
