@@ -9,7 +9,7 @@ function boardPanel()
 {
     const tasks = boardTasks();
     const lanes = boardLanes(tasks);
-    const head = boardStates.map((state) => {
+    const head = boardColumns.map((state) => {
         const count = tasks.filter((task) => columnOf(task) === state).length;
         const note = state === "done" ? `<span class="days">${escape(t("lastDays", data.boardDays))}</span>` : "";
         return `<div class="column-name"><i class="column-mark ${state}"></i>${escape(stateName(state))}<span class="badge">${count}</span>${note}</div>`;
@@ -56,7 +56,7 @@ function laneBlock(lane)
     const working = lane.own.some((task) => task.state === "doing");
     const open = lanesOpen[lane.name] ?? lane.own.some((task) => columnOf(task) !== "done");
     const [, name, note] = /^(.*?)(?:\s*\((.*)\))?$/.exec(lane.title);
-    const cells = boardStates.map((state) => laneCell(lane, state)).join("");
+    const cells = boardColumns.map((state) => laneCell(lane, state)).join("");
 
     return `<details class="lane" data-lane="${attribute(lane.name)}" ${open ? "open" : ""}>
             <summary>
@@ -92,7 +92,7 @@ function taskCard(task, lane, isUnder = false)
     const foot = worker !== null
         ? `<span class="work" data-tip="${attribute(escape(t("atWork")))}">⚒︎ ${escape(worker)}</span>`
         : column === "done" ? `<span>✓ ${escape(formatDay(task.done ?? task.archived))}${task.release ? ` · v${escape(task.release)}` : ""}</span>` : waitOrAge(task);
-    const moves = boardStates.filter((state) => state !== column)
+    const moves = boardColumns.filter((state) => state !== column)
         .map((state) => `<button type="button" id="move-${name}-${state}" data-move="${state}" data-task="${task.id}" aria-label="${attribute(t("moveTo", name, stateName(state)))}">${escape(stateName(state))}</button>`).join("");
 
     return `<li class="task ${column} ${isUnder ? "part" : ""} ${expanded.has(`board-${name}`) ? "open" : ""} ${landed === task.id ? "landed" : ""}" draggable="true" data-task="${task.id}" data-lane="${attribute(lane)}" data-column="${column}">

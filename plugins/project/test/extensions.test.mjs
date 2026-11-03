@@ -41,7 +41,7 @@ test("a project's own field reads from the end of a line, is set by its key, kee
     assert.match(run("backlog.mjs", "set", "T-2", "--area", "").stdout, /· the log, again \(system: ironsworn\)$/m);
     assert.match(run("backlog.mjs", "show", "T-1").stdout, /System: 5e/);
     assert.deepEqual(JSON.parse(run("backlog.mjs", "list", "--json").stdout).map((task) => task.fields), [{ system: "5e" }, { system: "ironsworn" }]);
-    assert.match(run("backlog.mjs", "add", "the map", "--system", "5e").stdout, /· the map \(by: Claude\) \(system: 5e\)$/m);
+    assert.match(run("backlog.mjs", "add", "the map", "--type", "feature", "--system", "5e").stdout, /· the map \(type: feature\) \(by: Claude\) \(system: 5e\)$/m);
 });
 
 test("the backlog goes out as JSON, CSV or an extension's format, and comes in from them as new tasks, all or none", () => {

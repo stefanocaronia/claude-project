@@ -2,8 +2,9 @@
 // words, the panel's order; then the tasks' tab: the list with its filters, the GitHub issues, the open tasks by owner, age and urgency,
 // and the colleagues.
 
-// The board's columns, in order; the turn of a priority and its rank, as the panel's; the priorities of the chart by owner.
+// The states in the list's order, and the board's columns in theirs; the turn of a priority and its rank, as the panel's; the priorities of the chart by owner.
 const boardStates = ["doing", "todo", "postponed", "done"];
+const boardColumns = ["todo", "doing", "done", "postponed"];
 const nextPriority = { P1: "P2", P2: "P3", P3: "P1" };
 const priorityRank = { P1: 1, P2: 2, P3: 3 };
 const priorityOrder = ["P1", "P2", "P3", "none"];

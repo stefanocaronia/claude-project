@@ -17,7 +17,7 @@ A task: `- T-12 · P2 · <effort> · <who> · 2026-10-29 · <goal> · text`, und
 
 | Command | Does |
 |---|---|
-| `add "text" --goal "<goal>" [--p P1\|P2\|P3] [--effort <word>] [--to <name>] [--state todo\|doing\|postponed\|done] [--type bug] [--in T-23] [--by <name>]` | a new task, numbered, dated today (a part, `--in`, takes its large task's goal unless one is given), with who created it: `(by: Claude)` unless `--by` names the person or colleague who asked for it |
+| `add "text" --goal "<goal>" [--p P1\|P2\|P3] [--effort <word>] [--to <name>] [--state todo\|doing\|postponed\|done] [--type bug] [--in T-23] [--by <name>]` | a new task, numbered, dated today (a part, `--in`, takes its large task's goal unless one is given), always with its `--type`, which the command asks for, with who created it: `(by: Claude)` unless `--by` names the person or colleague who asked for it |
 | `start`, `done`, `postpone`, `todo` `T-12 [T-13…]` | moves tasks to that state; done carries today's date |
 | `set T-12 [--p …] [--effort …] [--to …] [--goal …] [--text …] [--after "T-3, #giulia-1"] [--see "T-9, D-2"] [--in T-23] [--issue 34] [--due 2026-11-15] [--type bug]` | changes a task; `--after ""` clears; a wait that closes a cycle, or a number that does not exist, is refused |
 | `add --issue 34 ["text"]`, `issue-close T-12` | a task from a GitHub issue the user wrote (another's comes in only through the user's → Backlog); the issue closed on GitHub, only on the user's yes |

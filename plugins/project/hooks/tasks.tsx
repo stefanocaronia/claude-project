@@ -211,7 +211,8 @@ export function taskLists($: EngineInterface, p: Panel)
     // A new task, written in the list to do in a card of its own, as a task is: its text first, the whole width, then its priority, its
     // type and the large task it is a part of, the cancel at the end of their row. Its creator is the person the panel is for, as the
     // page's owner. A large task takes parts one level deep: the open tasks that are no part themselves.
-    const draft = { priority: "P2", type: "", parent: "", ...view.draft };
+    // A new task has a type: a feature unless the user picks another.
+    const draft = { priority: "P2", type: snapshot.types?.feature ? "feature" : Object.keys(snapshot.types ?? {})[0] ?? "", parent: "", ...view.draft };
     const closeNew = () => {
         newText = "";
         void change((old) => ({ ...old, editing: null, draft: undefined }));
@@ -233,7 +234,7 @@ export function taskLists($: EngineInterface, p: Panel)
                 <Box key="new-task-fields" flexDirection="row" flexWrap="nowrap" justifyContent="space-between" alignItems="center" columnGap={2} marginTop={1}>
                     <Box flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={1} flexShrink={1} minWidth={0}>
                         <Select key="new-priority" label={words("fieldPriority")} value={draft.priority} options={(["P1", "P2", "P3"] as const).map((key) => ({ value: key, label: `${key} · ${snapshot.words.priorities[key] ?? key}` }))} onSelect={pick("priority")} />
-                        <Select key="new-type" label={words("fieldType")} value={draft.type} options={[noChoice, ...Object.entries(snapshot.types ?? {}).map(([key, name]) => ({ value: key, label: name }))]} onSelect={pick("type")} />
+                        <Select key="new-type" label={words("fieldType")} value={draft.type} options={Object.entries(snapshot.types ?? {}).map(([key, name]) => ({ value: key, label: name }))} onSelect={pick("type")} />
                         <Select key="new-parent" label={words("fieldParent")} value={draft.parent} options={[noChoice, ...snapshot.tasks.filter((task) => !task.parent).sort(byOrder).map((task) => ({ value: idOf(task), label: `${idOf(task)} · ${task.text.length > 40 ? `${task.text.slice(0, 40)}…` : task.text}` }))]} onSelect={pick("parent")} />
                     </Box>
                     {iconButton("new-task-cancel", words("cancelEdit"), closeNew, true)}

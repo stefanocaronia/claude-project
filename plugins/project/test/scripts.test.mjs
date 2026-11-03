@@ -30,14 +30,14 @@ after(() => rmSync(root, { recursive: true, force: true }));
 
 test("add, start, done, set and archive change the backlog; show and list read it", () => {
     assert.match(run("backlog.mjs", "next"), /^T-2$/m);
-    assert.match(run("backlog.mjs", "add", "il registro", "--goal", "Nucleo", "--to", "Stefano", "--effort", "basso", "--p", "P3"), /T-2 aggiunto: - T-2 · P3 · low · Stefano · \d{4}-\d{2}-\d{2} · Nucleo · il registro/);
+    assert.match(run("backlog.mjs", "add", "il registro", "--type", "feature", "--goal", "Nucleo", "--to", "Stefano", "--effort", "basso", "--p", "P3"), /T-2 aggiunto: - T-2 · P3 · low · Stefano · \d{4}-\d{2}-\d{2} · Nucleo · il registro/);
     assert.match(run("backlog.mjs", "start", "T-1"), /T-1: In corso/);
     assert.match(run("backlog.mjs", "done", "t-2"), /T-2: Fatti/);
     assert.match(run("backlog.mjs", "set", "T-1", "--text", "i dadi e i tiri"), /· i dadi e i tiri · started \d{4}-\d{2}-\d{2}$/m);
 
     const tasks = splitFrontmatter(readFileSync(join(root, "docs/TASKS.md"), "utf8")).body;
     assert.match(tasks, /^# Backlog\n\nI compiti\.\n\n## In progress\n\n- T-1 · P1 · high · Matteo · 2026-10-01 · Nucleo · i dadi e i tiri · started \d{4}-\d{2}-\d{2}\n/);
-    assert.match(tasks, /## Done\n\n- T-2 · .* · il registro \(by: Claude\) · done \d{4}-\d{2}-\d{2}\n/);
+    assert.match(tasks, /## Done\n\n- T-2 · .* · il registro \(type: feature\) \(by: Claude\) · done \d{4}-\d{2}-\d{2}\n/);
 
     const listed = JSON.parse(run("backlog.mjs", "list", "--json"));
     assert.deepEqual(listed.map((task) => [task.id, task.state]), [[1, "doing"]]);
@@ -51,8 +51,8 @@ test("add, start, done, set and archive change the backlog; show and list read i
 
 test("a wrong value or an unknown task fails with a message that says how to fix it, and writes nothing", () => {
     const before = readFileSync(join(root, "docs/TASKS.md"), "utf8");
-    assert.match(fails("backlog.mjs", "add", "x", "--to", "Nessuno"), /Nessuno non può avere un compito: Claude, Stefano, Matteo/);
-    assert.match(fails("backlog.mjs", "add", "x", "--goal", "Altrove"), /Il traguardo «Altrove» non è nel piano: Nucleo/);
+    assert.match(fails("backlog.mjs", "add", "x", "--type", "feature", "--to", "Nessuno"), /Nessuno non può avere un compito: Claude, Stefano, Matteo/);
+    assert.match(fails("backlog.mjs", "add", "x", "--type", "feature", "--goal", "Altrove"), /Il traguardo «Altrove» non è nel piano: Nucleo/);
     assert.match(fails("backlog.mjs", "done", "T-50"), /T-50 non c'è nel backlog né nell'archivio/);
     assert.match(fails("backlog.mjs", "list", "--state", "later"), /Lo stato è uno fra/);
     assert.match(fails("backlog.mjs", "fly"), /Comandi: next, add/);
@@ -148,7 +148,7 @@ test("init sets a project up in its language, never overwrites, and a fresh proj
     assert.match(readFileSync(join(fresh, "private/project/TASKS.md"), "utf8"), /## In progress\n\n## To do\n\n## Postponed\n\n## Done\n$/);
 
     // No colleagues: the people of the configuration hold the tasks.
-    const add = execFileSync(process.execPath, [join(scripts, "backlog.mjs"), "add", "il primo", "--goal", "Primo traguardo", "--to", "Ann"], { cwd: fresh, encoding: "utf8", env });
+    const add = execFileSync(process.execPath, [join(scripts, "backlog.mjs"), "add", "il primo", "--type", "feature", "--goal", "Primo traguardo", "--to", "Ann"], { cwd: fresh, encoding: "utf8", env });
     assert.match(add, /T-1 aggiunto: - T-1 · P2 · medium · Ann/);
     const findings = JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: fresh, encoding: "utf8", env }).stdout);
     assert.deepEqual(findings.filter((finding) => finding.severity !== "note"), []);
@@ -181,14 +181,14 @@ test("the docs made private: --private project makes a new project's docs' folde
         writeFileSync(join(folder, "README.md"), "See project/PLAN.md, not plugins/project/x.\n");
         git(folder, "add", "-A");
         git(folder, "commit", "-q", "-m", "The docs");
-        script(folder, "backlog.mjs", "add", "one");
+        script(folder, "backlog.mjs", "add", "one", "--type", "feature");
         writeFileSync(join(folder, "code.txt"), "code\n");
         git(folder, "add", "-A");
         git(folder, "commit", "-q", "-m", "A task and code");
         writeFileSync(join(folder, "code.txt"), "more code\n");
         git(folder, "commit", "-q", "-am", "Code only");
         writeFileSync(join(folder, ".claude/project.yaml"), `${readFileSync(join(folder, ".claude/project.yaml"), "utf8")}repos: [{ name: app, path: . }]   # the repos\n`);
-        script(folder, "backlog.mjs", "add", "two");
+        script(folder, "backlog.mjs", "add", "two", "--type", "feature");
         return folder;
     };
 

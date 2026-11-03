@@ -94,7 +94,7 @@ test("set --after and --see write the links, show reads them both ways with the 
     assert.match(run("set", "T-1", "--after", "T-2, #giulia-1", "--see", "D-1"), /· the dice \(after: T-2, #giulia-1\) \(see: D-1\)$/);
     assert.match(run("set", "T-3", "--see", "T-1"), /· the log \(see: T-1\)$/);
     assert.match(run("set", "T-1", "--text", "the dice, fair"), /· the dice, fair \(after: T-2, #giulia-1\) \(see: D-1\)$/);
-    assert.match(run("add", "the table (after: T-1)", "--goal", "Core"), /T-4 added: .* · the table \(after: T-1\) \(by: Claude\)$/);
+    assert.match(run("add", "the table (after: T-1)", "--goal", "Core", "--type", "feature"), /T-4 added: .* · the table \(after: T-1\) \(type: feature\) \(by: Claude\)$/);
 
     const shown = run("show", "T-1");
     assert.match(shown, /waits for: T-2 \(To do\), #giulia-1 \(open in a todo\)/);
@@ -234,7 +234,7 @@ test("a goal closes once its tasks are closed, refuses new tasks while closed, o
     assert.match(plan("close", "Later").stdout, /«Later» closed on \d{4}-\d{2}-\d{2}\./);
     assert.match(read("docs/PLAN.md"), /^### Later · done \d{4}-\d{2}-\d{2}$/m);
     assert.match(plan("goals").stdout, /Core: 4 open, 0 done\nLater: closed on \d{4}-\d{2}-\d{2}, 0 done/);
-    assert.match(fails("add", "more", "--goal", "Later"), /The goal «Later» closed on .*plan\.mjs open "Later"/);
+    assert.match(fails("add", "more", "--goal", "Later", "--type", "feature"), /The goal «Later» closed on .*plan\.mjs open "Later"/);
 
     writeFileSync(join(root, "docs/TASKS.md"), read("docs/TASKS.md").replace("· Core · the log", "· Later · the log"));
     const findings = JSON.parse(spawnSync(process.execPath, [join(scripts, "check.mjs"), "--json"], { cwd: root, encoding: "utf8", env: environment() }).stdout);
@@ -305,7 +305,7 @@ test("with Crew, the todo lines that cite no task are listed; take makes one a t
     assert.match(read("docs/TASKS.md"), /· the dice \(after: T-2\)\n/);
 
     // Kept: the line stays open, citing the task.
-    assert.match(run("take", "giulia-ferri:6", "--to", "Giulia", "--keep"), /^T-3 added from giulia-ferri:6, created by Giulia: .* · Giulia · 2026-10-30 · .* · read the rules \(after: T-2\) \(by: Giulia\)$/);
+    assert.match(run("take", "giulia-ferri:6", "--to", "Giulia", "--type", "test", "--keep"), /^T-3 added from giulia-ferri:6, created by Giulia: .* · Giulia · 2026-10-30 · .* · read the rules \(after: T-2\) \(type: test\) \(by: Giulia\)$/);
     assert.match(read(".claude/agent-memory/giulia-ferri/todo.md"), /\r\n- \[ \] P3 · 2026-10-30 · T-3 · read the rules \(after: T-2\)\r\n/);
     assert.match(run("todos"), /^0 open lines/);
 });

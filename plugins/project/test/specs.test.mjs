@@ -68,8 +68,8 @@ test("adopt makes a project's spec the core's SPECS.md: numbered, links and conf
 
     // A task cites a spec; one that is not there is refused; show says what the task must satisfy.
     assert.equal(run("backlog.mjs", "add", "The log", "--see", "S-2", "--type", "feature", "--state", "done").status, 0);
-    assert.equal(run("backlog.mjs", "add", "The search", "--see", "S-1").status, 0);
-    assert.match(run("backlog.mjs", "add", "Nothing", "--see", "S-9").stderr, /S-9/);
+    assert.equal(run("backlog.mjs", "add", "The search", "--type", "feature", "--see", "S-1").status, 0);
+    assert.match(run("backlog.mjs", "add", "Nothing", "--type", "feature", "--see", "S-9").stderr, /S-9/);
     assert.match(run("backlog.mjs", "show", "T-2").stdout, /Does S-1: A campaign is a folder of markdown files\./);
     assert.match(run("specs.mjs", "add", "Campaigns export to a zip", "--section", "Functions").stdout, /S-4 added/);
     assert.match(readFileSync(join(root, "docs/SPECS.md"), "utf8"), /- S-3 · Any notation\.\n- S-4 · Campaigns export to a zip\n/);

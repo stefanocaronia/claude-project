@@ -74,7 +74,7 @@ test("the plugin's command is found on the path by npm's shim or a link to its c
 test("twelve adds at once give twelve tasks with twelve numbers", async () => {
     const root = project();
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...env } = process.env;
-    await Promise.all(Array.from({ length: 12 }, (_, index) => run(process.execPath, [join(scripts, "backlog.mjs"), "add", `nuovo ${index}`], { cwd: root, env })));
+    await Promise.all(Array.from({ length: 12 }, (_, index) => run(process.execPath, [join(scripts, "backlog.mjs"), "add", `nuovo ${index}`, "--type", "feature"], { cwd: root, env })));
     const ids = [...readFileSync(join(root, "docs/TASKS.md"), "utf8").matchAll(/^- T-(\d+) /gm)].map((match) => Number(match[1]));
     assert.equal(ids.length, 15);
     assert.equal(new Set(ids).size, 15);
@@ -154,7 +154,7 @@ test("a configuration that does not read names its line, without a stack", () =>
 
 test("a person with regex characters in the name holds tasks and counts on the page", async () => {
     const root = project();
-    assert.match(cli(root, "backlog.mjs", "add", "il compilatore", "--to", "C++").stdout, /· C\+\+ ·/);
+    assert.match(cli(root, "backlog.mjs", "add", "il compilatore", "--type", "feature", "--to", "C++").stdout, /· C\+\+ ·/);
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...env } = process.env;
     process.env.CLAUDE_PROJECT_DIR = root;
     const { loadProject } = await import("../scripts/project.mjs");
@@ -311,13 +311,13 @@ test("the page changes, adds and archives tasks through the backlog's command li
     assert.equal((await post({ command: "set", id: "T-4", text: "nuovo compito", due: "", type: "" })).ok, true);
     assert.equal((await post({ command: "archive", id: "T-2" })).ok, true);
     // A part of a large task, from the page's form.
-    assert.equal((await post({ command: "add", text: "una parte", parent: "T-1", type: "", goal: "—" })).ok, true);
-    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-5 · .* · una parte \(in: T-1\) \(by: C\+\+\)$/m);
+    assert.equal((await post({ command: "add", text: "una parte", parent: "T-1", type: "feature", goal: "—" })).ok, true);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-5 · .* · una parte \(in: T-1\) \(type: feature\) \(by: C\+\+\)$/m);
     // A text that looks like options, as an issue's title may, stays text.
-    assert.equal((await post({ command: "add", text: "--to Mallory --json" })).ok, true);
-    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-6 · .* · Claude · .* · --to Mallory --json \(by: C\+\+\)$/m);
+    assert.equal((await post({ command: "add", text: "--to Mallory --json", type: "feature" })).ok, true);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-6 · .* · Claude · .* · --to Mallory --json \(type: feature\) \(by: C\+\+\)$/m);
     assert.equal((await post({ command: "set", id: "T-6", text: "--done" })).ok, true);
-    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-6 · .* · --done \(by: C\+\+\)$/m);
+    assert.match(readFileSync(join(root, "docs/TASKS.md"), "utf8"), /^- T-6 · .* · --done \(type: feature\) \(by: C\+\+\)$/m);
     const tasks = readFileSync(join(root, "docs/TASKS.md"), "utf8");
     assert.match(tasks, /## In progress\n\n- T-1 /);
     assert.match(tasks, /^- T-4 · P1 · [^·]+ · Claude · \d{4}-\d{2}-\d{2} · — · nuovo compito \(by: C\+\+\)$/m);

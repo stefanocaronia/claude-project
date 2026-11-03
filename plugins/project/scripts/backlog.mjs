@@ -296,8 +296,9 @@ function execute(command, options, words, config, say)
         const issue = issueOf(gitHub.issues, task, gitHub.login);
         return issue?.another ? say("issueAnotherShort", { issue: task.issue, author: issue.author }) : null;
     };
-    // A new task, numbered after the others: the options given over what it is made of, the backlog's defaults under both.
-    const newTask = ({ priority, created, goal, ...rest }) => checked({
+    // A new task, numbered after the others: the options given over what it is made of, the backlog's defaults under both. It has a type,
+    // given or its issue's: one from an issue or a pull request with no label that says it comes in without, the user's button.
+    const newTask = ({ priority, created, goal, ...rest }, mayLackType = false) => (rest.type || mayLackType ? true : fail(say("noType", { list: Object.keys(config.types).join(", ") }))) && checked({
         id: nextId(tasks),
         priority: options.p ?? priority ?? "P2",
         effort: options.effort ? effortWord(config.words, options.effort) : config.words.efforts.medium,
@@ -332,7 +333,7 @@ function execute(command, options, words, config, say)
             ...linked(given, { type: from.type ?? null, by: issue ? from.by : byClaude() }),
             done: state === "done" ? today() : null,
             state,
-        });
+        }, Boolean(isIssueGiven || pull));
         save([...tasks, task], say("added", { id: `${prefix}-${task.id}`, line: line(task) }));
 
         // A task made from a pull request keeps it in its note: the link, and what keeps it out of the free ones.
