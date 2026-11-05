@@ -81,7 +81,9 @@ function world(on: On, answers: Answer[] = [good], whileReading?: () => void): {
             whileReading?.();
         }
 
-        const answer = args[0] === "snapshot.mjs" ? answers[Math.min(reads++, answers.length - 1)] ?? good : { exitCode: 0, stdout: "", stderr: "" };
+        // The commits just made do T-61, still open.
+        const said = args[0] === "backlog.mjs" && args[1] === "committed" ? "Questo commit fa T-61, ancora aperti." : "";
+        const answer = args[0] === "snapshot.mjs" ? answers[Math.min(reads++, answers.length - 1)] ?? good : { exitCode: 0, stdout: said, stderr: "" };
         return { value: { ...answer, isStdoutTruncated: false, isStderrTruncated: false } } as never;
     });
     on("prompt.submit", (_, e) => {
@@ -361,6 +363,14 @@ test("▶ on Claude's own task moves it to in progress before asking, and a chan
     stamp.mtimeMs = 2;
     await $.tool.call({ tool: "Bash", command: "node scripts/backlog.mjs start T-61" } as never);
     expect(reads()).toBe(before + 1);
+});
+
+test("a commit of this chat that does a task still open is followed by a reminder to close it; another command is not", async ($, on) => {
+    world(on);
+    on("tool.call", () => ({ result: "ran" }) as never);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    expect((await $.tool.call({ tool: "Bash", command: "git commit -q -F msg.txt" } as never)).context).toEqual(["Questo commit fa T-61, ancora aperti."]);
+    expect((await $.tool.call({ tool: "Bash", command: "git status" } as never)).context).toBeUndefined();
 });
 
 test("a grep, a cat or a Read of the backlog is refused with the command to use; a decision is read to be edited, not searched", async ($, on) => {

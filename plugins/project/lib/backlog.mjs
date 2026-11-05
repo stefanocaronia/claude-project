@@ -1,7 +1,7 @@
 // The backlog's lines: `- T-12 · P2 · medium · Matteo · 2026-10-29 · <goal> · text · started 2026-10-29 · done 2026-10-30`, one task a
 // line under the heading of its state. Pure: the text in, the text out, in the project's words.
 import { badLinks, joinLinks, splitLinks } from "./links.mjs";
-import { escapeRegex } from "./text.mjs";
+import { escapeRegex, plain } from "./text.mjs";
 import { effortWord, priorityKeys, readablePattern, stateKeys, stateOfHeading } from "./words.mjs";
 
 const separator = " · ";
@@ -126,6 +126,19 @@ export function citedTasks(text, prefix = "T", own = [])
     const owns = new Set(own.filter(Boolean).map((name) => name.toLowerCase()));
     const pattern = new RegExp(`(?:\\b(\\w+(?:[-./][A-Za-z]\\w*)+)(?:['’]s\\s+|#))?\\b${escapeRegex(prefix)}-(\\d+)\\b`, "g");
     return [...new Set([...String(text).matchAll(pattern)].filter((match) => !match[1] || owns.has(match[1].toLowerCase())).map((match) => Number(match[2])))];
+}
+
+/** Of others, the tasks whose text is like a task's: two words that say something, of four letters or more, shared at least, and most of
+ * the shorter text's. A double, or work the same change may do: what the tidy would find later, found at the start and the end of a task. */
+export function similarTasks(task, others)
+{
+    const words = (text) => new Set(plain(text).replace(/\([^)]*\)/g, " ").split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 4));
+    const mine = words(task.text);
+    return others.filter((other) => {
+        const theirs = words(other.text);
+        const shared = [...mine].filter((word) => theirs.has(word)).length;
+        return shared >= 2 && shared / Math.min(mine.size, theirs.size) >= 0.6;
+    });
 }
 
 /** The next free number: past every task of the backlog and the archive. */

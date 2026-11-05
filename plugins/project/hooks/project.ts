@@ -74,6 +74,14 @@ export async function backlog($: EngineInterface, args: string[], script: "backl
     await refresh($, true);
 }
 
+/** What backlog.mjs committed says of the commits just made: the tasks they do, still open; empty when none. */
+export async function committedOpen($: EngineInterface): Promise<string>
+{
+    const root = await projectRoot($);
+    const { exitCode, stdout } = await $.process.run(["node", `${$.plugin.root}/scripts/backlog.mjs`, "committed"], { cwd: root, env: { CLAUDE_PROJECT_DIR: root }, timeoutMs: 30_000 });
+    return exitCode === 0 ? stdout.trim() : "";
+}
+
 /** An extension's action in the panel, a start for instance: a POST to its path on the project's page, then the project read again. */
 export async function postLink($: EngineInterface, url: string): Promise<void>
 {

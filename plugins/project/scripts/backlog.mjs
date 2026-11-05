@@ -23,11 +23,12 @@
 //   node backlog.mjs todos [--to <colleague>] [--json]   (with Crew: the colleagues' open todo lines that cite no task, each as <id>:<line>)
 //   node backlog.mjs take matteo-conti:8 [--to <name>] [--text "…"] [--p P1] [--type bug] [--goal "…"] [--keep]   (a todo line that is
 //     work for the project made a task, created by the colleague; the line then cites it, ticked as handed over, or open with --keep)
+//   node backlog.mjs committed   (the tasks still open that the commits of the last minutes do: the panel runs it after a commit)
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { parseCsv, toCsv } from "../lib/csv.mjs";
-import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
-import { codeView, issueOf } from "../lib/code.mjs";
+import { formatLine, moveTasks, nextId, similarTasks, taskErrors } from "../lib/backlog.mjs";
+import { codeView, doneTasks, issueOf } from "../lib/code.mjs";
 import { issueTask, lineTitle } from "../lib/issues.mjs";
 import { listOf, nestedParts, splitLinks, todoLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
@@ -37,7 +38,7 @@ import { effortWord, stateKeys } from "../lib/words.mjs";
 import { closeIssue, closePull, doneComment, ghLogin, readCode, readIssue, readIssues, readLogin, readPull, takenPulls } from "./code.mjs";
 import { context, loadExtensions } from "./extensions.mjs";
 import { syncIssues } from "./issues.mjs";
-import { assignees, changeableBacklog, commandLine, fail, firstLine, isClosed, isMain, loadProject, notePath, openStates, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, taskRules, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
+import { assignees, changeableBacklog, commandLine, fail, firstLine, git, isClosed, isMain, loadProject, notePath, openStates, projectRepos, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, taskRules, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
 const changes = ["add", "start", "done", "postpone", "todo", "archive", "delete", "set", "import", "take"];
@@ -363,6 +364,31 @@ function execute(command, options, words, config, say)
                 console.log(say("partsAllDone", { id: parent }));
             }
         }
+
+        // At the start and at the end of a task, what the tidy would otherwise find later. A task like it still open: a double, or work the
+        // same change does. At the start, its waits still open and the commits that already cite it, the work perhaps done; at the end,
+        // the tasks it frees. A task it waits for, waits for it, holds or belongs to is no double.
+        const open = moved.filter((task) => openStates.includes(task.state));
+        const isOpen = (id) => open.some((task) => `${prefix}-${task.id}` === id);
+        const cited = state === "doing" ? readCode(config, { pulls: false }) : new Map();
+
+        for (const task of ids.map((id) => moved.find((one) => one.id === id))) {
+            const id = `${prefix}-${task.id}`;
+            const tied = (other) => other.id === task.id || other.parent === id || task.parent === `${prefix}-${other.id}` || other.after.includes(id) || task.after.includes(`${prefix}-${other.id}`);
+            const alike = similarTasks(task, open.filter((other) => !tied(other))).map((other) => `${prefix}-${other.id}`).join(", ");
+
+            if (state === "doing") {
+                const waits = task.after.filter(isOpen);
+                const commits = cited.get(task.id)?.commits ?? [];
+                waits.length > 0 && console.log(say("startWaits", { id, list: waits.join(", ") }));
+                commits.length > 0 && console.log(say("startCited", { id, count: commits.length }));
+                alike && console.log(say("startSimilar", { id, list: alike }));
+            } else if (state === "done") {
+                const freed = open.filter((other) => other.after.includes(id) && !other.after.some(isOpen)).map((other) => `${prefix}-${other.id}`);
+                freed.length > 0 && console.log(say("doneFreed", { id, list: freed.join(", ") }));
+                alike && console.log(say("doneSimilar", { id, list: alike }));
+            }
+        }
     } else if (command === "archive") {
         const chosen = options.done === true ? tasks.filter((task) => task.state === "done") : words.map(find);
         const ids = new Set(chosen.map((task) => task.id));
@@ -586,6 +612,16 @@ function execute(command, options, words, config, say)
             const count = (state) => own.filter((task) => task.state === state).length;
             console.log(say("goalLine", { goal, doing: count("doing"), todo: count("todo"), postponed: count("postponed"), done: own.filter((task) => task.done).length }));
         }
+    } else if (command === "committed") {
+        // The commits made in the last minutes, in the project's repos, that do a task still open: Claude closes it, or says what is left.
+        const since = Date.now() - 10 * 60_000;
+        const open = new Set(tasks.filter((task) => openStates.includes(task.state)).map((task) => task.id));
+        const done = projectRepos(config).flatMap((repo) => {
+            const [when, ...message] = git(repo.path, ["log", "-1", "--format=%ct%n%B"]).split("\n");
+            return Number(when) * 1000 >= since ? doneTasks(message.join("\n"), prefix, [basename(config.root)]) : [];
+        });
+        const left = [...new Set(done)].filter((id) => open.has(id)).map((id) => `${prefix}-${id}`);
+        left.length > 0 && console.log(say("committedOpen", { list: left.join(", ") }));
     } else {
         fail(say("backlogUsage"));
     }

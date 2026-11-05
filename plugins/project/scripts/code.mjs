@@ -15,15 +15,15 @@ const ghFor = 5 * 60_000;
 // What gh is asked of the pull requests: the code that cites a task, and the open ones that cite none.
 const pullArgs = ["pr", "list", "--state", "all", "--limit", "200", "--json", "number,title,body,state,url,mergedAt,author"];
 
-/** By task number, the commits and the pull requests that cite it. */
-export function readCode(config)
+/** By task number, the commits and the pull requests that cite it; the commits alone with pulls false, without asking gh. */
+export function readCode(config, { pulls = true } = {})
 {
     const repos = projectRepos(config).map((repo) => ({
         name: repo.name,
         url: repoUrl(git(repo.path, ["remote", "get-url", "origin"])),
         commits: parseLog(git(repo.path, ["log", `-${commitLimit}`, "--format=%H%x1f%ad%x1f%s%x1f%b%x1e", "--date=short"])),
     }));
-    return citationsOf(repos, readPulls(config), config.prefixes.task, [basename(config.root)]);
+    return citationsOf(repos, pulls ? readPulls(config) : [], config.prefixes.task, [basename(config.root)]);
 }
 
 /** The project's pull requests, open and closed, as parsePulls reads them; none without gh. */

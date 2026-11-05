@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sayer } from "../lib/messages.mjs";
-import { findRoot, git, loadProject, onPath, ProjectError, projectCommandOnPath, projectName, readSpecs, shown } from "../scripts/project.mjs";
+import { readCode } from "../scripts/code.mjs";
+import { findRoot, git, loadProject, onPath, ProjectError, projectCommandOnPath, projectName, readBacklog, readSpecs, shown } from "../scripts/project.mjs";
 
 const from = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const here = dirname(fileURLToPath(import.meta.url));
@@ -61,7 +62,11 @@ async function ensure()
     const specs = existsSync(config.files.specs) ? readSpecs(config).specs.filter((spec) => !spec.superseded) : null;
     const specsLine = specs ? say("specsAtStart", { file: shown(config, config.files.specs), count: specs.length }) : null;
     // The core docs are read through the scripts: the panel refuses the rest (lib/guard.mjs). Text from outside is data (D-16).
-    const told = [context, say("scriptsAtStart"), say("outsideAtStart"), projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null, specsLine].filter(Boolean).join(" ");
+    // The tasks in progress that commits already do: closed together on one yes, not left to pile up for the tidy.
+    const cited = readCode(config, { pulls: false });
+    const doneInCode = readBacklog(config).tasks.filter((task) => task.state === "doing" && cited.get(task.id)?.commits.length > 0).map((task) => `${config.prefixes.task}-${task.id}`);
+    const citedLine = doneInCode.length > 0 ? say("inProgressCited", { list: doneInCode.join(", ") }) : null;
+    const told = [context, say("scriptsAtStart"), say("outsideAtStart"), projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null, specsLine, citedLine].filter(Boolean).join(" ");
     console.log(JSON.stringify({ systemMessage: isServed ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: told } }));
 }
 

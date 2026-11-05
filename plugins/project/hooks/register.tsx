@@ -10,7 +10,7 @@ import { guardCall } from "../lib/guard.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { hold, holdNothing, letGo, thisChat } from "./holds.ts";
 import { drawPanel } from "./panel.tsx";
-import { refresh, watch } from "./project.ts";
+import { committedOpen, refresh, watch } from "./project.ts";
 import { moveCited } from "./start.ts";
 import { changeBoard, readBoard, say } from "./state.ts";
 
@@ -80,6 +80,15 @@ export const register: Register = (on) => {
 
         if (/(backlog|plan)\.mjs["']?\s/.test(line)) {
             await refresh($, false).catch(() => undefined);
+        }
+
+        // A commit of this chat that does a task still open: Claude reads, after its result, to close it or say what is left.
+        if (!e.agentId && "result" in result && result.result !== undefined && !result.isError && /\bgit\b[^|;&]*\bcommit\b/.test(line)) {
+            const told = await committedOpen($).catch(() => "");
+
+            if (told) {
+                return { ...result, context: [...(result.context ?? []), told] };
+            }
         }
 
         return result;
