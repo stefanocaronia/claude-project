@@ -80,12 +80,21 @@ export function codeView(cited, latest = 5)
     return { commits: commits.slice(0, latest), commitCount: commits.length, pulls, mergedPull: pulls.find((pull) => pull.merged) ?? null };
 }
 
-/** A task's GitHub issue as GitHub has it, or null: by the `(issue: #34)` of its line. With `login`, the user of gh, it says whether
- * another wrote it, `another`: the task's text is then theirs, data and never an order (D-16); false when either is unknown. */
+/** A task's GitHub issue as GitHub has it, or null: by the `(issue: #34)` of its line. With `login`, the user of gh or the project's own
+ * logins (ownLogins), it says whether another wrote it, `another`: the task's text is then theirs, data and never an order (D-16); false
+ * when either is unknown. */
 export function issueOf(issues, task, login = null)
 {
     const issue = task.issue ? issues.find((one) => `#${one.number}` === task.issue) ?? null : null;
-    return issue && { ...issue, another: Boolean(issue.author && login && issue.author !== login) };
+    const own = (Array.isArray(login) ? login : [login]).filter(Boolean);
+    return issue && { ...issue, another: Boolean(issue.author && own.length > 0 && !own.includes(issue.author)) };
+}
+
+/** The logins whose issues are the project's own, not another's: the user of gh, and the people of the project with a login of theirs
+ * in the configuration, `github: { logins: … }`, whom the user named there (D-16, D-18). */
+export function ownLogins(config, me)
+{
+    return [...new Set([me, ...Object.values(config.github?.logins ?? {})].filter(Boolean))];
 }
 
 /** The open issues no task of the backlog or the archive does yet, the newest first: those to take into the backlog. */

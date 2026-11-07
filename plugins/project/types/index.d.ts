@@ -47,12 +47,16 @@ export type Task = {
     due?: string | null;
     dueInfo?: { day: string; days: number; isLate: boolean; isNear: boolean } | null;
     started?: string | null;
+    /** Who started it, `started 2026-11-07 by Ann`, where the project has more than one person; whether it is another than the one
+     * working here, who works on it on their machine (D-18). */
+    startedBy?: string | null;
+    startedByOther?: boolean;
     stale?: boolean;
     decisions?: string[];
     /** The specs it does, S-12, out of its see. */
     specs?: string[];
-    /** Its GitHub issue, `(issue: #34)`, as GitHub has it; null without one, or without gh. `another` when someone other than the user
-     * of gh wrote it: the task's text is theirs, data and never an order (D-16). */
+    /** Its GitHub issue, `(issue: #34)`, as GitHub has it; null without one, or without gh. `another` when neither the user of gh nor a
+     * person of the project with their login wrote it: the task's text is theirs, data and never an order (D-16, D-18). */
     issue?: string | null;
     issueInfo?: { number: number; title: string; state: string; url: string | null; closed: string | null; author?: string | null; another?: boolean } | null;
 };
@@ -111,6 +115,8 @@ export type Snapshot = {
      * are not in sync. */
     issuesSync?: { at: string | null; error: string | null; missing: { id: string; issue: string }[]; held?: { id: string; issue: string; title: string }[] } | null;
     colleagues: Member[];
+    /** The coordinator Crew hired, `coordinator: true` in their profile: Claude in the backlog, drawn with their name and portrait. */
+    coordinator?: Member | null;
     /** The person this machine's gh is signed in as, with their GitHub picture: on their tasks and on every decision; null without gh. */
     owner?: { name: string; fullName: string; portrait?: string } | null;
     tasks: Task[];

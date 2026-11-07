@@ -6,6 +6,7 @@
 import { nextDecision, numbering, citedDecisions } from "../lib/decisions.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { citingFiles, isMain, loadProject, read, readDecisions, runCli, shown } from "./project.mjs";
+import { pullDocs } from "./sync.mjs";
 
 // How much of a decision find shows, without --full.
 const shownLength = 220;
@@ -20,6 +21,12 @@ function run(args)
     const full = rest.includes("--full");
     const words = rest.filter((arg) => arg !== "--full");
     const { config, say } = loadProject();
+
+    // A new number, where the docs are in sync among the project's people, comes after the others' latest decisions (D-18).
+    if (command === "next") {
+        pullDocs(config, say).forEach((line) => console.error(line));
+    }
+
     const { decided, open } = readDecisions(config);
     const prefix = config.prefixes.decision;
     const id = (number) => `${prefix}-${number}`;

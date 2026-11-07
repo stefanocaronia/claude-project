@@ -62,13 +62,14 @@ language: en            # en or it
 docs: project           # the docs' folder
 people: [Claude, Ann]   # who holds tasks
 github: { issues: sync }   # optional: GitHub issues kept in sync with the backlog
+sync: auto              # optional: private docs shared by several people, each with their own Claude
 ```
 
 Claude knows the rest: ask it to change a setting. Every key is in the [Guide](docs/guide.md#configuration).
 
 ## Learn more
 
-- [Guide](docs/guide.md): commands, files, tasks, the configuration, public code with private docs, working with Crew.
+- [Guide](docs/guide.md): commands, files, tasks, the configuration, public code with private docs, working together, Project and Crew.
 - [Contributing](CONTRIBUTING.md): trying it locally, tests, preview, releases.
 - [Changelog](CHANGELOG.md): what changed, version by version.
 

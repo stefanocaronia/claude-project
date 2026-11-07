@@ -20,7 +20,7 @@ Run `init.mjs adopt`. It writes nothing. It finds the folder that holds a plan, 
 Ask once, in the choice form, with the recommendation first, what the request leaves open:
 - the docs' language (`en`, `it`; another one starts from `en` with its words overridden under `words:`);
 - where the docs live: in the repo (`project/`, the default), or, for a public project whose plan stays private, in a **private repo of their own**, ignored by the project's: the docs' folder itself (`project/`, recommended), or a `private/` repo that holds them in `private/project/` beside other private things, such as manuals or assets. A submodule or a folder outside the repo is a path in `docs:` the user sets up;
-- who besides Claude holds tasks (`people:`). Crew's colleagues, if the project has them, count by themselves.
+- who besides Claude holds tasks (`people:`). Crew's colleagues, if the project has them, count by themselves. Where several people work on it, each with their own Claude, their GitHub logins go in `github: { logins: { Ann: ann-gh } }`, and private docs kept in sync among them take `sync: auto` (the project skill's Working together); each says who they are in `.claude/project.local.yaml`, `me: Ann`, which the start of a session writes from gh.
 
 Then run `init.mjs --language it [--private project|private] [--docs <folder>] [--people "Claude,Ann"] [--name "<project>"]`. It writes the configuration and the docs that are missing, and never overwrites one. With `--private` it makes that folder a git repo on `main` and adds it to the project's `.gitignore`. Then fill the plan with the user: the phases and the first goals.
 

@@ -69,6 +69,34 @@ export function readIssues(config)
     return parseIssues(ghCached(config, "issues", ["issue", "list", "--state", "all", "--limit", "300", "--json", "number,title,state,url,closedAt,author"]));
 }
 
+/** Who of the project's people the user of gh is: the one whose login the configuration names, `github: { logins }`, else the one named
+ * as their login or their first name on GitHub, the coordinator never; null when none is, or without gh. */
+export function personOfUser(config)
+{
+    const user = readUser(config);
+    const login = String(user?.login ?? "").toLowerCase();
+
+    if (!login) {
+        return null;
+    }
+
+    const first = String(user.name ?? "").split(/\s+/)[0].toLowerCase();
+    const named = Object.entries(config.github?.logins ?? {}).find(([, one]) => one.toLowerCase() === login)?.[0]?.toLowerCase();
+    const people = config.people.slice(1);
+    return people.find((person) => person.toLowerCase() === named) ?? (named ? null : people.find((person) => [first, login].includes(person.toLowerCase()))) ?? null;
+}
+
+/** The logins of the repo's collaborators on GitHub; none without gh, or without the right to list them. */
+export function readCollaborators(config)
+{
+    try {
+        const logins = JSON.parse(ghCached(config, "collaborators", ["api", "repos/{owner}/{repo}/collaborators", "--jq", "[.[].login]"]));
+        return Array.isArray(logins) ? logins.map(String) : [];
+    } catch {
+        return [];
+    }
+}
+
 /** The login this machine's gh is signed in as, from the reading readOwner makes; null without gh. */
 export function readLogin(config)
 {
@@ -109,8 +137,8 @@ export function doneComment(config, say, id, code = readCode(config))
 export async function readOwner(config)
 {
     const user = readUser(config);
-    const first = String(user?.name ?? "").split(/\s+/)[0].toLowerCase();
-    const name = config.people.find((person) => [first, String(user?.login ?? "").toLowerCase()].includes(person.toLowerCase()));
+    // The one working here, as their own settings say; else the person the user of gh is.
+    const name = config.me && config.people.includes(config.me) ? config.me : personOfUser(config);
 
     if (!name || !user.avatar) {
         return null;

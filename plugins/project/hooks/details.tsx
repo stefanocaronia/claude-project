@@ -32,7 +32,7 @@ export function taskDetails($: EngineInterface, p: Panel)
         const what = [
             task.goal === snapshot.words.noGoal ? null : chip(`goal-chip-${task.id}`, `⚑ ${task.goal}`),
             task.due ? chip(`due-chip-${task.id}`, due && (due.isLate || due.isNear) ? `⏰ ${dueWords(due)}` : words("dueLabel", { day: task.due }), due?.isLate ? errorColor : due?.isNear ? warningColor : undefined, null, words("dueTip", { day: task.due })) : null,
-            task.started && task.state === "doing" ? chip(`started-chip-${task.id}`, words(task.stale ? "staleTip" : "startedLabel", { day: task.started }), task.stale ? warningColor : workColor) : null,
+            task.started && task.state === "doing" ? chip(`started-chip-${task.id}`, words(task.stale ? "staleTip" : task.startedBy ? "startedByLabel" : "startedLabel", { day: task.started, who: task.startedBy }), task.stale ? warningColor : workColor) : null,
             ...Object.entries(task.fields ?? {}).map(([key, value]) => chip(`field-chip-${task.id}-${key}`, `${snapshot.fields?.[key]?.name ?? key}: ${value}`)),
             chip(`born-chip-${task.id}`, task.by ? words("bornBy", { date: task.created, name: task.by }) : words("born", { date: task.created })),
             // An issue another wrote, in the color of a warning: the task's text is theirs (D-16).

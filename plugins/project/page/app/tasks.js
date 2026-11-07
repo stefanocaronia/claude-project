@@ -155,14 +155,15 @@ function effortMeter(task)
     return `<span class="effort" role="img" aria-label="${attribute(label)}" data-tip="${attribute(escape(label))}"><svg class="icon" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true">${bars}</svg></span>`;
 }
 
-/** Who holds a task: Claude's critter, a colleague's portrait or initials on their color, a person's initials in gray. */
+/** Who holds a task: Claude's critter, or the coordinator Crew hired in its place; a colleague's portrait or initials on their color, a
+ * person's initials in gray. */
 function face(task)
 {
-    const person = task.colleague ? data.colleagues.find((one) => one.id === task.colleague) : null;
+    const person = task.colleague ? data.colleagues.find((one) => one.id === task.colleague) : task.to === "Claude" ? data.coordinator ?? null : null;
     const name = person?.name ?? task.to;
     const tip = `data-tip="${attribute(`<b>${escape(name)}</b>${person ? escape(person.role) : ""}`)}"`;
 
-    if (task.to === "Claude") {
+    if (task.to === "Claude" && !person) {
         return `<span class="face" role="img" aria-label="Claude" ${tip}>${critter}</span>`;
     }
 
@@ -223,6 +224,12 @@ function waitOrAge(task)
         return `<span class="wait ${due.isLate ? "late" : "near"}" data-tip="${attribute(escape(t("dueTip", formatDay(due.day))))}"><span aria-hidden="true">⏰ </span>${escape(when)}</span>`;
     }
 
+    // Started by another person of the project, who works on it on their machine.
+    if (task.startedByOther && task.started) {
+        const said = t("startedByTip", formatDay(task.started), task.startedBy);
+        return `<span class="wait" data-tip="${attribute(escape(said))}"><span aria-hidden="true">▸ ${escape(task.startedBy)}</span><span class="visually-hidden">${escape(said)}</span></span>`;
+    }
+
     if (task.stale && task.started) {
         const said = t("staleTip", formatDay(task.started));
         return `<span class="wait stale" data-tip="${attribute(escape(said))}"><span aria-hidden="true">⏸ ${escape(age(task.started))}</span><span class="visually-hidden">${escape(said)}</span></span>`;
@@ -238,7 +245,7 @@ function taskLinks(task, isUnder = false)
     const line = (label, list) => (list?.length ? `<span><b>${escape(label)}</b> ${escape(list.join(", "))}</span>` : "");
     const parts = [
         task.due ? `<span><b>${escape(t("linkDue"))}</b> ${escape(formatDay(task.due))}</span>` : "",
-        task.started && task.state === "doing" ? `<span><b>${escape(t("linkStarted"))}</b> ${escape(formatDay(task.started))}</span>` : "",
+        task.started && task.state === "doing" ? `<span><b>${escape(t("linkStarted"))}</b> ${escape(formatDay(task.started))}${task.startedBy ? `, ${escape(t("startedBy", task.startedBy))}` : ""}</span>` : "",
         line(t("linkDecisions"), task.decisions),
         // A part drawn under its large task does not name it again.
         line(t("linkPartOf"), task.parent && !isUnder ? [task.parent] : []),

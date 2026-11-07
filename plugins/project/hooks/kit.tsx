@@ -183,16 +183,18 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
     const chatButton = (key: string, label: string, onPress: () => unknown, look: { variant?: "primary"; plain?: true; dimColor?: boolean } = {}) => (isWorking
         ? idleButton(`${key}-idle`, label, words("busyTurn"), Boolean(look.plain))
         : <Button key={key} label={label} onPress={() => void onPress()} {...look} />);
-    // Who holds a task: Claude's critter, a colleague's portrait or initials, the owner's GitHub picture, a person's initials in gray;
-    // the name under the pointer. It stands at the top of its row, beside the first line of what it holds, however many lines that has.
+    // Who holds a task: Claude's critter, or the coordinator Crew hired in its place; a colleague's portrait or initials, the owner's
+    // GitHub picture, a person's initials in gray; the name under the pointer. It stands at the top of its row, beside the first line of
+    // what it holds, however many lines that has.
+    const coordinator = snapshot.coordinator ?? null;
     const face = (name: string, size: number) => {
-        const member = byName.get(name) ?? (owner && name === owner.name ? { id: name, name, fullName: owner.fullName, role: "", color: "gray", portrait: owner.portrait } : undefined);
+        const member = (name === "Claude" ? coordinator : null) ?? byName.get(name) ?? (owner && name === owner.name ? { id: name, name, fullName: owner.fullName, role: "", color: "gray", portrait: owner.portrait } : undefined);
 
         if (!Svg) {
             return <Text key={`face-${name}`} color={member?.color} dimColor={!member}>●</Text>;
         }
 
-        const source = name === "Claude" ? claudeSvg(size) : faceSvg(member ?? { id: name, name, fullName: name, role: "", color: "gray" }, member?.portrait, size);
+        const source = name === "Claude" && !coordinator ? claudeSvg(size) : faceSvg(member ?? { id: name, name, fullName: name, role: "", color: "gray" }, member?.portrait, size);
         const fullName = member?.fullName ?? name;
         return (
             <Box key={`face-${name}`} flexShrink={0} alignSelf="flex-start">

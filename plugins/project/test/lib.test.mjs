@@ -28,9 +28,17 @@ test("a doc's description is its first paragraph of prose, its quoted summary to
 test("a task line reads and writes back in the format's English words, an old Italian line read as well", () => {
     const line = "- T-12 · P2 · medio · Matteo · 2026-10-29 · Revisione e pulizia · La plancia, in tre parti · fatto 2026-10-30 · archiviato 2026-10-31";
     const task = parseLine(line, "archived", it);
-    assert.deepEqual({ ...task }, { id: 12, priority: "P2", effort: "medium", to: "Matteo", created: "2026-10-29", goal: "Revisione e pulizia", text: "La plancia, in tre parti", after: [], see: [], parent: null, issue: null, due: null, type: null, by: null, fields: {}, started: null, done: "2026-10-30", archived: "2026-10-31", state: "archived" });
+    assert.deepEqual({ ...task }, { id: 12, priority: "P2", effort: "medium", to: "Matteo", created: "2026-10-29", goal: "Revisione e pulizia", text: "La plancia, in tre parti", after: [], see: [], parent: null, issue: null, due: null, type: null, by: null, fields: {}, started: null, startedBy: null, done: "2026-10-30", archived: "2026-10-31", state: "archived" });
     assert.equal(formatLine(task, it), "- T-12 · P2 · medium · Matteo · 2026-10-29 · Revisione e pulizia · La plancia, in tre parti · done 2026-10-30 · archived 2026-10-31");
     assert.equal(parseLine("- [ ] P2 · 2026-10-29 · a todo line", "todo", it), null);
+
+    // Who started it, where the project has more than one person (D-18): after the day, and read in the old Italian words too.
+    const shared = "- T-5 · P1 · high · Ann · 2026-11-01 · — · The map (after: T-2) · started 2026-11-07 by Ann Lee · done 2026-11-08";
+    const started = parseLine(shared, "done", en);
+    assert.deepEqual([started.text, started.after, started.started, started.startedBy, started.done], ["The map", ["T-2"], "2026-11-07", "Ann Lee", "2026-11-08"]);
+    assert.equal(formatLine(started, en), shared);
+    assert.equal(parseLine("- T-5 · P1 · alto · Ann · 2026-11-01 · — · La mappa · iniziato 2026-11-07 da Ann", "doing", it).startedBy, "Ann");
+    assert.equal(formatLine({ ...started, started: null }, en), "- T-5 · P1 · high · Ann · 2026-11-01 · — · The map (after: T-2) · done 2026-11-08");
 });
 
 test("the markers follow the language and the prefix the project picks", () => {
@@ -93,6 +101,14 @@ test("moving tasks sets the day of done once, clears it when they open again, an
     assert.deepEqual(done.tasks.map((task) => [task.state, task.done]), [["done", "2026-10-30"], ["done", "2026-10-01"]]);
     assert.deepEqual(done.missing, [3]);
     assert.equal(moveTasks(done.tasks, [2], "doing", "2026-10-30").tasks[1].done, null);
+
+    // Who started it: set when it goes into progress, kept while it is and once it is done, gone when it waits again.
+    const begun = moveTasks(tasks, [1], "doing", "2026-11-07", "Ann").tasks[0];
+    assert.deepEqual([begun.started, begun.startedBy], ["2026-11-07", "Ann"]);
+    const again = moveTasks([begun], [1], "doing", "2026-11-08", "Bob").tasks[0];
+    assert.deepEqual([again.started, again.startedBy], ["2026-11-07", "Ann"]);
+    assert.deepEqual(["done", "todo"].map((state) => moveTasks([begun], [1], state, "2026-11-09", "Bob").tasks[0].startedBy), ["Ann", null]);
+    assert.equal(moveTasks(tasks, [1], "doing", "2026-11-07").tasks[0].startedBy, null);
 });
 
 test("the next number, the cited tasks and an effort's key", () => {
@@ -212,6 +228,21 @@ test("each project's page has a port of its own from its folder, the same every 
     assert.equal(readConfig("", "f:\\work\\engine\\").page.port, port);
     assert.notEqual(defaultPort("F:/work/other"), port);
     assert.equal(readConfig("page: { port: 5790 }\n", "F:/work/engine").page.port, 5790);
+});
+
+test("each person's own settings, .claude/project.local.yaml, over the project's: who they are, and a map key by key", () => {
+    const shared = "people: [Claude, Ann, Bob]\ngithub: { issues: sync, logins: { Ann: ann } }\npage: { port: 5790 }\n";
+    const config = readConfig(shared, "F:/work/engine", "me: bob\npage: { port: 5791 }\ngithub: { unassigned: leave }\n");
+    // Who they are, as the project writes them; the rest of a map stays the project's.
+    assert.equal(config.me, "Bob");
+    assert.equal(config.page.port, 5791);
+    assert.deepEqual(config.github, { issues: "sync", unassigned: "leave", logins: { Ann: "ann" } });
+    assert.deepEqual(config.people, ["Claude", "Ann", "Bob"]);
+    // Unsaid, nobody; a name that is none of the people, as written.
+    assert.equal(readConfig(shared, "/x").me, null);
+    assert.equal(readConfig(shared, "/x", "me: Carla\n").me, "Carla");
+    // A file that is not a map says which.
+    assert.throws(() => readConfig(shared, "/x", "- a\n"), (error) => error.file === ".claude/project.local.yaml" && /project\.local\.yaml must be a map/.test(error.message));
 });
 
 test("a text's links: bare addresses and Markdown's links apart, the sentence keeping its punctuation", () => {

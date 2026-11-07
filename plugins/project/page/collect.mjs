@@ -9,7 +9,7 @@ import { numbering, proposalOf } from "../lib/decisions.mjs";
 import { phaseStates, planPhases, planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
-import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
+import { codeView, freeIssues, issueOf, ownLogins } from "../lib/code.mjs";
 import { readsAsInstruction } from "../lib/issues.mjs";
 import { decisionLinks } from "../lib/links.mjs";
 import { check } from "../scripts/check.mjs";
@@ -19,7 +19,7 @@ import { specsState } from "../scripts/specs.mjs";
 import { context, extensionChecks } from "../scripts/extensions.mjs";
 import { releaseState } from "../lib/release.mjs";
 import { readablePattern } from "../lib/words.mjs";
-import { colleagues, git, profileOf, projectName, read, readBacklog, readContracts, readReleases, readDecisions, showsReleases, projectRepos, readGoals, readHolds, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
+import { colleagues, coordinatorOf, git, profileOf, projectName, read, readBacklog, readContracts, readReleases, readDecisions, showsReleases, projectRepos, readGoals, readHolds, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 const lastDecisions = 8;
@@ -59,6 +59,8 @@ export async function collect(config, say, extensions = [])
         inbox: readInbox(config),
         people: config.people,
         colleagues: readColleagues(config),
+        // The coordinator Crew hired, who is Claude here: Claude's tasks drawn with their name and portrait (D-18).
+        coordinator: readCoordinator(config),
         owner: await ownerOf(config),
         tasks: readTasks(config),
         board: readBoard(config, code),
@@ -186,7 +188,9 @@ function readBoard(config, code)
             colleague: ids.get(task.to) ?? null,
             noteHref: links.get(task.id).noteHasBody ? `/note/${task.id}` : null,
             ...codeView(code.get(task.id)),
-            issueInfo: issueOf(issues, task, login),
+            issueInfo: issueOf(issues, task, ownLogins(config, login)),
+            // In progress, started by another person of the project, who works on it on their machine (D-18).
+            startedByOther: task.state === "doing" && Boolean(task.startedBy && task.startedBy !== config.me),
             // The version whose notes list it, when one does.
             release: released.get(task.id) ?? null,
         }));
@@ -294,6 +298,13 @@ function readColleagues(config)
             hasPortrait: existsSync(`${config.memory}/${id}/avatar-small.jpg`),
         };
     });
+}
+
+/** The coordinator Crew hired: their profile's name, role and color, and whether they have a portrait; null without one. */
+function readCoordinator(config)
+{
+    const coordinator = coordinatorOf(config);
+    return coordinator && { ...coordinator, hasPortrait: existsSync(`${config.memory}/${coordinator.id}/avatar-small.jpg`) };
 }
 
 /** Every open task, by who holds it: the backlog's, by its assignee, and those of the colleagues' todos. */

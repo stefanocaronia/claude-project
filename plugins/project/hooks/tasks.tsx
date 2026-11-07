@@ -152,8 +152,8 @@ export function taskLists($: EngineInterface, p: Panel)
         return tip(`parts-${task.id}`, words("partsTip", { done: task.partsDone, total: task.parts.length }), button);
     };
     // In place of its age, a blocked task shows what it waits for: «⛓ T-62», and how many more; a large task, its parts closed. After
-    // those, a due day near or past, «⏰ 3 g», red when late; a task stuck in progress, «⏸ 4 g», in the color of a warning. On the desktop
-    // a hint under the pointer says it in words.
+    // those, a due day near or past, «⏰ 3 g», red when late; a task another person of the project started, «▸ Ann»; a task stuck in
+    // progress, «⏸ 4 g», in the color of a warning. On the desktop a hint under the pointer says it in words.
     const ageOrWait = (task: Task) => {
         if (isLarge(task)) {
             return partsChip(task);
@@ -163,6 +163,7 @@ export function taskLists($: EngineInterface, p: Panel)
         const due = task.dueInfo && (task.dueInfo.isLate || task.dueInfo.isNear) ? task.dueInfo : null;
         const [label, hint, color] = blockers.length > 0 ? [`⛓ ${blockers[0]}${blockers.length > 1 ? ` +${blockers.length - 1}` : ""}`, words("blockedTip", { list: blockers.join(", ") }), undefined]
             : due ? [`⏰ ${dueWords(due)}`, words("dueTip", { day: due.day }), due.isLate ? errorColor : warningColor]
+            : task.startedByOther && task.started ? [`▸ ${task.startedBy}`, words("startedByLabel", { day: task.started, who: task.startedBy }), workColor]
             : task.stale && task.started ? [`⏸ ${age(task.started)}`, words("staleTip", { day: task.started }), warningColor]
             : [age(task.created), null, undefined];
         const cell = <Box key={`age-${task.id}`} flexShrink={0}><Text dimColor={!color} color={color} wrap="truncate">{label}</Text></Box>;

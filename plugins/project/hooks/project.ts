@@ -82,6 +82,15 @@ export async function committedOpen($: EngineInterface): Promise<string>
     return exitCode === 0 ? stdout.trim() : "";
 }
 
+/** What the chat changed in the private docs, Crew's colleagues' writing too, committed and pushed where the project keeps them in sync
+ *  (D-18); sync.mjs does nothing elsewhere. Its lines, a clash with the others' changes, else empty. */
+export async function pushDocs($: EngineInterface): Promise<string>
+{
+    const root = await projectRoot($);
+    const { exitCode, stdout } = await $.process.run(["node", `${$.plugin.root}/scripts/sync.mjs`, "push"], { cwd: root, env: { CLAUDE_PROJECT_DIR: root }, timeoutMs: 120_000 });
+    return exitCode === 0 ? stdout.trim() : "";
+}
+
 /** An extension's action in the panel, a start for instance: a POST to its path on the project's page, then the project read again. */
 export async function postLink($: EngineInterface, url: string): Promise<void>
 {

@@ -10,7 +10,7 @@ import { guardCall } from "../lib/guard.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { hold, holdNothing, letGo, thisChat, worksUnheld } from "./holds.ts";
 import { drawPanel } from "./panel.tsx";
-import { committedOpen, refresh, watch } from "./project.ts";
+import { committedOpen, pushDocs, refresh, watch } from "./project.ts";
 import { moveCited } from "./start.ts";
 import { changeBoard, readBoard, say } from "./state.ts";
 
@@ -21,6 +21,20 @@ const command = "project-panel";
 let hasRead = false;
 // Whether this turn of the chat was told that it changes the project's files holding no task.
 let toldUnheld = false;
+
+/** The private docs pushed, where the project keeps them in sync; a clash with the others' changes said in a toast. */
+async function syncDocs($: Parameters<typeof refresh>[0]): Promise<void>
+{
+    if (!(await readBoard($)).snapshot) {
+        return;
+    }
+
+    const told = await pushDocs($).catch(() => "");
+
+    if (told) {
+        $.ui.toast(told);
+    }
+}
 
 /** The file a tool call writes: an Edit, a Write, a notebook's edit; none for any other. */
 function editedFile(e: object): string | null
@@ -132,6 +146,8 @@ export const register: Register = (on) => {
 
         if (e.agentId === undefined) {
             await changeBoard($, (old) => ({ ...old, working: false })).catch(() => undefined);
+            // What the turn wrote in the private docs, by hand or by a colleague, goes to the others, without holding the chat up.
+            void syncDocs($);
         }
 
         if (e.agentId) {
@@ -142,9 +158,10 @@ export const register: Register = (on) => {
         return completed;
     });
 
-    // A chat that ends holds nothing any longer.
+    // A chat that ends holds nothing any longer, and leaves nothing of the docs unpushed.
     on("session.end", async ($, e, next) => {
         await holdNothing($).catch(() => undefined);
+        await syncDocs($);
         return next(e);
     });
 

@@ -5,9 +5,9 @@ import { resolve } from "node:path";
 import { effortKey } from "../lib/backlog.mjs";
 import { proposalOf } from "../lib/decisions.mjs";
 import { phaseStates, planPhases, planUpdated } from "../lib/plan.mjs";
-import { configFile } from "../lib/config.mjs";
+import { configFile, localConfigFile } from "../lib/config.mjs";
 import { plainMarkdown } from "../lib/text.mjs";
-import { codeView, freeIssues, issueOf } from "../lib/code.mjs";
+import { codeView, freeIssues, issueOf, ownLogins } from "../lib/code.mjs";
 import { readsAsInstruction } from "../lib/issues.mjs";
 import { releaseState } from "../lib/release.mjs";
 import { gitHubRepo } from "./github.mjs";
@@ -16,7 +16,7 @@ import { check } from "./check.mjs";
 import { readCode, readFreePulls, readIssues, readLogin, readOwner } from "./code.mjs";
 import { syncStateFile, syncSummary } from "./issues.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
-import { colleagues, findRoot, git, isClosed, isMain, onPath, loadProject, openStates, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
+import { colleagues, coordinatorOf, findRoot, git, isClosed, isMain, onPath, loadProject, openStates, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
 
 // The most a portrait may weigh in the panel's drawing, which the desktop drops past about 100 KB: Crew's small ones are under 2 KB.
 const portraitLimit = 4096;
@@ -26,6 +26,7 @@ export async function snapshot(config, say, withHealth = true)
 {
     const { tasks, unread } = readBacklog(config);
     const team = colleagues(config).map((colleague) => ({ ...colleague, ...profileOf(config, colleague.id, colleague.name), ...portraitOf(config, colleague.id) }));
+    const coordinator = coordinatorOf(config);
     const idOf = new Map(team.map((colleague) => [colleague.name, colleague.id]));
     const goals = readGoals(config);
     // A task merged into another is neither done nor open: it counts nowhere, as the page counts.
@@ -64,6 +65,8 @@ export async function snapshot(config, say, withHealth = true)
         // The key documents, each opened through the project's page.
         documents: config.documents.map((document, index) => ({ name: document.name, href: `${page}/#documents/${index}`, exists: existsSync(document.path) })),
         colleagues: team,
+        // The coordinator Crew hired, who is Claude here: Claude's tasks drawn with their name and portrait (D-18).
+        coordinator: coordinator && { ...coordinator, ...portraitOf(config, coordinator.id) },
         // The person this machine's gh is signed in as, with their GitHub picture inline: on their tasks and on every decision.
         owner: ownerOf(await readOwner(config)),
         // Whether git and gh are here, and the project's repo on GitHub: the panel offers the github skill while one is missing.
@@ -77,7 +80,9 @@ export async function snapshot(config, say, withHealth = true)
             colleague: idOf.get(task.to) ?? null,
             noteHref: links.get(task.id).noteHasBody ? `${page}/note/${task.id}` : null,
             ...codeView(code.get(task.id)),
-            issueInfo: issueOf(issues, task, login),
+            issueInfo: issueOf(issues, task, ownLogins(config, login)),
+            // In progress, started by another person of the project, who works on it on their machine (D-18).
+            startedByOther: task.state === "doing" && Boolean(task.startedBy && task.startedBy !== config.me),
         })),
         // The last versions, the newest first, and how many tasks wait for the next one.
         releases: releasesOf(config, tasks, goals),
@@ -103,7 +108,7 @@ export async function snapshot(config, say, withHealth = true)
         },
         // The files whose change makes the panel read the project again: the issues' sync state too, where they are in sync, and the
         // repo's tags, where a version tagged outside release.mjs shows.
-        watch: [`${config.root}/${configFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.specs, config.files.notes, config.files.releases, ...todoFiles(config).map((one) => one.file), ...(config.github?.issues === "sync" ? [syncStateFile(config)].filter(Boolean) : []), ...tagFiles(config)],
+        watch: [`${config.root}/${configFile}`, `${config.root}/${localConfigFile}`, config.files.tasks, config.files.archive, config.files.plan, config.files.decisions, config.files.specs, config.files.notes, config.files.releases, ...todoFiles(config).map((one) => one.file), ...(config.github?.issues === "sync" ? [syncStateFile(config)].filter(Boolean) : []), ...tagFiles(config)],
         health: findings && { errors: severityCount(findings, "error"), warnings: severityCount(findings, "warning"), notes: severityCount(findings, "note") },
         // The core docs the scripts own, which the panel keeps from a direct read or write (lib/guard.mjs).
         guard: guardOf(config, unread),

@@ -1,5 +1,6 @@
 // The backlog's lines: `- T-12 · P2 · medium · Matteo · 2026-10-29 · <goal> · text · started 2026-10-29 · done 2026-10-30`, one task a
-// line under the heading of its state. Pure: the text in, the text out, in the project's words.
+// line under the heading of its state; where the project has more than one person, who started it after the day, `started 2026-10-29 by
+// Ann` (D-18). Pure: the text in, the text out, in the project's words.
 import { badLinks, joinLinks, splitLinks } from "./links.mjs";
 import { escapeRegex, plain } from "./text.mjs";
 import { effortWord, priorityKeys, readablePattern, stateKeys, stateOfHeading } from "./words.mjs";
@@ -9,7 +10,8 @@ const byId = (first, second) => first.id - second.id;
 // A task line's patterns, by the project's words and its prefix: made once, not once a line of a backlog of thousands.
 const patterns = new WeakMap();
 
-/** The patterns of a task line: `line` the whole of it, `marks` the days it started, was done and archived at the end of its text. */
+/** The patterns of a task line: `line` the whole of it, `marks` the days it started (and who started it), was done and archived at the
+ * end of its text. */
 function linePatterns(words, prefix)
 {
     const byPrefix = patterns.get(words) ?? new Map();
@@ -19,7 +21,7 @@ function linePatterns(words, prefix)
         const day = "(\\d{4}-\\d{2}-\\d{2})";
         byPrefix.set(prefix, {
             line: new RegExp(`^- ${escapeRegex(prefix)}-(\\d+) · (P[1-3]) · ([^·]+?) · ([^·]+?) · ${day} · ([^·]+?) · (.*)$`),
-            marks: new RegExp(`^(.*?)(?: · (?:${readablePattern(words, "startedMarker")}) ${day})?(?: · (?:${readablePattern(words, "doneMarker")}) ${day})?(?: · (?:${readablePattern(words, "archivedMarker")}) ${day})?$`),
+            marks: new RegExp(`^(.*?)(?: · (?:${readablePattern(words, "startedMarker")}) ${day}(?: (?:${readablePattern(words, "startedByMarker")}) ([^·]+?))?)?(?: · (?:${readablePattern(words, "doneMarker")}) ${day})?(?: · (?:${readablePattern(words, "archivedMarker")}) ${day})?$`),
         });
     }
 
@@ -37,16 +39,17 @@ export function parseLine(line, state, words, prefix = "T")
     }
 
     const [, id, priority, effort, to, created, goal, rest] = match;
-    const [, whole, started, done, archived] = pattern.marks.exec(rest);
-    return { id: Number(id), priority, effort: effortWord(words, effort.trim()), to: to.trim(), created, goal: goal.trim(), ...splitLinks(whole, words.fields ?? []), started: started ?? null, done: done ?? null, archived: archived ?? null, state };
+    const [, whole, started, startedBy, done, archived] = pattern.marks.exec(rest);
+    return { id: Number(id), priority, effort: effortWord(words, effort.trim()), to: to.trim(), created, goal: goal.trim(), ...splitLinks(whole, words.fields ?? []), started: started ?? null, startedBy: startedBy?.trim() || null, done: done ?? null, archived: archived ?? null, state };
 }
 
-/** The task as a line again, its links at the end of its text, then the days it started, was done and archived. */
+/** The task as a line again, its links at the end of its text, then the days it started (and who started it), was done and archived. */
 export function formatLine(task, words, prefix = "T")
 {
     const mark = (marker, day) => (day ? `${separator}${marker} ${day}` : "");
     const text = joinLinks(task.text, task, words.fields ?? []);
-    return `- ${prefix}-${task.id}${separator}${[task.priority, task.effort, task.to, task.created, task.goal, text].join(separator)}${mark(words.startedMarker, task.started)}${mark(words.doneMarker, task.done)}${mark(words.archivedMarker, task.archived)}`;
+    const startedBy = task.started && task.startedBy ? ` ${words.startedByMarker} ${task.startedBy}` : "";
+    return `- ${prefix}-${task.id}${separator}${[task.priority, task.effort, task.to, task.created, task.goal, text].join(separator)}${mark(words.startedMarker, task.started)}${startedBy}${mark(words.doneMarker, task.done)}${mark(words.archivedMarker, task.archived)}`;
 }
 
 /** The tasks of a backlog's text, each with its line and the state of its heading, and the lines that do not read as a task. What comes
@@ -107,14 +110,17 @@ export function renderArchive(tasks, previous, words, prefix = "T")
     return `${headerOf(previous, prefix)}${lines.join("\n")}\n`;
 }
 
-/** The tasks with those named moved to a state, the day of today on those done; the ids not found, apart. */
-export function moveTasks(tasks, ids, state, today)
+/** The tasks with those named moved to a state, the day of today on those done; the ids not found, apart. `by`, who starts them, where
+ * the project has more than one person. */
+export function moveTasks(tasks, ids, state, today, by = null)
 {
     const wanted = new Set(ids.map(Number));
     const missing = [...wanted].filter((id) => !tasks.some((task) => task.id === id));
-    // The day it started: set when it goes into progress, kept while it is and once it is done, gone when it waits again.
-    const started = (task) => (state === "doing" ? (task.state === "doing" && task.started) || today : state === "done" ? task.started ?? null : null);
-    const moved = tasks.map((task) => (wanted.has(task.id) ? { ...task, state, started: started(task), done: state === "done" ? (task.done ?? today) : null, archived: null } : task));
+    // The day it started and who started it: set when it goes into progress, kept while it is and once it is done, gone when it waits again.
+    const going = (task) => task.state === "doing" && Boolean(task.started);
+    const started = (task) => (state === "doing" ? (going(task) ? task.started : today) : state === "done" ? task.started ?? null : null);
+    const startedBy = (task) => (state === "doing" ? (going(task) ? task.startedBy ?? null : by) : state === "done" ? task.startedBy ?? null : null);
+    const moved = tasks.map((task) => (wanted.has(task.id) ? { ...task, state, started: started(task), startedBy: startedBy(task), done: state === "done" ? (task.done ?? today) : null, archived: null } : task));
     return { tasks: moved, missing };
 }
 

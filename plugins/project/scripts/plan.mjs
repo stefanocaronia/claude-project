@@ -5,6 +5,7 @@
 //   node plan.mjs phases [--json]
 import { closeGoal, phaseStates, planPhases } from "../lib/plan.mjs";
 import { fail, isMain, loadProject, openStates, read, readBacklog, readGoals, runCli, today, writeDoc } from "./project.mjs";
+import { pullDocs, pushDocs } from "./sync.mjs";
 
 if (isMain(import.meta.url)) {
     runCli(() => run(process.argv.slice(2)));
@@ -14,6 +15,12 @@ function run(args)
 {
     const [command, ...rest] = args;
     const { config, say } = loadProject();
+
+    // A goal closed or opened, where the docs are in sync among the project's people: from the others' latest plan (D-18).
+    if (["close", "open"].includes(command)) {
+        pullDocs(config, say).forEach((line) => console.error(line));
+    }
+
     const goals = readGoals(config);
     const name = rest.filter((arg) => !arg.startsWith("--")).join(" ").trim();
     const goal = goals.find((one) => one.name === name);
@@ -64,4 +71,5 @@ function run(args)
     const day = command === "close" ? (goal.closed ?? today()) : null;
     writeDoc(config, config.files.plan, closeGoal(read(config.files.plan), config.words, goal.name, day));
     console.log(say(day ? "goalClosed" : "goalOpened", { goal: goal.name, day }));
+    pushDocs(config, say, `plan: ${command} ${goal.name}`).forEach((line) => console.error(line));
 }

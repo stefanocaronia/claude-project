@@ -7,7 +7,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sayer } from "../lib/messages.mjs";
 import { readCode } from "../scripts/code.mjs";
+import { isShared, localConfigFile } from "../lib/config.mjs";
+import { excludeLocal, missingCollaborators, settleMe } from "../scripts/people.mjs";
 import { findRoot, git, loadProject, onPath, ProjectError, projectCommandOnPath, projectName, readBacklog, readSpecs, shown } from "../scripts/project.mjs";
+import { pullDocs, pushDocs, unpushed } from "../scripts/sync.mjs";
 
 const from = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const here = dirname(fileURLToPath(import.meta.url));
@@ -29,6 +32,13 @@ if (findRoot(from) === null) {
 async function ensure()
 {
     const { config, say } = loadProject(from);
+    // Where the docs are in sync among the project's people (D-18): the others' latest first, then what this machine left unpushed.
+    const syncLines = [...pullDocs(config, say), ...pushDocs(config, say)];
+    const notPushed = unpushed(config);
+
+    if (notPushed > 0) {
+        syncLines.push(say("syncWaiting", { count: notPushed }));
+    }
     const port = config.page.port;
     const url = `http://localhost:${port}`;
     const answer = await whoServes(port);
@@ -66,8 +76,24 @@ async function ensure()
     const cited = readCode(config, { pulls: false });
     const doneInCode = readBacklog(config).tasks.filter((task) => task.state === "doing" && cited.get(task.id)?.commits.length > 0).map((task) => `${config.prefixes.task}-${task.id}`);
     const citedLine = doneInCode.length > 0 ? say("inProgressCited", { list: doneInCode.join(", ") }) : null;
-    const told = [context, say("scriptsAtStart"), say("outsideAtStart"), projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null, specsLine, citedLine].filter(Boolean).join(" ");
+    const told = [context, say("scriptsAtStart"), say("outsideAtStart"), projectCommandOnPath() ? say("cliOnPath") : null, missing.length > 0 ? say("githubAtStart", { list: missing.join(", ") }) : null, specsLine, citedLine, ...syncLines, ...peopleLines(config, say)].filter(Boolean).join(" ");
     console.log(JSON.stringify({ systemMessage: isServed ? `${projectName(config)}: ${url}` : context, hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: told } }));
+}
+
+/** Where several people work on the project, each with their own Claude (D-18): who works here, written in their own settings when
+ * gh says it, those settings kept out of the code's repo, and the repo's collaborators who are none of the people yet. */
+function peopleLines(config, say)
+{
+    const { me, written } = settleMe(config);
+    excludeLocal(config);
+    const file = localConfigFile;
+    const others = missingCollaborators(config);
+    const people = config.people.slice(1).join(", ");
+    return [
+        written ? say("meWritten", { me, file }) : null,
+        isShared(config) ? (me ? say("peopleAtStart", { list: people, me }) : say("meUnknown", { list: people, file })) : null,
+        others.length > 0 ? say("collaboratorsMissing", { list: others.join(", ") }) : null,
+    ];
 }
 
 /** One line, once a repo: the plugin is here and /project:init sets it up. The repos already told are kept in the temporary folder. */

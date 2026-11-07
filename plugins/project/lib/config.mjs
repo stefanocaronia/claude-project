@@ -7,6 +7,10 @@ import { labelsOf, wordsOf } from "./words.mjs";
 /** Where the configuration lives, relative to the project's root. */
 export const configFile = ".claude/project.yaml";
 
+/** Each person's own settings, beside the configuration and never committed (D-18): who works on this machine, `me: Ann`, and what
+ * holds for them alone, their page's port say. A setting there takes the configuration's place; a map, key by key. */
+export const localConfigFile = ".claude/project.local.yaml";
+
 // What a setting is when the configuration does not say.
 const defaults = {
     language: "en",
@@ -22,14 +26,11 @@ const defaults = {
     extensions: [],
 };
 
-/** The configuration from the file's text (empty when there is none), with the paths resolved against the root, "/" between parts. */
-export function readConfig(text, root)
+/** The configuration from the file's text (empty when there is none), with the paths resolved against the root, "/" between parts; the
+ * person's own settings, `local` the text of .claude/project.local.yaml, over it. */
+export function readConfig(text, root, local = "")
 {
-    const given = (text ? parse(text) : null) ?? {};
-
-    if (typeof given !== "object" || Array.isArray(given)) {
-        throw new Error(`${configFile} must be a map of settings (language: it, docs: project, ...), not ${Array.isArray(given) ? "a list" : typeof given}.`);
-    }
+    const given = overlay(settingsOf(text, configFile), settingsOf(local, localConfigFile));
 
     const language = given.language ?? defaults.language;
     const fields = fieldsOf(given.fields);
@@ -37,6 +38,7 @@ export function readConfig(text, root)
     const words = { ...wordsOf(language, given.words), fields: Object.keys(fields) };
     const files = { ...words.files, ...(given.files ?? {}) };
     const docs = resolve(root, given.docs ?? defaults.docs);
+    const people = list(given.people, defaults.people);
 
     return {
         root: clean(root),
@@ -65,7 +67,10 @@ export function readConfig(text, root)
         archiveFolder: files.archiveFolder,
         // The core files the configuration names itself, `files: { … }`: those keep their name.
         namedFiles: Object.keys(given.files ?? {}),
-        people: list(given.people, defaults.people),
+        people,
+        // Who works on this machine, one of the people as the project writes them, `me: Ann` in .claude/project.local.yaml; null where it
+        // is unsaid. Crew reads it there too.
+        me: meOf(given.me, people),
         agents: resolve(root, given.agents ?? defaults.agents),
         memory: resolve(root, given.memory ?? defaults.memory),
         prefixes: { ...defaults.prefixes, ...(given.prefixes ?? {}) },
@@ -91,7 +96,49 @@ export function readConfig(text, root)
         // GitHub; `unassigned: take | leave` fixes whether the open issues assigned to nobody come in, else they do where the user is
         // the repo's only collaborator.
         github: githubOf(given.github),
+        // The private docs kept in sync among the project's people, `sync: auto`: pulled before a change, committed and pushed after it
+        // (D-18); only where the docs' folder is a git repo of its own.
+        sync: given.sync === "auto" ? "auto" : "off",
     };
+}
+
+/** Whether more than one person works on the project, besides its coordinator, the first of the people: each then says who works on
+ * their machine (`me:`), and who started a task (D-18). */
+export function isShared(config)
+{
+    return config.people.length > 2;
+}
+
+/** A file's settings, a map: {} for an empty file; an error otherwise, which names the person's own file when it is theirs. */
+function settingsOf(text, file)
+{
+    const named = file === localConfigFile ? { file } : {};
+    let given;
+
+    try {
+        given = (text ? parse(text) : null) ?? {};
+    } catch (error) {
+        throw Object.assign(error, named);
+    }
+
+    if (typeof given !== "object" || Array.isArray(given)) {
+        throw Object.assign(new Error(`${file} must be a map of settings (language: it, docs: project, ...), not ${Array.isArray(given) ? "a list" : typeof given}.`), named);
+    }
+
+    return given;
+}
+
+/** The configuration with the person's own settings over it: a setting in place of the configuration's, a map key by key. */
+function overlay(shared, own)
+{
+    return { ...shared, ...Object.fromEntries(Object.entries(own).map(([key, value]) => [key, isMap(value) && isMap(shared[key]) ? { ...shared[key], ...value } : value])) };
+}
+
+/** Who works on this machine: one of the people, whatever the case it is written in; the name as written where it is none of them. */
+function meOf(given, people)
+{
+    const name = given === undefined || given === null ? "" : String(given).trim();
+    return name === "" ? null : (people.find((person) => person.toLowerCase() === name.toLowerCase()) ?? name);
 }
 
 /** The GitHub settings: { issues: "sync" | "off", unassigned: "auto" | "take" | "leave", logins: { person: login } }. */

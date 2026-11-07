@@ -27,8 +27,9 @@
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseCsv, toCsv } from "../lib/csv.mjs";
+import { isShared } from "../lib/config.mjs";
 import { formatLine, moveTasks, nextId, similarTasks, taskErrors } from "../lib/backlog.mjs";
-import { codeView, doneTasks, issueOf } from "../lib/code.mjs";
+import { codeView, doneTasks, issueOf, ownLogins } from "../lib/code.mjs";
 import { issueTask, lineTitle } from "../lib/issues.mjs";
 import { listOf, nestedParts, splitLinks, todoLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
@@ -38,7 +39,8 @@ import { effortWord, stateKeys } from "../lib/words.mjs";
 import { closeIssue, closePull, doneComment, ghLogin, readCode, readIssue, readIssues, readLogin, readPull, takenPulls } from "./code.mjs";
 import { context, loadExtensions } from "./extensions.mjs";
 import { syncIssues } from "./issues.mjs";
-import { assignees, changeableBacklog, commandLine, fail, firstLine, git, isClosed, isMain, loadProject, notePath, openStates, projectRepos, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, taskRules, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
+import { pullDocs, pushDocs } from "./sync.mjs";
+import { assignees, backlogName, changeableBacklog, commandLine, fail, firstLine, git, isClosed, isMain, loadProject, notePath, openStates, projectRepos, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, taskRules, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
 const changes = ["add", "start", "done", "postpone", "todo", "archive", "delete", "set", "import", "take"];
@@ -119,13 +121,26 @@ async function run(args)
         options.incoming = await importedTasks(config, say, words[0], options);
     }
 
+    // Where the docs are in sync among the project's people, a change starts from the others' latest, numbers too, and goes to them
+    // right after, with what the issues' sync brought (D-18). A comment or a note changes the docs too.
+    const isChange = changes.includes(command) && options.preview !== true;
+    const isSynced = isChange || ["comment", "note", "issue-close"].includes(command);
+
+    if (isSynced) {
+        pullDocs(config, say).forEach((line) => console.error(line));
+    }
+
     // A change reads the backlog again once it holds the lock, so it never writes over a change made meanwhile.
     const result = changes.includes(command) ? withBacklogLock(config, () => execute(command, options, words, config, say)) : execute(command, options, words, config, say);
 
     // Where the issues are in sync, a change of the backlog goes to GitHub at once, and what GitHub changed comes in.
-    if (changes.includes(command) && options.preview !== true && config.github?.issues === "sync") {
+    if (isChange && config.github?.issues === "sync") {
         const quiet = [say("issuesInSync"), say("issuesBusy")];
         syncIssues(config, say).lines.filter((line) => !quiet.includes(line)).forEach((line) => console.log(line));
+    }
+
+    if (isSynced) {
+        pushDocs(config, say, `backlog: ${[command, ...words].join(" ").slice(0, 120)}`).forEach((line) => console.error(line));
     }
 
     return result;
@@ -197,6 +212,11 @@ function execute(command, options, words, config, say)
     const stateName = (task) => (task.state === "archived" ? config.labels.archivedMarker : task.state === "done" ? config.labels.doneMarker : config.labels.states[task.state]);
     const line = (task) => formatLine(task, config.words, prefix);
 
+    // The coordinator Crew hired is Claude in the backlog: a task given to them, or created by them, by their name is Claude's (D-18).
+    for (const key of ["to", "by"].filter((one) => typeof options[one] === "string")) {
+        options[key] = backlogName(config, options[key]);
+    }
+
     if (options.state !== undefined && ![...stateKeys, "archived"].includes(options.state)) {
         fail(say("badState", { value: options.state, list: [...stateKeys, "archived"].join(", ") }));
     }
@@ -260,7 +280,7 @@ function execute(command, options, words, config, say)
 
         const issue = readIssue(config, issueNumber());
 
-        if (options.approved === undefined && issue.author?.login !== ghLogin(config)) {
+        if (options.approved === undefined && !ownLogins(config, ghLogin(config)).includes(issue.author?.login)) {
             fail(say("issueOfAnother", { issue: `#${issue.number}`, author: issue.author?.login ?? "?" }));
         }
 
@@ -283,7 +303,7 @@ function execute(command, options, words, config, say)
 
         const pull = readPull(config, pullNumber());
 
-        if (options.approved === undefined && pull.author !== ghLogin(config)) {
+        if (options.approved === undefined && !ownLogins(config, ghLogin(config)).includes(pull.author)) {
             fail(say("pullOfAnother", { pull: `#${pull.number}`, author: pull.author ?? "?" }));
         }
 
@@ -294,7 +314,7 @@ function execute(command, options, words, config, say)
     let gitHub = null;
     const fromAnother = (task) => {
         gitHub ??= { issues: readIssues(config), login: readLogin(config) };
-        const issue = issueOf(gitHub.issues, task, gitHub.login);
+        const issue = issueOf(gitHub.issues, task, ownLogins(config, gitHub.login));
         return issue?.another ? say("issueAnotherShort", { issue: task.issue, author: issue.author }) : null;
     };
     // A new task, numbered after the others: the options given over what it is made of, the backlog's defaults under both. It has a type,
@@ -346,7 +366,9 @@ function execute(command, options, words, config, say)
         const ids = words.map(find).map((task) => task.id);
         // A large task is in progress while one of its parts is: a part started starts it too.
         const parents = state === "doing" ? ids.map((id) => tasks.find((task) => task.id === id).parent).filter(Boolean).map(find).filter((task) => ["todo", "postponed"].includes(task.state)).map((task) => task.id) : [];
-        const moved = moveTasks(moveTasks(tasks, ids, state, today()).tasks, parents, "doing", today()).tasks;
+        // Who starts them, where the project has more than one person: the one working here, as their own settings say (D-18).
+        const by = isShared(config) ? config.me : null;
+        const moved = moveTasks(moveTasks(tasks, ids, state, today(), by).tasks, parents, "doing", today(), by).tasks;
         save(moved, [...ids, ...parents].map((id) => say("moved", { id: `${prefix}-${id}`, state: config.labels.states[state] })).join("\n"));
         // A task done whose GitHub issue is still open: Claude asks whether to close it, and closes it on a yes; where the issues are in
         // sync, the sync closes it.
@@ -470,7 +492,7 @@ function execute(command, options, words, config, say)
         const issues = shownTasks.some((task) => task.issue) ? readIssues(config) : [];
         const login = issues.length > 0 ? readLogin(config) : null;
         const issueLine = (task) => {
-            const issue = issueOf(issues, task, login);
+            const issue = issueOf(issues, task, ownLogins(config, login));
             return issue ? [say(issue.another ? "issueLabelAnother" : "issueLabel", { issue: task.issue, title: issue.title, state: say(issue.state === "open" ? "issueStateOpen" : "issueStateClosed"), author: issue.author })] : [];
         };
         print(shownTasks, options.json, (task) => [line(task), ...[say("stateLabel", { state: stateName(task) }), ...links(task), ...issueLine(task), ...codeLines(code.get(task.id), say)].map((one) => `  ${one}`)].join("\n"));
@@ -683,7 +705,7 @@ function linksOf(tasks, config, say, stateName)
             task.type ? say("typeLabel", { name: config.types[task.type] ?? task.type }) : null,
             ...Object.entries(task.fields ?? {}).map(([key, value]) => `${config.fields[key]?.name ?? key}: ${value}`),
             task.due ? `${say("dueLabel", { day: task.due })}${dueInfo && (dueInfo.isLate || dueInfo.isNear) ? ` (${dueText(dueInfo, say)})` : ""}` : null,
-            task.started && task.state === "doing" ? say(stale ? "staleTip" : "startedLabel", { day: task.started }) : null,
+            task.started && task.state === "doing" ? say(stale ? "staleTip" : task.startedBy ? "startedByLabel" : "startedLabel", { day: task.started, who: task.startedBy }) : null,
             decisions.length > 0 ? say("decisionsOf", { list: decisions.join(", ") }) : null,
             parent ? say("partOf", { id: named(parent) }) : null,
             parts.length > 0 ? say("partsLabel", { done: partsDone, total: parts.length, list: parts.map(named).join(", ") }) : null,

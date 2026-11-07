@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseBacklog, renderArchive, renderBacklog } from "../lib/backlog.mjs";
-import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
+import { configFile, localConfigFile, readConfig, relativeTo } from "../lib/config.mjs";
 import { parseDecisions } from "../lib/decisions.mjs";
 import { citedSpecs, parseSpecs } from "../lib/specs.mjs";
 import { sayer } from "../lib/messages.mjs";
@@ -51,7 +51,7 @@ export function loadProject(from = process.env.CLAUDE_PROJECT_DIR || process.cwd
         throw new ProjectError(sayer("en")("noConfig"));
     }
 
-    const config = configOf(read(join(root, configFile)), root, configFile);
+    const config = configOf(read(join(root, configFile)), root, configFile, read(join(root, localConfigFile)));
     return { config, say: sayer(config.language) };
 }
 
@@ -225,10 +225,39 @@ export function specCitations(config)
     });
 }
 
-/** The colleagues of Crew: each agent of the agents folder, by id and first name. */
+/** The colleagues of Crew: each agent of the agents folder, by id and first name; the coordinator apart (coordinatorOf). */
 export function colleagues(config)
 {
-    return existsSync(config.agents) ? readdirSync(config.agents).filter((file) => file.endsWith(".md")).map((file) => file.slice(0, -3)).map((id) => ({ id, name: firstName(id) })) : [];
+    return agentIds(config).filter((id) => !isCoordinator(config, id)).map((id) => ({ id, name: firstName(id) }));
+}
+
+/** The coordinator Crew hired for the project, `coordinator: true` in their profile's frontmatter: Claude in the backlog, drawn with
+ * their name and portrait, never a colleague a task is handed to (D-18). { id, name, fullName, role, color }; null without one. */
+export function coordinatorOf(config)
+{
+    const id = agentIds(config).find((one) => isCoordinator(config, one));
+    return id ? { id, name: firstName(id), ...profileOf(config, id, firstName(id)) } : null;
+}
+
+/** A name as the backlog writes it: the coordinator's, by their first or full name or id, is Claude's, the first of the people. */
+export function backlogName(config, name)
+{
+    const coordinator = coordinatorOf(config);
+    const given = String(name).trim().toLowerCase();
+    return coordinator && [coordinator.name, coordinator.fullName, coordinator.id].some((one) => one.toLowerCase() === given) ? config.people[0] : name;
+}
+
+/** The ids of the agents folder's profiles. */
+function agentIds(config)
+{
+    return existsSync(config.agents) ? readdirSync(config.agents).filter((file) => file.endsWith(".md")).map((file) => file.slice(0, -3)) : [];
+}
+
+/** Whether a profile is the coordinator's: `coordinator: true` in its frontmatter. */
+function isCoordinator(config, id)
+{
+    const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---/.exec(read(`${config.agents}/${id}.md`))?.[1] ?? "";
+    return /^coordinator:\s*true\s*$/m.test(frontmatter);
 }
 
 /** A colleague's full name, role and color, from their profile's frontmatter, as Crew writes it. */
@@ -350,7 +379,8 @@ export function taskLinks(config, tasks = readBacklog(config).tasks)
             comments: note === null ? [] : parseComments(note),
             decisions: decisions.get(id) ?? [],
             dueInfo: isClosed(task) ? null : dueOf(task.due, now),
-            stale: isStale(task, Boolean(holds[String(task.id)]), now, config.limits.staleDays),
+            // Started by another person of the project: they hold it on their machine, which this one cannot see (D-18).
+            stale: isStale(task, Boolean(holds[String(task.id)]) || Boolean(task.startedBy && task.startedBy !== config.me), now, config.limits.staleDays),
         }];
     }));
 }
@@ -814,13 +844,13 @@ export function commandLine(args, flags = [])
 
 /** The configuration, or a message that says which line of the file is wrong; in English, since the language is in the file that does
  * not read. */
-function configOf(text, root, file)
+function configOf(text, root, file, local = "")
 {
     try {
-        return withLegacyNames(readConfig(text, root));
+        return withLegacyNames(readConfig(text, root, local));
     } catch (error) {
         const line = error?.linePos?.[0]?.line;
-        throw new ProjectError(`${file}${line ? `, line ${line}` : ""}: ${firstLine(error)} Fix it, or run /project:init again.`);
+        throw new ProjectError(`${error?.file ?? file}${line ? `, line ${line}` : ""}: ${firstLine(error)} Fix it, or run /project:init again.`);
     }
 }
 

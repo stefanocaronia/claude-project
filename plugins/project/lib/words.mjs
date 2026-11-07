@@ -26,6 +26,7 @@ export const presets = {
         efforts: { low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max", none: "—" },
         noGoal: "—",
         startedMarker: "started",
+        startedByMarker: "by",
         types: { bug: "bug", feature: "feature", chore: "chore", research: "research", test: "test" },
         doneMarker: "done",
         archivedMarker: "archived",
@@ -51,6 +52,7 @@ export const presets = {
         efforts: { low: "basso", medium: "medio", high: "alto", xhigh: "extra", max: "max", none: "—" },
         noGoal: "—",
         startedMarker: "iniziato",
+        startedByMarker: "da",
         types: { bug: "bug", feature: "funzione", chore: "manutenzione", research: "ricerca", test: "prova" },
         doneMarker: "fatto",
         archivedMarker: "archiviato",
@@ -73,7 +75,7 @@ export const presets = {
 
 // The words of the core files' format: in English whatever the project's language, as the files' names are; the panel, the page and the
 // messages show them in the project's language (its preset's words, the labels).
-const formatKeys = ["states", "archived", "efforts", "noGoal", "startedMarker", "doneMarker", "archivedMarker", "goals", "phase", "updated", "open", "why", "decision", "superseded"];
+const formatKeys = ["states", "archived", "efforts", "noGoal", "startedMarker", "startedByMarker", "doneMarker", "archivedMarker", "goals", "phase", "updated", "open", "why", "decision", "superseded"];
 
 /** The words of a project: its language's (types, priorities, the verbs read in its decisions), the format's in English, a project's
  * overrides on top, one level deep for the grouped ones; `legacy`, the format as the language's files wrote it before, still read. */

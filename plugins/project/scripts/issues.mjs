@@ -12,8 +12,10 @@ import { closeSync, existsSync, openSync, readFileSync, statSync, unlinkSync, wr
 import { isAbsolute, join } from "node:path";
 import { formatLine, moveTasks, nextId, taskErrors } from "../lib/backlog.mjs";
 import { issueTask, labelFor, labelsSaying, lineTitle, parseSyncIssues, planFields, planSync, taskFields, taskSide } from "../lib/issues.mjs";
+import { ownLogins } from "../lib/code.mjs";
 import { doneComment, forgetGh, gh, ghLogin, readCode } from "./code.mjs";
 import { assignees, changeableBacklog, fail, git, isMain, loadProject, ProjectError, readBacklog, readGoals, runCli, taskRules, today, withBacklogLock, writeBacklog } from "./project.mjs";
+import { pullDocs, pushDocs } from "./sync.mjs";
 
 // A sync left running longer than this died: the next one goes ahead.
 const syncStale = 120_000;
@@ -23,20 +25,27 @@ if (isMain(import.meta.url)) {
         const [command, ...rest] = process.argv.slice(2);
         const { config, say } = loadProject();
 
+        // Where the docs are kept in sync with the others' (D-18), theirs come first: a task they closed or took from an issue is not
+        // done twice; what the sync changed goes to them after.
         if (command === "sync") {
-            const { lines } = syncIssues(config, say, { dry: rest.includes("--dry") });
-            rest.includes("--quiet") || console.log(lines.join("\n"));
+            const dry = rest.includes("--dry");
+            const isSynced = !dry && config.github?.issues === "sync";
+            const pulled = isSynced ? pullDocs(config, say) : [];
+            const { lines } = syncIssues(config, say, { dry });
+            const pushed = isSynced ? pushDocs(config, say, "issues: sync") : [];
+            rest.includes("--quiet") || console.log([...pulled, ...lines, ...pushed].join("\n"));
         } else if (command === "status") {
             const state = readState(config);
             console.log(rest.includes("--json") ? JSON.stringify(state.last ?? null) : state.last ? [say("issuesLast", { at: localTime(state.last.at) }), ...state.last.lines].join("\n") : say("issuesNever"));
         } else if (command === "keep-title" && /^#?\d+$/.test(rest[0] ?? "")) {
+            const pulled = pullDocs(config, say);
             const { lines, kept } = syncIssues(config, say, { keepTitle: rest[0].replace(/^#/, "") });
 
             if (!kept) {
-                fail(lines.join("\n"));
+                fail([...pulled, ...lines].join("\n"));
             }
 
-            console.log(lines.join("\n"));
+            console.log([...pulled, ...lines, ...pushDocs(config, say, `issues: keep-title ${rest[0]}`)].join("\n"));
         } else {
             fail(say("issuesUsage"));
         }
@@ -250,15 +259,16 @@ function sync(config, say, dry, keepTitle)
 }
 
 /** The fields to align of each task and its issue both open, and staying so in this sync. The title of an issue another wrote, changed
- * on GitHub, waits for the user's yes (D-16). */
+ * on GitHub, waits for the user's yes (D-16): another is neither the user of gh nor a person of the project with their login (D-18). */
 function fieldPlans(config, issues, tasks, plan, base, me, { loginOf, personOf })
 {
     const moving = new Set([...plan.closeIssues, ...plan.reopenIssues, ...plan.closeTasks, ...plan.reopenTasks].map((one) => one.number));
     const goals = readGoals(config).filter((goal) => !goal.closed);
+    const own = ownLogins(config, me);
     const goalOf = (milestone) => goals.find((goal) => goal.name.toLowerCase() === milestone.toLowerCase())?.name ?? null;
     return issues.filter((issue) => issue.state === "open" && !moving.has(issue.number)).flatMap((issue) => {
         const task = tasks.find((one) => one.issue === `#${issue.number}` && taskSide(one) === "open");
-        const hold = issue.author?.login === me ? [] : ["title"];
+        const hold = own.includes(issue.author?.login) ? [] : ["title"];
         return task ? [{ issue, task, ...planFields({ task, issue, before: base[String(issue.number)]?.fields, me, loginOf, personOf, goalOf, noGoal: config.words.noGoal, types: config.types, hold }) }] : [];
     });
 }

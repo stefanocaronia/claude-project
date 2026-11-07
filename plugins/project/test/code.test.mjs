@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { citationsOf, codeView, doneTasks, freeIssues, issueOf, parseIssues, parseLog, parsePulls, repoUrl } from "../lib/code.mjs";
+import { citationsOf, codeView, doneTasks, freeIssues, issueOf, ownLogins, parseIssues, parseLog, parsePulls, repoUrl } from "../lib/code.mjs";
 
 const scripts = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts");
 let root;
@@ -74,6 +74,14 @@ test("GitHub's issues read, a task's own, and the open ones no task does yet", (
     assert.equal(issueOf(issues, { issue: null }), null);
     assert.deepEqual(freeIssues(issues, [{ issue: null }]).map((issue) => issue.number), [40]);
     assert.deepEqual(freeIssues(issues, [{ issue: "#40" }]), []);
+
+    // Another's issue: neither the user of gh's nor a person's of the project with their login (D-16, D-18); unknown, nobody's.
+    const authored = parseIssues(JSON.stringify([{ number: 41, title: "A", state: "OPEN", author: { login: "giulia" } }, { number: 42, title: "B", state: "OPEN", author: { login: "x" } }]));
+    const own = ownLogins({ github: { logins: { Giulia: "giulia", Ste: "ste" } } }, "ste");
+    assert.deepEqual(own, ["ste", "giulia"]);
+    assert.deepEqual(ownLogins({ github: { logins: {} } }, null), []);
+    assert.deepEqual([41, 42].map((number) => issueOf(authored, { issue: `#${number}` }, own).another), [false, true]);
+    assert.deepEqual([issueOf(authored, { issue: "#42" }, "x").another, issueOf(authored, { issue: "#42" }, "ste").another, issueOf(authored, { issue: "#42" }).another], [false, true, false]);
 });
 
 test("a task takes a GitHub issue once; done asks Claude to ask about closing it; the check and show follow the issue; without gh, closing says how", () => {
