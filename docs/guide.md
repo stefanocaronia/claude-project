@@ -127,7 +127,7 @@ What it does:
 
 [Crew](https://github.com/stefanocaronia/claude-crew) gives the project colleagues; Project keeps the work they do. They are two plugins, each working alone and both together, and what one reads and writes of the other is this contract, written in both guides in the same words.
 
-- **Crew reads of Project**: `.claude/project.yaml`, its `docs:` (`project` when it does not say), `people:` and `github: { logins }`; `.claude/project.local.yaml`, its `me:`; the backlog through `backlog.mjs list --atomic --json` and `show`.
+- **Crew reads of Project**: `.claude/project.yaml`, its `docs:` (`project` when it does not say), `prefixes:`, `people:` and `types:`; `.claude/project.local.yaml`, its `me:`; the backlog through `backlog.mjs list --atomic --json` and `show`.
 - **Crew writes of Project**: the backlog only through `backlog.mjs`: `add "<text>" --type <type> --to <who> --by <who>`, `comment --by <who>`, `set`, `archive`.
 - **Project reads of Crew**: the colleagues' profiles, `.claude/agents/<id>.md` (the first name from the id, the full name and role from `description:`, `color:`, and `coordinator: true` for the coordinator); their portraits, `.claude/agent-memory/<id>/avatar-small.jpg`, or `avatar.svg`; their `todo.md` and its done and archived notes.
 - **Shared folders**: where the docs are a repo of their own, Crew keeps the colleagues in `<docs>/crew/agents` and `<docs>/crew/memory`, with `.claude/agents` and `.claude/agent-memory` as links that Crew makes and keeps out of the code's repo. Project's sync commits and pushes them with the docs: the memories and todos merge line by line, a profile changed by two at once is a clash to mend.
