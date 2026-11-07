@@ -64,18 +64,22 @@ people: [Claude, Ann]   # who holds tasks
 github: { issues: sync }   # optional: GitHub issues kept in sync with the backlog
 ```
 
-Claude knows the rest: ask it to change a setting.
+Claude knows the rest: ask it to change a setting. Every key is in the [Guide](docs/guide.md#configuration).
 
-## Development
+## Learn more
 
-```
-node --test "plugins/project/test/*.test.mjs"
-claude plugin test plugins/project
-claude plugin validate .
-```
-
-`node tools/screenshots.mjs` makes this README's pictures again. Installed from a local folder (`/plugin marketplace add <folder>`), the plugin is read from there: after a change, `/reload-plugins`.
+- [Guide](docs/guide.md): commands, files, tasks, the configuration, public code with private docs, working with Crew.
+- [Contributing](CONTRIBUTING.md): trying it locally, tests, preview, releases.
+- [Changelog](CHANGELOG.md): what changed, version by version.
 
 ## License
 
 MIT. The YAML parser in `lib/vendor/yaml` is [yaml](https://github.com/eemeli/yaml) by Eemeli Aro, ISC. Project is an independent project, not affiliated with or endorsed by Anthropic. Claude is a trademark of Anthropic.
+
+## Development notes
+
+Developed with the help of AI coding agents. Everything is designed, reviewed and tested by the project's human maintainer.
+
+**We encourage everyone to use AI for their own purposes.**  
+The means of production should belong to the people.  
+Fight corporate control of technology, not our right to use it.
