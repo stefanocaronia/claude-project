@@ -21,30 +21,21 @@ Everything lives in your project's folder as markdown. Claude changes the files 
 
 ## Install
 
-You need **Claude Code** and **Node.js 20 or later**. If you don't have Node.js, install it from [nodejs.org](https://nodejs.org) and check it with `node -v` in a terminal.
+You need **Claude Code**, in the desktop app or in the terminal, and **Node.js 20 or later** ([nodejs.org](https://nodejs.org)).
 
-1. Open a terminal in your project's folder and start Claude Code (the desktop app's Code tab does not take `/plugin install`):
+1. In a Claude Code chat, paste:
    ```
-   claude
+   Install the plugin "project": run `claude plugin marketplace add stefanocaronia/claude-project` and `claude plugin install project@claude-project`, then tell me to open a new chat.
    ```
-2. In the chat, add the plugin's marketplace:
+2. Open a new chat in your project's folder (the plugin loads when a chat starts) and paste:
    ```
-   /plugin marketplace add stefanocaronia/claude-project
+   Set the project plugin up here.
    ```
-3. Install the plugin:
-   ```
-   /plugin install project@claude-project
-   ```
-4. Close the chat and start a new one, so the plugin loads.
-5. Set the project up:
-   ```
-   /project:init
-   ```
-   Claude asks a few questions (the language, where to keep the docs) and writes the plan, the backlog and the decisions.
+   If the project already keeps a plan or a task list, say so: Claude moves it onto the plugin.
 
-The panel opens beside the chat by itself; `/project-panel` shows or hides it. The page's address is shown when the chat starts.
+The panel opens beside the chat by itself. When Claude asks to run `node`, allow it: the plugin runs on it.
 
-When Claude asks to run `node`, allow it: the plugin's commands run on it.
+Made for Claude Code. Codex, Gemini and Antigravity are not tested.
 
 ## Use it
 
@@ -58,7 +49,7 @@ Just talk to Claude:
 
 Claude starts and closes tasks as it works, and tells you when something is done.
 
-**Already have a plan or a task list?** `/project:init` finds it and moves it onto the plugin. A Trello, Jira or Linear export can be imported too: ask Claude.
+**Coming from Trello, Jira or Linear?** Ask Claude to import the export.
 
 **Working with [Crew](https://github.com/stefanocaronia/claude-crew)?** Crew gives your project a team of expert colleagues; with both, the colleagues take and do the backlog's tasks. Crew is optional.
 
