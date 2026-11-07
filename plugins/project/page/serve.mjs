@@ -5,7 +5,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { isMain, loadProject, notePath } from "../scripts/project.mjs";
+import { isMain, loadProject, notePath, portraitFile } from "../scripts/project.mjs";
 import { context, loadExtensions } from "../scripts/extensions.mjs";
 import { collect } from "./collect.mjs";
 import { readFaces, readOwner } from "../scripts/code.mjs";
@@ -76,8 +76,10 @@ export async function pageServer(from)
                 face?.file ? send(response, 200, "image/jpeg", readFileSync(face.file)) : send(response, 404, "text/plain", "no picture");
             } else if (url.pathname.startsWith("/portrait/")) {
                 const id = url.pathname.slice("/portrait/".length).replace(/[^a-z0-9-]/g, "");
-                const path = `${config.memory}/${id}/avatar-small.jpg`;
-                existsSync(path) ? send(response, 200, "image/jpeg", readFileSync(path)) : send(response, 404, "text/plain", "no portrait");
+                const portrait = id ? portraitFile(config, id) : null;
+                // A drawing opened by itself runs nothing: it is a picture, never a page of this server's.
+                const drawing = portrait?.type === "image/svg+xml" ? { "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'", "x-content-type-options": "nosniff" } : {};
+                portrait ? send(response, 200, portrait.type, readFileSync(portrait.path), drawing) : send(response, 404, "text/plain", "no portrait");
             } else if (url.pathname.startsWith("/extension/")) {
                 await extensionRoute(extensions, config, say, request, response, url);
             } else if (url.pathname === "/") {
@@ -313,8 +315,8 @@ function body(request)
 }
 
 /** An answer, never kept by the browser: the page always asks again. */
-function send(response, status, type, content)
+function send(response, status, type, content, headers = {})
 {
-    response.writeHead(status, { "content-type": type, "cache-control": "no-store" });
+    response.writeHead(status, { "content-type": type, "cache-control": "no-store", ...headers });
     response.end(content);
 }

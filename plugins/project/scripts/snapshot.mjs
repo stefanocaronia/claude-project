@@ -16,7 +16,7 @@ import { check } from "./check.mjs";
 import { readCode, readFaces, readFreePulls, readIssues, readLogin, readOwner } from "./code.mjs";
 import { syncStateFile, syncSummary } from "./issues.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
-import { colleagues, coordinatorOf, findRoot, git, isClosed, isMain, onPath, loadProject, openStates, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
+import { colleagues, coordinatorOf, findRoot, git, isClosed, isMain, onPath, loadProject, openStates, portraitFile, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
 
 // The most a portrait may weigh in the panel's drawing, which the desktop drops past about 100 KB: Crew's small ones are under 2 KB.
 const portraitLimit = 4096;
@@ -226,14 +226,15 @@ function releasesOf(config, tasks, goals)
     };
 }
 
-/** A colleague's small portrait, as Crew keeps it, inline for the panel; nothing when there is none or it is too heavy. */
+/** A colleague's portrait, as Crew keeps it, inline for the panel: the small picture, else the one Claude drew, which may weigh more;
+ * nothing when there is none or it is too heavy. */
 function portraitOf(config, id)
 {
-    const path = `${config.memory}/${id}/avatar-small.jpg`;
+    const portrait = portraitFile(config, id);
 
-    if (!existsSync(path) || statSync(path).size > portraitLimit) {
+    if (!portrait || statSync(portrait.path).size > (portrait.type === "image/jpeg" ? portraitLimit : portraitLimit * 4)) {
         return {};
     }
 
-    return { portrait: inline(path) };
+    return { portrait: `data:${portrait.type};base64,${readFileSync(portrait.path).toString("base64")}` };
 }

@@ -16,7 +16,7 @@ What changes for whoever uses Project, version by version. Plugins update in a n
 - `.claude/project.local.yaml` holds each person's own settings, never committed; the start of a session writes who you are there, `me:`, from gh.
 - A task says who started it where the project has more than one person; another's task in progress shows who, and is never marked stuck.
 - An issue written by a person of the project, by their login, is the project's own, as yours; their GitHub picture is on their tasks.
-- With Crew, the coordinator you hired draws Claude's tasks with their name and portrait, and takes tasks by their name.
+- With Crew, the coordinator you hired draws Claude's tasks with their name and portrait, and takes tasks by their name; a portrait Claude drew for a colleague, `avatar.svg`, is drawn as a picture would be.
 
 ## 0.15.0
 

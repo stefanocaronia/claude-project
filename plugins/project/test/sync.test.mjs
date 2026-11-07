@@ -235,6 +235,11 @@ test("the coordinator Crew hired is Claude in the backlog: by their name, drawn 
     const snapshot = JSON.parse(run("crewed", "snapshot.mjs", "--no-health"));
     assert.deepEqual(snapshot.colleagues.map((one) => one.id), ["giulia-tester"]);
     assert.deepEqual([snapshot.coordinator.id, snapshot.coordinator.name, snapshot.coordinator.fullName, snapshot.coordinator.color], ["marco-coordinator", "Marco", "Marco Rossi", "blue"]);
+    // A portrait Claude drew, where Crew had no picture made: drawn as the picture would be; the picture wins where both are.
+    put(crewed, ".claude/agent-memory/marco-coordinator/avatar.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 8 8\"><circle cx=\"4\" cy=\"4\" r=\"4\" fill=\"#36c\"/></svg>\n");
+    assert.match(JSON.parse(run("crewed", "snapshot.mjs", "--no-health")).coordinator.portrait, /^data:image\/svg\+xml;base64,/);
+    put(crewed, ".claude/agent-memory/marco-coordinator/avatar-small.jpg", "\xff\xd8\xff\xd9");
+    assert.match(JSON.parse(run("crewed", "snapshot.mjs", "--no-health")).coordinator.portrait, /^data:image\/jpeg;base64,/);
     // Without Crew's coordinator, Claude is Claude.
     put(crewed, ".claude/agents/marco-coordinator.md", "---\nname: marco-coordinator\ndescription: \"Marco Rossi, the team's coordinator.\"\n---\n");
     assert.equal(JSON.parse(run("crewed", "snapshot.mjs", "--no-health")).coordinator, null);

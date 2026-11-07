@@ -19,7 +19,7 @@ import { specsState } from "../scripts/specs.mjs";
 import { context, extensionChecks } from "../scripts/extensions.mjs";
 import { releaseState } from "../lib/release.mjs";
 import { readablePattern } from "../lib/words.mjs";
-import { colleagues, coordinatorOf, git, profileOf, projectName, read, readBacklog, readContracts, readReleases, readDecisions, showsReleases, projectRepos, readGoals, readHolds, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
+import { colleagues, coordinatorOf, git, portraitFile, profileOf, projectName, read, readBacklog, readContracts, readReleases, readDecisions, showsReleases, projectRepos, readGoals, readHolds, realPath, shown, taskLinks, today, todoFiles } from "../scripts/project.mjs";
 
 const openStates = ["doing", "todo", "postponed"];
 const lastDecisions = 8;
@@ -297,7 +297,7 @@ function readColleagues(config)
             color: profile.color,
             open: (todo.match(/^\s*- \[ \]/gm) ?? []).length,
             done: (todo.match(/^\s*- \[x\]/gm) ?? []).length,
-            hasPortrait: existsSync(`${config.memory}/${id}/avatar-small.jpg`),
+            hasPortrait: portraitFile(config, id) !== null,
         };
     });
 }
@@ -306,7 +306,7 @@ function readColleagues(config)
 function readCoordinator(config)
 {
     const coordinator = coordinatorOf(config);
-    return coordinator && { ...coordinator, hasPortrait: existsSync(`${config.memory}/${coordinator.id}/avatar-small.jpg`) };
+    return coordinator && { ...coordinator, hasPortrait: portraitFile(config, coordinator.id) !== null };
 }
 
 /** Every open task, by who holds it: the backlog's, by its assignee, and those of the colleagues' todos. */

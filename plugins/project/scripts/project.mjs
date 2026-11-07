@@ -270,6 +270,12 @@ export function profileOf(config, id, name)
     return { fullName: comma > 0 ? sentence.slice(0, comma) : name, role: comma > 0 ? sentence.slice(comma + 2) : "", color: /^color: (\w+)/m.exec(profile)?.[1] ?? "gray" };
 }
 
+/** A colleague's portrait, as Crew keeps it: the small picture, else the one Claude drew; { path, type }, null without one. */
+export function portraitFile(config, id)
+{
+    return [["avatar-small.jpg", "image/jpeg"], ["avatar.svg", "image/svg+xml"]].map(([name, type]) => ({ path: `${config.memory}/${id}/${name}`, type })).find((one) => existsSync(one.path)) ?? null;
+}
+
 /** The project's name: the configuration's, else the title of its README, else its folder's. */
 export function projectName(config)
 {
