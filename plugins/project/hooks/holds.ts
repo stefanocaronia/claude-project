@@ -5,7 +5,7 @@ import type { EngineInterface } from "claude-code";
 
 import type { Board, Hold } from "../types";
 
-import { changeBoard, projectRoot } from "./state.ts";
+import { changeBoard, projectRoot, readBoard } from "./state.ts";
 
 /** Who holds a task in a chat: the chat itself, or a colleague at work in it. */
 export type Holder = Omit<Hold, "session">;
@@ -44,6 +44,24 @@ export async function letGo($: EngineInterface, agentId: string): Promise<void>
 export async function holdNothing($: EngineInterface): Promise<void>
 {
     await $.fs.write(await holdFile($), JSON.stringify({ root: "", at: 0, tasks: {} }));
+}
+
+/** Whether this file is the project's work, not its docs or its configuration, and this chat holds no task in progress, itself or through a
+ *  colleague: work begun without its task started. */
+export async function worksUnheld($: EngineInterface, file: string): Promise<boolean>
+{
+    const { snapshot, holds, session } = await readBoard($);
+
+    if (!snapshot || !session || Object.values(holds).some((one) => one.session === session)) {
+        return false;
+    }
+
+    const root = `${(await projectRoot($)).toLowerCase()}/`;
+    const path = file.replace(/\\/g, "/").toLowerCase();
+    const backlog = snapshot.guard?.find((one) => one.script === "backlog")?.path.toLowerCase() ?? "";
+    const docs = backlog.includes("/") ? `${backlog.slice(0, backlog.lastIndexOf("/"))}/` : null;
+    const inside = path.startsWith(root) ? path.slice(root.length) : null;
+    return inside !== null && !inside.startsWith(".claude/") && !(docs && inside.startsWith(docs));
 }
 
 /** Every chat's holds for this project, the fresh ones, by task number, into the board: this chat's win over another's. */

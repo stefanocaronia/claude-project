@@ -7,6 +7,7 @@ What changes for whoever uses Project, version by version. Plugins update in a n
 - A new task always has a type; the panel and the page offer feature.
 - Tidying the backlog groups the tasks that are one piece of work into a large task with its parts.
 - `start` and `done` tell Claude about doubles, open waits, commits already citing the task and the tasks it frees; a commit that does a task reminds Claude to close it.
+- Changing the project's files with no task in progress in the chat reminds Claude to start the task, or add it.
 - The board's columns: To do, In progress, Done, Postponed.
 - Open pull requests that cite no task show in the panel and the page, to take into the backlog or close.
 - A comment can be edited or deleted; Claude's carry its name.

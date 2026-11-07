@@ -373,6 +373,24 @@ test("a commit of this chat that does a task still open is followed by a reminde
     expect((await $.tool.call({ tool: "Bash", command: "git status" } as never)).context).toBeUndefined();
 });
 
+test("the first file of the project a turn changes, holding no task, is followed by a reminder to start one; the docs, a second file or a task held are not", async ($, on) => {
+    const guard = [{ path: "docs/TASKS.md", script: "backlog", owned: true }];
+    world(on, [{ ...good, stdout: JSON.stringify({ ...snapshot, guard }) }]);
+    on("tool.call", () => ({ result: "ran" }) as never);
+    on("turn.start", (_, e) => ({ turnId: e.turnId }));
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    await $.turn.start({ text: "", turnId: "t1" } as never);
+    expect((await $.tool.call({ tool: "Edit", file_path: "/p/docs/PLAN.md" } as never)).context).toBeUndefined();
+    expect((await $.tool.call({ tool: "Write", file_path: "/elsewhere/notes.txt" } as never)).context).toBeUndefined();
+    expect((await $.tool.call({ tool: "Edit", file_path: "/p/src/map.ts" } as never)).context?.[0]).toMatch(/^Stai cambiando i file del progetto e questa chat non ha nessun compito in corso/);
+    expect((await $.tool.call({ tool: "Edit", file_path: "/p/src/dice.ts" } as never)).context).toBeUndefined();
+    // A colleague's edit is theirs; a new turn is told again, until this chat starts a task.
+    await $.turn.start({ text: "", turnId: "t2" } as never);
+    expect((await $.tool.call({ tool: "Edit", file_path: "/p/src/map.ts", agentId: "a1" } as never)).context).toBeUndefined();
+    await $.tool.call({ tool: "Bash", command: "node scripts/backlog.mjs start T-61" } as never);
+    expect((await $.tool.call({ tool: "Edit", file_path: "/p/src/map.ts" } as never)).context).toBeUndefined();
+});
+
 test("a grep, a cat or a Read of the backlog is refused with the command to use; a decision is read to be edited, not searched", async ($, on) => {
     const guard = [{ path: "docs/TASKS.md", script: "backlog", owned: true }, { path: "docs/DECISIONS.md", script: "decisions", owned: false }];
     world(on, [{ ...good, stdout: JSON.stringify({ ...snapshot, guard }) }]);

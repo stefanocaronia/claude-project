@@ -8,7 +8,7 @@ import type { Register } from "claude-code";
 import { citedTasks } from "../lib/backlog.mjs";
 import { guardCall } from "../lib/guard.mjs";
 import { sayer } from "../lib/messages.mjs";
-import { hold, holdNothing, letGo, thisChat } from "./holds.ts";
+import { hold, holdNothing, letGo, thisChat, worksUnheld } from "./holds.ts";
 import { drawPanel } from "./panel.tsx";
 import { committedOpen, refresh, watch } from "./project.ts";
 import { moveCited } from "./start.ts";
@@ -19,6 +19,16 @@ const command = "project-panel";
 // Whether this module has read the project since it was loaded: a reload of the plugins keeps the panel's state, not this, so the first
 // drawing after one reads the project again, as a new session would.
 let hasRead = false;
+// Whether this turn of the chat was told that it changes the project's files holding no task.
+let toldUnheld = false;
+
+/** The file a tool call writes: an Edit, a Write, a notebook's edit; none for any other. */
+function editedFile(e: object): string | null
+{
+    const call = e as { tool?: string; file_path?: unknown; notebook_path?: unknown };
+    const file = call.tool === "Edit" || call.tool === "Write" ? call.file_path : call.tool === "NotebookEdit" ? call.notebook_path : null;
+    return typeof file === "string" ? file : null;
+}
 
 export const register: Register = (on) => {
     on("session.start", async ($, e, next) => {
@@ -82,6 +92,16 @@ export const register: Register = (on) => {
             await refresh($, false).catch(() => undefined);
         }
 
+        // The first file of the project this chat changes in a turn, holding no task: Claude reads, after its result, to start the task
+        // the work is, or to add it. Once a turn: a quick fix needs none, and is not told again.
+        const edited = editedFile(e);
+
+        if (!e.agentId && !toldUnheld && edited && "result" in result && !result.isError && (await worksUnheld($, edited).catch(() => false))) {
+            toldUnheld = true;
+            const { snapshot } = await readBoard($);
+            return { ...result, context: [...(result.context ?? []), sayer(snapshot?.language ?? "en")("workUnheld")] };
+        }
+
         // A commit of this chat that does a task still open: Claude reads, after its result, to close it or say what is left.
         if (!e.agentId && "result" in result && result.result !== undefined && !result.isError && /\bgit\b[^|;&]*\bcommit\b/.test(line)) {
             const told = await committedOpen($).catch(() => "");
@@ -98,6 +118,7 @@ export const register: Register = (on) => {
     // colleague's turn, a subagent's, is not this chat's.
     on("turn.start", async ($, e, next) => {
         if (e.agentId === undefined) {
+            toldUnheld = false;
             await changeBoard($, (old) => ({ ...old, working: true })).catch(() => undefined);
         }
 
