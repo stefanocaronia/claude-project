@@ -684,6 +684,15 @@ test("the owner's GitHub picture on their tasks and beside every decision; witho
     await ui.unmount();
 });
 
+test("another person's GitHub picture, by the login the configuration gives them, on their tasks and beside every decision", async ($, on) => {
+    world(on, [{ ...good, stdout: JSON.stringify({ ...snapshot, owner: null, faces: { Stefano: "data:image/jpeg;base64,CCCC" } }) }]);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    // T-70, Stefano's, in its row, and the two points to decide: his picture, as the owner's would be.
+    expect((await ui.findAll({ type: "Svg" })).filter((one) => (one.props as { alt?: string }).alt === "Stefano").length).toBe(3);
+    await ui.unmount();
+});
+
 test("the coordinator Crew hired draws Claude's tasks with their portrait; a task another person started shows who, not stuck", async ($, on) => {
     const coordinator = { id: "marco-coordinator", name: "Marco", fullName: "Marco Rossi", role: "coordinator", color: "blue", portrait: "data:image/jpeg;base64,BBBB" };
     const tasks = snapshot.tasks.map((task) => (task.id === 62 ? { ...task, to: "Stefano", colleague: null, stale: false, startedBy: "Ann", startedByOther: true } : task));

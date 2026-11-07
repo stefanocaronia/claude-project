@@ -156,7 +156,7 @@ function effortMeter(task)
 }
 
 /** Who holds a task: Claude's critter, or the coordinator Crew hired in its place; a colleague's portrait or initials on their color, a
- * person's initials in gray. */
+ * person's GitHub picture or initials in gray. */
 function face(task)
 {
     const person = task.colleague ? data.colleagues.find((one) => one.id === task.colleague) : task.to === "Claude" ? data.coordinator ?? null : null;
@@ -174,6 +174,13 @@ function face(task)
     // The owner's GitHub picture, on their tasks and on every decision.
     if (data.owner?.href && task.to === data.owner.name) {
         return `<img class="face" src="${attribute(data.owner.href)}" alt="${attribute(data.owner.fullName)}" data-tip="${attribute(`<b>${escape(data.owner.fullName)}</b>`)}">`;
+    }
+
+    // Another person's GitHub picture, where the configuration gives their login.
+    const picture = !person ? (data.faces ?? []).find((one) => one.name === task.to) : null;
+
+    if (picture) {
+        return `<img class="face" src="${attribute(picture.href)}" alt="${attribute(name)}" ${tip}>`;
     }
 
     const initials = String(name).split(/\s+/).map((part) => part[0] ?? "").join("").slice(0, 2).toUpperCase();

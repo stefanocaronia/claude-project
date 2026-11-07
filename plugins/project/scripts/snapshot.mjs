@@ -13,7 +13,7 @@ import { releaseState } from "../lib/release.mjs";
 import { gitHubRepo } from "./github.mjs";
 import { specsState } from "./specs.mjs";
 import { check } from "./check.mjs";
-import { readCode, readFreePulls, readIssues, readLogin, readOwner } from "./code.mjs";
+import { readCode, readFaces, readFreePulls, readIssues, readLogin, readOwner } from "./code.mjs";
 import { syncStateFile, syncSummary } from "./issues.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
 import { colleagues, coordinatorOf, findRoot, git, isClosed, isMain, onPath, loadProject, openStates, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
@@ -69,6 +69,8 @@ export async function snapshot(config, say, withHealth = true)
         coordinator: coordinator && { ...coordinator, ...portraitOf(config, coordinator.id) },
         // The person this machine's gh is signed in as, with their GitHub picture inline: on their tasks and on every decision.
         owner: ownerOf(await readOwner(config)),
+        // The other people's GitHub pictures inline, by name, where the configuration gives their login: on their tasks (D-18).
+        faces: facesOf(await readFaces(config)),
         // Whether git and gh are here, and the project's repo on GitHub: the panel offers the github skill while one is missing.
         github: { tools: onPath("git") && onPath("gh"), repo: gitHubRepo(git(config.root, ["remote", "get-url", "origin"]).trim()) },
         // Each with its links: what it waits for, still open, and the chain to do first; what points to it; its note.
@@ -165,6 +167,12 @@ function ownerOf(owner)
 
     const portrait = owner.file && statSync(owner.file).size <= portraitLimit * 4 ? inline(owner.file) : undefined;
     return { name: owner.name, fullName: owner.fullName, ...(portrait ? { portrait } : {}) };
+}
+
+/** The people's GitHub pictures inline, by name, those light enough. */
+function facesOf(faces)
+{
+    return Object.fromEntries(faces.filter((face) => face.file && statSync(face.file).size <= portraitLimit * 4).map((face) => [face.name, inline(face.file)]));
 }
 
 /** A JPEG picture inline, as the panel draws it. */

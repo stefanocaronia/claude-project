@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { isMain, loadProject, notePath } from "../scripts/project.mjs";
 import { context, loadExtensions } from "../scripts/extensions.mjs";
 import { collect } from "./collect.mjs";
-import { readOwner } from "../scripts/code.mjs";
+import { readFaces, readOwner } from "../scripts/code.mjs";
 import { lineTitle } from "../lib/issues.mjs";
 import { apply, isRunning, propose, runFix, tidyState } from "./tidy.mjs";
 
@@ -70,6 +70,10 @@ export async function pageServer(from)
                 // The owner's GitHub picture, as the page's data names it.
                 const owner = await readOwner(config);
                 owner?.file ? send(response, 200, "image/jpeg", readFileSync(owner.file)) : send(response, 404, "text/plain", "no picture");
+            } else if (/^\/face\/[\w-]+$/.test(url.pathname)) {
+                // A person's GitHub picture, by the login the configuration gives them: never another file.
+                const face = (await readFaces(config)).find((one) => one.login === url.pathname.slice("/face/".length));
+                face?.file ? send(response, 200, "image/jpeg", readFileSync(face.file)) : send(response, 404, "text/plain", "no picture");
             } else if (url.pathname.startsWith("/portrait/")) {
                 const id = url.pathname.slice("/portrait/".length).replace(/[^a-z0-9-]/g, "");
                 const path = `${config.memory}/${id}/avatar-small.jpg`;

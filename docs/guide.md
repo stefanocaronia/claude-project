@@ -104,7 +104,7 @@ Docs a repo already keeps move there with their history (`init.mjs private`). A 
 
 Several people can work on one project, each with their own Claude, on the same GitHub repo and the same private docs.
 
-1. **Name them**: `people: [Claude, Ann, Bob]`, and their GitHub logins, `github: { logins: { Ann: ann-gh, Bob: bob-gh } }`. The start of a session names the repo's collaborators who are none of the people yet, for Claude to offer.
+1. **Name them**: `people: [Claude, Ann, Bob]`, and their GitHub logins, `github: { logins: { Ann: ann-gh, Bob: bob-gh } }`: their issues are the project's own, and their GitHub pictures are on their tasks. The start of a session names the repo's collaborators who are none of the people yet, for Claude to offer.
 2. **Say who you are**: the start of a session writes `me: Ann` in `.claude/project.local.yaml`, from your gh login or your first name on GitHub; if it can't tell, Claude asks you.
 3. **Keep the docs in sync**: `sync: auto`, with the docs in a private repo of their own, one remote for all.
 

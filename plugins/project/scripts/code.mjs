@@ -140,17 +140,49 @@ export async function readOwner(config)
     // The one working here, as their own settings say; else the person the user of gh is.
     const name = config.me && config.people.includes(config.me) ? config.me : personOfUser(config);
 
-    if (!name || !user.avatar) {
+    if (!name || !user?.avatar) {
         return null;
     }
 
-    const file = join(tempFolder, `avatar-${String(user.login).replace(/[^\w-]/g, "_")}.jpg`);
+    return { name, fullName: user.name || name, file: await keepPicture(user.login, user.avatar) };
+}
+
+/** The project's people with their login in the configuration, `github: { logins }`, each with their GitHub picture kept small in the
+ * temporary folder, as the owner's: [{ name, login, file }], file null until it is downloaded, or without gh. */
+export async function readFaces(config)
+{
+    const people = config.people.slice(1);
+    const named = Object.entries(config.github?.logins ?? {}).flatMap(([name, login]) => {
+        const person = people.find((one) => one.toLowerCase() === String(name).toLowerCase());
+        return person && loginPattern.test(String(login)) ? [{ name: person, login: String(login) }] : [];
+    });
+    return Promise.all(named.map(async (one) => ({ ...one, file: await keepPicture(one.login, () => avatarOf(config, one.login)) })));
+}
+
+// A GitHub login: letters, digits and single dashes, never a path.
+const loginPattern = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+
+/** Where a login's picture is on GitHub, as gh says it; null without gh, or anywhere but GitHub's pictures. */
+function avatarOf(config, login)
+{
+    const url = ghCached(config, `avatar-${login}`, ["api", `users/${login}`, "--jq", ".avatar_url"]).trim();
+    return /^https:\/\/avatars\.githubusercontent\.com\//.test(url) ? url : null;
+}
+
+/** A login's GitHub picture, small, kept in the temporary folder: downloaded once, from the address given or the one `where()` finds;
+ * the file, null until it is there. */
+async function keepPicture(login, where)
+{
+    const file = join(tempFolder, `avatar-${String(login).replace(/[^\w-]/g, "_")}.jpg`);
 
     if (!existsSync(file)) {
-        try {
-            const answer = await fetch(`${user.avatar}${user.avatar.includes("?") ? "&" : "?"}s=64`, { signal: AbortSignal.timeout(5000) });
+        const url = typeof where === "function" ? where() : where;
 
-            if (answer.ok) {
+        try {
+            const answer = url ? await fetch(`${url}${url.includes("?") ? "&" : "?"}s=64`, { signal: AbortSignal.timeout(5000) }) : null;
+
+            if (answer?.ok) {
+                mkdirSync(tempFolder, { recursive: true });
                 writeFileSync(file, Buffer.from(await answer.arrayBuffer()));
             }
         } catch {
@@ -158,7 +190,7 @@ export async function readOwner(config)
         }
     }
 
-    return { name, fullName: user.name || name, file: existsSync(file) ? file : null };
+    return existsSync(file) ? file : null;
 }
 
 /** The user gh is signed in as, { name, login, avatar }, from a reading kept a few minutes; null without gh. */

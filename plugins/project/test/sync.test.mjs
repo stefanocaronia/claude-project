@@ -200,6 +200,28 @@ test("the start of a session says who works here, written from gh and kept out o
     assert.equal(JSON.parse(local("backlog.mjs", "list", "--json")).find((task) => task.id === 9).startedBy, "Ann");
     writeFileSync(join(team, ".claude", "project.local.yaml"), "me: ann\n");
     assert.deepEqual([tasks()[9].startedByOther, tasks()[9].stale], [false, true]);
+
+    // Ann's GitHub picture, by the login the configuration gives her, on her tasks: asked of gh, and none while it has none; once
+    // downloaded, inline in the panel's snapshot.
+    const faces = () => JSON.parse(local("snapshot.mjs", "--no-health")).faces;
+    assert.deepEqual(faces(), {});
+    assert.ok(JSON.parse(readFileSync(join(team, "gh.json"), "utf8")).calls.includes("api users/asmith --jq .avatar_url"));
+    const picture = join(tmpdir(), "claude-project", "avatar-asmith.jpg");
+    const had = existsSync(picture);
+
+    if (!had) {
+        mkdirSync(dirname(picture), { recursive: true });
+        writeFileSync(picture, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    }
+
+    try {
+        assert.deepEqual(Object.keys(faces()), ["Ann"]);
+        assert.match(faces().Ann, /^data:image\/jpeg;base64,/);
+    } finally {
+        if (!had) {
+            rmSync(picture);
+        }
+    }
 });
 
 test("the coordinator Crew hired is Claude in the backlog: by their name, drawn with their portrait, never a colleague to hand a task to", () => {

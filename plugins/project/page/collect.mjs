@@ -13,7 +13,7 @@ import { codeView, freeIssues, issueOf, ownLogins } from "../lib/code.mjs";
 import { readsAsInstruction } from "../lib/issues.mjs";
 import { decisionLinks } from "../lib/links.mjs";
 import { check } from "../scripts/check.mjs";
-import { readCode, readFreePulls, readIssues, readLogin, readOwner } from "../scripts/code.mjs";
+import { readCode, readFaces, readFreePulls, readIssues, readLogin, readOwner } from "../scripts/code.mjs";
 import { syncSummary } from "../scripts/issues.mjs";
 import { specsState } from "../scripts/specs.mjs";
 import { context, extensionChecks } from "../scripts/extensions.mjs";
@@ -62,6 +62,8 @@ export async function collect(config, say, extensions = [])
         // The coordinator Crew hired, who is Claude here: Claude's tasks drawn with their name and portrait (D-18).
         coordinator: readCoordinator(config),
         owner: await ownerOf(config),
+        // The other people's GitHub pictures, by name, where the configuration gives their login (D-18).
+        faces: (await readFaces(config)).filter((face) => face.file).map((face) => ({ name: face.name, href: `/face/${face.login}` })),
         tasks: readTasks(config),
         board: readBoard(config, code),
         releases: readReleasesData(config),

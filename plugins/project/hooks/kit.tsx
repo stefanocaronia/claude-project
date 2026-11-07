@@ -188,7 +188,8 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
     // what it holds, however many lines that has.
     const coordinator = snapshot.coordinator ?? null;
     const face = (name: string, size: number) => {
-        const member = (name === "Claude" ? coordinator : null) ?? byName.get(name) ?? (owner && name === owner.name ? { id: name, name, fullName: owner.fullName, role: "", color: "gray", portrait: owner.portrait } : undefined);
+        const picture = snapshot.faces?.[name];
+        const member = (name === "Claude" ? coordinator : null) ?? byName.get(name) ?? (owner && name === owner.name ? { id: name, name, fullName: owner.fullName, role: "", color: "gray", portrait: owner.portrait } : undefined) ?? (picture ? { id: name, name, fullName: name, role: "", color: "gray", portrait: picture } : undefined);
 
         if (!Svg) {
             return <Text key={`face-${name}`} color={member?.color} dimColor={!member}>●</Text>;

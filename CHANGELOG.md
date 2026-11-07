@@ -15,7 +15,7 @@ What changes for whoever uses Project, version by version. Plugins update in a n
 - Several people on one project, each with their own Claude: `sync: auto` pulls the shared private docs before each change and pushes after it; two tasks or decisions given one number offline are renumbered, and the same task changed by both merges field by field.
 - `.claude/project.local.yaml` holds each person's own settings, never committed; the start of a session writes who you are there, `me:`, from gh.
 - A task says who started it where the project has more than one person; another's task in progress shows who, and is never marked stuck.
-- An issue written by a person of the project, by their login, is the project's own, as yours.
+- An issue written by a person of the project, by their login, is the project's own, as yours; their GitHub picture is on their tasks.
 - With Crew, the coordinator you hired draws Claude's tasks with their name and portrait, and takes tasks by their name.
 
 ## 0.15.0

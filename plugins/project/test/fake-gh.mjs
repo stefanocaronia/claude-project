@@ -22,6 +22,8 @@ if (state.offline) {
 
 if (noun === "api" && verb === "user") {
     console.log(option("--jq") === ".login" ? state.me : JSON.stringify({ name: state.name ?? state.me, login: state.me, avatar: null }));
+} else if (noun === "api" && verb.startsWith("users/")) {
+    console.log(state.avatars?.[verb.slice("users/".length)] ?? "null");
 } else if (noun === "api" && verb.endsWith("/collaborators")) {
     console.log(JSON.stringify(state.collaborators));
 } else if (noun === "pr" && verb === "list") {

@@ -119,6 +119,8 @@ export type Snapshot = {
     coordinator?: Member | null;
     /** The person this machine's gh is signed in as, with their GitHub picture: on their tasks and on every decision; null without gh. */
     owner?: { name: string; fullName: string; portrait?: string } | null;
+    /** The other people's GitHub pictures inline, by name, where the configuration gives their login (D-18). */
+    faces?: Record<string, string>;
     tasks: Task[];
     plan: { updated: string | null; goals: Goal[]; phases?: Phase[] };
     /** The points still to decide; the decisions taken are the page's. */
