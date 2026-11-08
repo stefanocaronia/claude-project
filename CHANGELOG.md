@@ -2,7 +2,7 @@
 
 What changes for whoever uses Project, version by version. Plugins update in a new chat: `/plugin`, Marketplaces, claude-project, Update marketplace, or turn its auto-update on there.
 
-## Unreleased
+## 0.16.0
 
 - A new task always has a type; the panel and the page offer feature.
 - Tidying the backlog groups the tasks that are one piece of work into a large task with its parts.
