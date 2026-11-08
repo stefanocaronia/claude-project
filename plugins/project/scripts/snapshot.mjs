@@ -17,6 +17,7 @@ import { readCode, readFaces, readFreePulls, readIssues, readLogin, readOwner } 
 import { syncStateFile, syncSummary } from "./issues.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
 import { colleagues, coordinatorOf, findRoot, git, isClosed, isMain, onPath, loadProject, openStates, portraitFile, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
+import { nameKey } from "../lib/crew.mjs";
 
 // The most a portrait may weigh in the panel's drawing, which the desktop drops past about 100 KB: Crew's small ones are under 2 KB.
 const portraitLimit = 4096;
@@ -25,9 +26,9 @@ const portraitLimit = 4096;
 export async function snapshot(config, say, withHealth = true)
 {
     const { tasks, unread } = readBacklog(config);
-    const team = colleagues(config).map((colleague) => ({ ...colleague, ...profileOf(config, colleague.id, colleague.name), ...portraitOf(config, colleague.id) }));
+    const team = colleagues(config).map((colleague) => ({ ...colleague, ...profileOf(config, colleague.id), ...portraitOf(config, colleague.id) }));
     const coordinator = coordinatorOf(config);
-    const idOf = new Map(team.map((colleague) => [colleague.name, colleague.id]));
+    const idOf = new Map(team.map((colleague) => [nameKey(colleague.name), colleague.id]));
     const goals = readGoals(config);
     // A task merged into another is neither done nor open: it counts nowhere, as the page counts.
     const counted = tasks.filter((task) => task.done || openStates.includes(task.state));
@@ -79,7 +80,7 @@ export async function snapshot(config, say, withHealth = true)
             ...links.get(task.id),
             text: plainMarkdown(task.text),
             effortKey: effortKey(task.effort, config.words) ?? "none",
-            colleague: idOf.get(task.to) ?? null,
+            colleague: idOf.get(nameKey(task.to)) ?? null,
             noteHref: links.get(task.id).noteHasBody ? `${page}/note/${task.id}` : null,
             ...codeView(code.get(task.id)),
             issueInfo: issueOf(issues, task, ownLogins(config, login)),

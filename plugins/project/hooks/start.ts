@@ -5,6 +5,7 @@ import type { EngineInterface } from "claude-code";
 import type { Member, Snapshot, Task } from "../types";
 
 import { citedTasks } from "../lib/backlog.mjs";
+import { nameKey } from "../lib/crew.mjs";
 import { sayer } from "../lib/messages.mjs";
 import { hold, thisChat } from "./holds.ts";
 import { backlog } from "./project.ts";
@@ -77,7 +78,7 @@ export async function moveCited($: EngineInterface, e: { prompt: string; subagen
     }
 
     const cited = new Set(citedTasks(e.prompt, snapshot.prefixes.task));
-    const own = snapshot.tasks.filter((task) => cited.has(task.id) && task.to === member.name);
+    const own = snapshot.tasks.filter((task) => cited.has(task.id) && (task.colleague === member.id || nameKey(task.to) === nameKey(member.name)));
     const ids = own.filter((task) => task.state !== "doing").map((task) => idOf(snapshot, task));
 
     if (ids.length > 0) {

@@ -4,8 +4,8 @@
 
 // The page's words, in its language once the data says it (words.js).
 let words = pageWords.en;
-// The colors a colleague's profile names, as the page draws them.
-const colors = { blue: "#3987e5", red: "#e34948", green: "#1baf7a", yellow: "#eda100", purple: "#6250d6", cyan: "#0fa3b1", orange: "#eb6834", pink: "#e87ba4", gray: "#898781" };
+// The colors a colleague's profile names, as Crew draws them too (lib/crew.mjs): the data gives each colleague's already as a hex.
+const colors = { red: "#C0453A", blue: "#3F7CC4", green: "#4E9A6B", yellow: "#C9A227", purple: "#8A63C9", orange: "#D9773A", pink: "#D0679B", cyan: "#2FA3B5", gray: "#888780" };
 // The texts opened by hand, by their button's id: a task's on the board or in the list, a decision, a proposal.
 const expanded = new Set();
 // What a screen reader is told after a quick run of changes, once it ends.

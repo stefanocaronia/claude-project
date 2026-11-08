@@ -18,8 +18,10 @@ const archiveAskFor = 4000;
 
 export function taskDetails($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Input, Select, hasForms, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, iconButton, dueWords, linkedText, face, decider } = p;
+    const { Box, Text, Button, Input, Select, hasForms, isDesktop, view, snapshot, words, prefix, idOf, partsOf, change, chip, iconButton, dueWords, linkedText, face, decider, holderName } = p;
     const choices = (values: string[]) => values.map((value) => ({ value, label: value }));
+    // Who may hold a task, Claude by the coordinator's name where Crew hired one (D-18).
+    const holderChoices = (values: string[]) => values.map((value) => ({ value, label: holderName(value) }));
     const refColor = (id: string) => (id.startsWith(`${snapshot.prefixes.decision}-`) ? decisionColor : id.startsWith(`${prefix}-`) ? taskColor : undefined);
     // A part drawn under its large task does not name it again.
     const facts = (task: Task, isPart: boolean) => {
@@ -128,7 +130,7 @@ export function taskDetails($: EngineInterface, p: Panel)
             <Input key={`edit-${task.id}`} value={task.text} rows={2} autoFocus submitLabel={saveMark} onSubmit={saveText} />,
             <Box key={`edit-fields-${task.id}`} flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={1}>
                 <Select key={`edit-goal-${task.id}`} label={words("fieldGoal")} value={task.goal} options={choices(goals)} onSelect={set("goal")} />
-                <Select key={`edit-to-${task.id}`} label={words("fieldTo")} value={task.to} options={choices(holders)} onSelect={set("to")} />
+                <Select key={`edit-to-${task.id}`} label={words("fieldTo")} value={task.to} options={holderChoices(holders)} onSelect={set("to")} />
                 {Object.entries(snapshot.fields ?? {}).map(([field, own]) => (own.values
                     ? <Select key={`edit-field-${field}-${task.id}`} label={own.name} value={task.fields?.[field] ?? ""} options={[noChoice, ...choices(own.values)]} onSelect={set(field)} />
                     : <Input key={`edit-field-${field}-${task.id}`} label={own.name} value={task.fields?.[field] ?? ""} submitLabel={saveMark} onSubmit={(value) => set(field)(value.trim())} />))}

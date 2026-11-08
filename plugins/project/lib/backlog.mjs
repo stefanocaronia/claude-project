@@ -1,6 +1,7 @@
 // The backlog's lines: `- T-12 · P2 · medium · Matteo · 2026-10-29 · <goal> · text · started 2026-10-29 · done 2026-10-30`, one task a
 // line under the heading of its state; where the project has more than one person, who started it after the day, `started 2026-10-29 by
 // Ann` (D-18). Pure: the text in, the text out, in the project's words.
+import { nameKey } from "./crew.mjs";
 import { badLinks, joinLinks, splitLinks } from "./links.mjs";
 import { escapeRegex, plain } from "./text.mjs";
 import { effortWord, priorityKeys, readablePattern, stateKeys, stateOfHeading } from "./words.mjs";
@@ -167,7 +168,10 @@ export function taskErrors(task, { words, people, goals, types = Object.keys(wor
         errors.push(say("badEffort", { value: task.effort, list: efforts.join(", ") }));
     }
 
-    if (!people.includes(task.to)) {
+    // Who may hold or create a task, whatever the case and accents of the name (Nicolo is Nicolò).
+    const isPerson = (name) => people.some((person) => nameKey(person) === nameKey(name));
+
+    if (!isPerson(task.to)) {
         errors.push(say("badAssignee", { value: task.to, list: people.join(", ") }));
     }
 
@@ -203,7 +207,7 @@ export function taskErrors(task, { words, people, goals, types = Object.keys(wor
         errors.push(say("inItself", { id: `${prefix}-${task.id}` }));
     }
 
-    if (task.by && !people.includes(task.by)) {
+    if (task.by && !isPerson(task.by)) {
         errors.push(say("unknownCreator", { value: task.by, list: people.join(", ") }));
     }
 

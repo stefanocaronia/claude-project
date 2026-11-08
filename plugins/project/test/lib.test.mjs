@@ -10,6 +10,7 @@ import { firstName, formatTodo, parseTodo } from "../lib/todos.mjs";
 import { wordsOf } from "../lib/words.mjs";
 import { betterDescription, firstParagraph } from "../lib/frontmatter.mjs";
 import { linksIn } from "../lib/text.mjs";
+import { colorOf, nameKey, profileFrom } from "../lib/crew.mjs";
 import { hasBody, parseComments, withComment } from "../lib/notes.mjs";
 
 const it = wordsOf("it");
@@ -199,6 +200,19 @@ test("a todo line of Crew reads and writes back, and an agent id gives a first n
     assert.equal(formatTodo({ ...parseTodo(line), done: true }), "  - [x] 2026-10-29 · see T-12");
     assert.equal(parseTodo("- plain"), null);
     assert.equal(firstName("matteo-conti"), "Matteo");
+});
+
+test("a profile reads as Crew reads it: name, full name and role from the heading, the color from Crew's table or a hex", () => {
+    const profile = "---\r\nname: nicolo-ferri\r\ndescription: \"Nicolo, a designer. Edited by hand.\"\r\ncolor: blue\r\n---\r\n\r\n# Nicolò Ferri, game designer, rules\r\n\r\n## How you work\r\n";
+    assert.deepEqual(profileFrom("nicolo-ferri", profile), { name: "Nicolò", fullName: "Nicolò Ferri", role: "game designer, rules", color: "#3F7CC4" });
+    assert.deepEqual(profileFrom("claude-coordinator", "---\nname: claude-coordinator\ncoordinator: true\ncolor: \"#aabbcc\"\n---\n# Claude, coordinator\n"), { name: "Claude", fullName: "Claude", role: "coordinator", color: "#aabbcc" });
+    // Without a heading, the id's first part; a color Crew does not know, gray.
+    assert.deepEqual(profileFrom("giulia-tester", "---\nname: giulia-tester\ncolor: teal\n---\nGiulia.\n"), { name: "Giulia", fullName: "Giulia", role: "", color: "#888780" });
+    assert.equal(profileFrom("sara-rossi", "").color, "#888780");
+    assert.equal(colorOf("Purple"), "#8A63C9");
+    // One person whatever the case and accents.
+    assert.equal(nameKey("Nicolò"), nameKey("nicolo"));
+    assert.notEqual(nameKey("Nicola"), nameKey("Nicolò"));
 });
 
 test("the configuration fills the defaults, resolves the paths and takes the language's words with overrides", () => {

@@ -2,6 +2,12 @@
 
 What changes for whoever uses Project, version by version. Plugins update in a new chat: `/plugin`, Marketplaces, claude-project, Update marketplace, or turn its auto-update on there.
 
+## 0.16.1
+
+- Claude and Crew's coordinator are one person everywhere: Claude's tasks show the coordinator's name, color and portrait, and Claude's critter where they have no portrait, never initials. The coordinator's todo counts as Claude's on the page.
+- A colleague is read as Crew reads them: name, full name and role from their profile's heading, the colors of Crew's panel, a hex too. A name is one person whatever its case and accents: a task given to Nicolo is Nicolò's.
+- The coordinator without a role in their heading is «your assistant», as Claude is.
+
 ## 0.16.0
 
 - A new task always has a type; the panel and the page offer feature.

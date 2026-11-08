@@ -17,7 +17,8 @@ import { decisionLinks, dependencies, partsOf, seenFrom, todoLinks } from "../li
 import { dueOf, isStale } from "../lib/schedule.mjs";
 import { compareVersions, messageSummary, parseRelease } from "../lib/release.mjs";
 import { contractState, contractValue } from "../lib/contracts.mjs";
-import { firstName, parseTodo } from "../lib/todos.mjs";
+import { parseTodo } from "../lib/todos.mjs";
+import { nameKey, profileFrom } from "../lib/crew.mjs";
 import { hasBody, parseComments } from "../lib/notes.mjs";
 
 // How long a change waits for the backlog's lock, and the age past which a lock left behind is taken over.
@@ -225,26 +226,32 @@ export function specCitations(config)
     });
 }
 
-/** The colleagues of Crew: each agent of the agents folder, by id and first name; the coordinator apart (coordinatorOf). */
+/** The colleagues of Crew: each agent of the agents folder, by id and first name, their profile's; the coordinator apart (coordinatorOf). */
 export function colleagues(config)
 {
-    return agentIds(config).filter((id) => !isCoordinator(config, id)).map((id) => ({ id, name: firstName(id) }));
+    return agentIds(config).filter((id) => !isCoordinator(config, id)).map((id) => ({ id, name: profileOf(config, id).name }));
 }
 
 /** The coordinator Crew hired for the project, `coordinator: true` in their profile's frontmatter: Claude in the backlog, drawn with
- * their name and portrait, never a colleague a task is handed to (D-18). { id, name, fullName, role, color }; null without one. */
+ * their name, color and portrait, never a colleague a task is handed to (D-18). { id, name, fullName, role, color }; null without one. */
 export function coordinatorOf(config)
 {
     const id = agentIds(config).find((one) => isCoordinator(config, one));
-    return id ? { id, name: firstName(id), ...profileOf(config, id, firstName(id)) } : null;
+    return id ? { id, ...profileOf(config, id) } : null;
 }
 
-/** A name as the backlog writes it: the coordinator's, by their first or full name or id, is Claude's, the first of the people. */
+/** A name as the backlog writes it: the coordinator's, by their first or full name or id, is Claude's, the first of the people; one of
+ * who may hold a task, whatever its case and accents, as the project writes it (Nicolo is Nicolò). */
 export function backlogName(config, name)
 {
     const coordinator = coordinatorOf(config);
-    const given = String(name).trim().toLowerCase();
-    return coordinator && [coordinator.name, coordinator.fullName, coordinator.id].some((one) => one.toLowerCase() === given) ? config.people[0] : name;
+    const given = nameKey(name);
+
+    if (coordinator && [coordinator.name, coordinator.fullName, coordinator.id].some((one) => nameKey(one) === given)) {
+        return config.people[0];
+    }
+
+    return assignees(config).find((one) => nameKey(one) === given) ?? name;
 }
 
 /** The ids of the agents folder's profiles. */
@@ -260,14 +267,10 @@ function isCoordinator(config, id)
     return /^coordinator:\s*true\s*$/m.test(frontmatter);
 }
 
-/** A colleague's full name, role and color, from their profile's frontmatter, as Crew writes it. */
-export function profileOf(config, id, name)
+/** A colleague's or the coordinator's name, full name, role and color, from their profile as Crew reads it too (lib/crew.mjs). */
+export function profileOf(config, id)
 {
-    const profile = read(`${config.agents}/${id}.md`);
-    const description = /^description: "?(.*?)"?$/m.exec(profile)?.[1] ?? "";
-    const sentence = description.split(". ")[0];
-    const comma = sentence.indexOf(", ");
-    return { fullName: comma > 0 ? sentence.slice(0, comma) : name, role: comma > 0 ? sentence.slice(comma + 2) : "", color: /^color: (\w+)/m.exec(profile)?.[1] ?? "gray" };
+    return profileFrom(id, read(`${config.agents}/${id}.md`));
 }
 
 /** A colleague's portrait, as Crew keeps it: the small picture, else the one Claude drew; { path, type }, null without one. */
@@ -294,11 +297,13 @@ export function assignees(config)
     return [...new Set([...config.people, ...colleagues(config).map((colleague) => colleague.name)])];
 }
 
-/** The colleagues' todo files that exist, by the id of their memory folder. */
+/** The colleagues' todo files that exist, by the id of their memory folder, each with whose it is: the coordinator's is Claude's, the
+ * first of the people (D-18). */
 export function todoFiles(config)
 {
     const ids = existsSync(config.memory) ? readdirSync(config.memory) : [];
-    return ids.map((id) => ({ id, name: firstName(id), file: `${config.memory}/${id}/todo.md` })).filter((one) => existsSync(one.file));
+    const coordinator = coordinatorOf(config)?.id;
+    return ids.map((id) => ({ id, name: id === coordinator ? config.people[0] : profileOf(config, id).name, file: `${config.memory}/${id}/todo.md` })).filter((one) => existsSync(one.file));
 }
 
 /** Every task line of the colleagues' todos with its id and what it waits for: { colleague, file, line, done, text, id, after }. */

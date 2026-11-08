@@ -228,6 +228,8 @@ const pageWords = {
         crewHint: "The open tasks in each one's todo; Crew wants 15 at most.",
         crewOpen: (count) => (count === 1 ? "1 open task" : `${count} open tasks`),
         crewTip: (open, done) => `${open} open, ${done} ticked`,
+        // Claude's role, and the coordinator's where their heading gives none, as Crew says it.
+        claudeRole: "Your assistant",
 
         tidyTitle: "Cleanup",
         tidyHint: "The mechanical part is done here, at once and without AI. The proposals are prepared by Claude Code with the plugin's tidy skill and your login; only the ones you tick are applied.",
@@ -519,6 +521,8 @@ const pageWords = {
         crewHint: "I compiti aperti nel todo di ciascuno; Crew ne vuole al più 15.",
         crewOpen: (count) => (count === 1 ? "1 compito aperto" : `${count} compiti aperti`),
         crewTip: (open, done) => `${open} aperti, ${done} spuntati`,
+        // Claude's role, and the coordinator's where their heading gives none, as Crew says it.
+        claudeRole: "Il tuo assistente",
 
         tidyTitle: "Riordino",
         tidyHint: "Il meccanico si fa qui, subito e senza AI. Le proposte le prepara Claude Code con la skill tidy del plugin e il tuo login; si applicano solo quelle che spunti.",

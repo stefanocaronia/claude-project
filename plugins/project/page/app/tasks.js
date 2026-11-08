@@ -9,14 +9,13 @@ const nextPriority = { P1: "P2", P2: "P3", P3: "P1" };
 const priorityRank = { P1: 1, P2: 2, P3: 3 };
 const priorityOrder = ["P1", "P2", "P3", "none"];
 const priorityColors = { P1: "#184f95", P2: "#3987e5", P3: "#9ec5f4", none: "var(--never)" };
-// Crew's marks: a priority as an issue tracker draws it, the effort as four bars, a colleague's color for their initials, Claude's critter.
+// Crew's marks: a priority as an issue tracker draws it, the effort as four bars, Claude's critter.
 const priorityMarks = {
     P1: `<path d="M3.5 7.5L7 4l3.5 3.5M3.5 11L7 7.5l3.5 3.5" stroke="#E5493A"/>`,
     P2: `<path d="M3 5.5h8M3 8.5h8" stroke="#E2852B"/>`,
     P3: `<path d="M3.5 5.5L7 9l3.5-3.5" stroke="#4C8FE0"/>`,
 };
 const effortBars = { low: 1, medium: 2, high: 3, xhigh: 4, max: 4 };
-const tints = { red: "#b42318", blue: "#1d4ed8", green: "#15803d", yellow: "#8a6100", purple: "#7e22ce", orange: "#c2410c", pink: "#be185d", cyan: "#0e7490" };
 const critter = claudeCritter();
 // The colors of the task types, as Jira's issue types (lib/schedule.mjs).
 const typeColors = { bug: "#E5493A", feature: "#36B37E", chore: "#4C9AFF", research: "#8777D9", test: "#E2852B" };
@@ -155,16 +154,37 @@ function effortMeter(task)
     return `<span class="effort" role="img" aria-label="${attribute(label)}" data-tip="${attribute(escape(label))}"><svg class="icon" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true">${bars}</svg></span>`;
 }
 
-/** Who holds a task: Claude's critter, or the coordinator Crew hired in its place; a colleague's portrait or initials on their color, a
- * person's GitHub picture or initials in gray. */
+/** Claude as the backlog writes them, the first of the people. */
+function claudeOf()
+{
+    return (data.people ?? [])[0] ?? "Claude";
+}
+
+/** A holder's name as the page shows it: Claude's is the coordinator's, where Crew hired one, as they are one person (D-18); a
+ * colleague's as their profile writes it, whatever case or accents the task gave it (Nicolo is Nicolò). */
+function holderName(name)
+{
+    if (name === claudeOf() && data.coordinator) {
+        return data.coordinator.name;
+    }
+
+    const held = (data.board ?? []).find((task) => task.to === name && task.colleague);
+    return (held && data.colleagues.find((one) => one.id === held.colleague)?.short) ?? name;
+}
+
+/** Who holds a task: Claude, or the coordinator Crew hired in their place, with the coordinator's portrait, else Claude's critter; a
+ * colleague's portrait or initials on their color, a person's GitHub picture or initials in gray. */
 function face(task)
 {
-    const person = task.colleague ? data.colleagues.find((one) => one.id === task.colleague) : task.to === "Claude" ? data.coordinator ?? null : null;
+    const isClaude = !task.colleague && task.to === claudeOf();
+    const person = task.colleague ? data.colleagues.find((one) => one.id === task.colleague) : isClaude ? data.coordinator ?? null : null;
     const name = person?.name ?? task.to;
-    const tip = `data-tip="${attribute(`<b>${escape(name)}</b>${person ? escape(person.role) : ""}`)}"`;
+    // Claude's role, the coordinator's where their heading gives none: your assistant, as Crew says it.
+    const role = person?.role || (isClaude ? t("claudeRole") : "");
+    const tip = `data-tip="${attribute(`<b>${escape(name)}</b>${escape(role)}`)}"`;
 
-    if (task.to === "Claude" && !person) {
-        return `<span class="face" role="img" aria-label="Claude" ${tip}>${critter}</span>`;
+    if (isClaude && !person?.hasPortrait) {
+        return `<span class="face" role="img" aria-label="${attribute(name)}" ${tip}>${critter}</span>`;
     }
 
     if (person?.hasPortrait) {
@@ -184,7 +204,8 @@ function face(task)
     }
 
     const initials = String(name).split(/\s+/).map((part) => part[0] ?? "").join("").slice(0, 2).toUpperCase();
-    const color = person ? tints[person.color] ?? "#6b6b67" : "#8a8a86";
+    // A colleague's color, as the data gives it; a person without a profile in gray.
+    const color = person?.color ?? colors.gray;
 
     return `<span class="face" role="img" aria-label="${attribute(name)}" style="background:${color}" ${tip}>${escape(initials)}</span>`;
 }
@@ -359,7 +380,7 @@ function taskFilters()
     return `<div class="chips" role="group" aria-labelledby="filter-state-name"><span class="filter-name" id="filter-state-name">${t("filterState")}</span>${states.map(([value, label, keep]) => chip("state", value, label, countOf(keep))).join("")}</div>
         <div class="chips" role="group" aria-labelledby="filter-priority-name"><span class="filter-name" id="filter-priority-name">${t("filterPriority")}</span>${priorities.join("")}</div>
         ${types.length ? `<div class="chips" role="group" aria-labelledby="filter-type-name"><span class="filter-name" id="filter-type-name">${t("filterType")}</span>${chip("type", "all", t("anyType"))}${types.map((type) => chip("type", type, `${typeIcon({ type })}${escape(data.types?.[type] ?? type)}`, countOf((task) => task.type === type && columnOf(task) !== "done"))).join("")}</div>` : ""}
-        <label>${t("filterWho")} <select id="filter-who" data-task-filter="who">${option("who", "all", t("anyone"))}${people.map((person) => option("who", person, person)).join("")}</select></label>
+        <label>${t("filterWho")} <select id="filter-who" data-task-filter="who">${option("who", "all", t("anyone"))}${people.map((person) => option("who", person, holderName(person))).join("")}</select></label>
         <label>${t("filterGoal")} <select id="filter-goal" data-task-filter="goal">${option("goal", "all", t("anyGoal"))}${goals.map((goal) => option("goal", goal, goal)).join("")}${noGoal}</select></label>`;
 }
 
@@ -472,7 +493,7 @@ function taskOwnerRows(tasks, colleagues)
 
     return owners.map((owner) => {
         const own = tasks.filter((task) => task.owner === owner);
-        const label = names[owner] ?? owner;
+        const label = names[owner] ?? holderName(owner);
         const segments = priorityOrder.map((key) => [key, own.filter((task) => (task.priority ?? "none") === key).length]).filter(([, value]) => value > 0)
             .map(([key, value]) => `<span style="flex:${value};background:${priorityColors[key]}" data-tip="${attribute(`<b>${escape(label)}: ${value} ${escape(priorityLabel(key))}</b>`)}"></span>`).join("");
 
@@ -510,7 +531,7 @@ function urgentTasks(tasks, colleagues)
     const names = Object.fromEntries(colleagues.map((person) => [person.id, person.name.split(" ")[0]]));
 
     return tasks.filter((task) => task.priority === "P1").sort((first, second) => (first.created ?? "").localeCompare(second.created ?? ""))
-        .map((task) => `<li><span class="tag" style="min-width:70px">${escape(names[task.owner] ?? task.owner)}</span><span style="color:var(--muted)">${formatDay(task.created)}</span> · <span class="clamp" style="display:inline">${escape(task.text)}</span></li>`).join("");
+        .map((task) => `<li><span class="tag" style="min-width:70px">${escape(names[task.owner] ?? holderName(task.owner))}</span><span style="color:var(--muted)">${formatDay(task.created)}</span> · <span class="clamp" style="display:inline">${escape(task.text)}</span></li>`).join("");
 }
 
 /** The colleagues, the busiest first: each with their portrait, role and a bar of their open todo. */
@@ -519,7 +540,7 @@ function colleagueCards(colleagues)
     const most = Math.max(1, ...colleagues.map((person) => person.open));
 
     return [...colleagues].sort((first, second) => second.open - first.open).map((person) => {
-        const color = colors[person.color] ?? colors.gray;
+        const color = person.color ?? colors.gray;
         const portrait = person.hasPortrait ? `<img src="/portrait/${attribute(person.id)}" alt="">` : `<div class="avatar" style="background:${color}"></div>`;
 
         return `<div class="person" style="--person:${color}" data-tip="${attribute(`<b>${escape(person.name)}</b>${escape(person.role)}<br>${escape(t("crewTip", person.open, person.done))}`)}">

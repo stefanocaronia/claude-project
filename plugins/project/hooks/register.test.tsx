@@ -706,6 +706,22 @@ test("the coordinator Crew hired draws Claude's tasks with their portrait; a tas
     await ui.unmount();
 });
 
+test("the coordinator without a portrait is drawn as Claude's critter, never initials, and holds tasks by their name", async ($, on) => {
+    const coordinator = { id: "marco-coordinator", name: "Marco", fullName: "Marco Rossi", role: "coordinator", color: "blue" };
+    world(on, [{ ...good, stdout: JSON.stringify({ ...snapshot, people: ["Claude", "Stefano"], coordinator }) }]);
+    await $.session.start({ cwd: "/p", surface: null, isInteractive: true } as never);
+    const ui = await $.ui.mount({ plugin, surface: "desktop", component: "Pane", requestId: "project", props });
+    const marco = (await ui.findAll({ type: "Svg" })).filter((one) => (one.props as { alt?: string }).alt === "Marco Rossi");
+    expect(marco.length).toBeGreaterThan(0);
+    // The critter's cream circle and orange, not Marco's initials on blue.
+    expect(marco.every((one) => /#F3E6DC/.test((one.props as { source: string }).source) && !/>MR</.test((one.props as { source: string }).source))).toBe(true);
+    await ui.press({ key: "open-80" });
+    await ui.press({ key: "edit-text-80" });
+    const holders = ((await ui.find({ key: "edit-to-80" }))?.props as { options: { value: string; label: string }[] }).options;
+    expect(holders.find((one) => one.value === "Claude")?.label).toBe("Marco");
+    await ui.unmount();
+});
+
 test("an open task being edited changes its goal, who does it and the project's own fields through the backlog's command", async ($, on) => {
     const withFields = { ...snapshot, fields: { system: { name: "Sistema", values: ["5e", "ironsworn"] }, area: { name: "Area", values: null } } };
     const { runs } = world(on, [{ ...good, stdout: JSON.stringify(withFields) }]);

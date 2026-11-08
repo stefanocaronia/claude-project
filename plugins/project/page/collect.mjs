@@ -9,6 +9,7 @@ import { numbering, proposalOf } from "../lib/decisions.mjs";
 import { phaseStates, planPhases, planUpdated } from "../lib/plan.mjs";
 import { escapeRegex } from "../lib/text.mjs";
 import { parseTodo } from "../lib/todos.mjs";
+import { nameKey } from "../lib/crew.mjs";
 import { codeView, freeIssues, issueOf, ownLogins } from "../lib/code.mjs";
 import { readsAsInstruction } from "../lib/issues.mjs";
 import { decisionLinks } from "../lib/links.mjs";
@@ -171,7 +172,7 @@ async function ownerOf(config)
 function readBoard(config, code)
 {
     const since = today(new Date(Date.now() - boardDays * 86_400_000));
-    const ids = new Map(colleagues(config).map((colleague) => [colleague.name, colleague.id]));
+    const ids = new Map(colleagues(config).map((colleague) => [nameKey(colleague.name), colleague.id]));
     const { tasks } = readBacklog(config);
     const planned = new Set(readGoals(config).map((goal) => goal.name));
     const links = taskLinks(config, tasks);
@@ -187,7 +188,7 @@ function readBoard(config, code)
             ...links.get(task.id),
             text: clean(task.text),
             effortKey: effortKey(task.effort, config.words) ?? "none",
-            colleague: ids.get(task.to) ?? null,
+            colleague: ids.get(nameKey(task.to)) ?? null,
             noteHref: links.get(task.id).noteHasBody ? `/note/${task.id}` : null,
             ...codeView(code.get(task.id)),
             issueInfo: issueOf(issues, task, ownLogins(config, login)),
@@ -286,13 +287,13 @@ function readInbox(config)
 /** The colleagues, each with their profile's name, role and color, their todo's open and ticked lines, and whether they have a portrait. */
 function readColleagues(config)
 {
-    return colleagues(config).map(({ id, name }) => {
-        const profile = profileOf(config, id, name);
+    return colleagues(config).map(({ id }) => {
+        const profile = profileOf(config, id);
         const todo = read(`${config.memory}/${id}/todo.md`);
         return {
             id,
             name: profile.fullName,
-            short: name,
+            short: profile.name,
             role: profile.role,
             color: profile.color,
             open: (todo.match(/^\s*- \[ \]/gm) ?? []).length,
@@ -309,16 +310,18 @@ function readCoordinator(config)
     return coordinator && { ...coordinator, hasPortrait: portraitFile(config, coordinator.id) !== null };
 }
 
-/** Every open task, by who holds it: the backlog's, by its assignee, and those of the colleagues' todos. */
+/** Every open task, by who holds it: the backlog's, by its assignee, and those of the colleagues' todos; the coordinator's todo is
+ * Claude's, the first of the people, as they are one person (D-18). */
 function readTasks(config)
 {
-    const ids = colleagues(config).map((colleague) => colleague.id);
-    // A task's assignee as its owner: the colleague of that first name, else the name.
-    const holder = (to) => ids.find((id) => id.split("-")[0] === to.toLowerCase()) ?? to;
+    const ids = new Map(colleagues(config).map((colleague) => [nameKey(colleague.name), colleague.id]));
+    const coordinator = coordinatorOf(config)?.id;
+    // A task's assignee as its owner: the colleague of that first name, whatever its case and accents, else the name.
+    const holder = (to) => ids.get(nameKey(to)) ?? to;
     const prefix = config.prefixes.task;
     const backlog = readBacklog(config).tasks.filter((task) => openStates.includes(task.state))
         .map((task) => ({ owner: holder(task.to), priority: task.priority, created: task.created, text: clean(`${prefix}-${task.id} · ${task.text}`).slice(0, 300), state: task.state, effort: task.effort }));
-    const todos = todoFiles(config).flatMap(({ id, file }) => read(file).split(/\r?\n/).map(parseTodo).filter((task) => task && !task.done).map((task) => ({ owner: id, priority: task.priority, created: task.created, text: clean(task.text).slice(0, 300) })));
+    const todos = todoFiles(config).flatMap(({ id, file }) => read(file).split(/\r?\n/).map(parseTodo).filter((task) => task && !task.done).map((task) => ({ owner: id === coordinator ? config.people[0] : id, priority: task.priority, created: task.created, text: clean(task.text).slice(0, 300) })));
     return [...backlog, ...todos];
 }
 

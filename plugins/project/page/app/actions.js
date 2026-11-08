@@ -213,7 +213,7 @@ function taskForm(task)
                     ${field("goal", t("filterGoal"), `<select id="form-goal-${id}">${goals.map((goal) => option(goal, goal === data.words.noGoal ? t("noGoalLane") : goal, task?.goal ?? data.words.noGoal)).join("")}</select>`)}
                     ${field("priority", t("filterPriority"), `<select id="form-priority-${id}">${["P1", "P2", "P3"].map((key) => option(key, priorityName(key), task?.priority ?? "P2")).join("")}</select>`)}
                     ${field("type", t("filterType"), `<select id="form-type-${id}">${types.map((key) => option(key, key ? data.types[key] : "—", task ? task.type ?? "" : data.types.feature ? "feature" : Object.keys(data.types)[0])).join("")}</select>`)}
-                    ${field("to", t("filterWho"), `<select id="form-to-${id}">${people.map((person) => option(person, person, task?.to ?? people[0])).join("")}</select>`)}
+                    ${field("to", t("filterWho"), `<select id="form-to-${id}">${people.map((person) => option(person, holderName(person), task?.to ?? people[0])).join("")}</select>`)}
                     ${field("due", t("linkDue"), `<input type="date" id="form-due-${id}" value="${attribute(task?.due ?? "")}">`)}
                     ${Object.entries(data.fields ?? {}).map(([key, own]) => field(key, own.name, own.values
                         ? `<select id="form-field-${key}-${id}">${["", ...own.values].map((value) => option(value, value || "—", task?.fields?.[key] ?? "")).join("")}</select>`

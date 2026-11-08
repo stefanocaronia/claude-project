@@ -34,6 +34,7 @@ import { issueTask, lineTitle } from "../lib/issues.mjs";
 import { listOf, nestedParts, splitLinks, todoLinks } from "../lib/links.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { formatTodo, parseTodo } from "../lib/todos.mjs";
+import { nameKey } from "../lib/crew.mjs";
 import { changeComment, withComment } from "../lib/notes.mjs";
 import { effortWord, stateKeys } from "../lib/words.mjs";
 import { closeIssue, closePull, doneComment, ghLogin, readCode, readIssue, readIssues, readLogin, readPull, takenPulls } from "./code.mjs";
@@ -260,7 +261,7 @@ function execute(command, options, words, config, say)
             due: single("due", "due"),
             type: single("type", "type", typeKey),
             // Who created it: a name as the project writes it, whatever its case.
-            by: typeof options.by === "string" ? (assignees(config).find((name) => name.toLowerCase() === options.by.toLowerCase()) ?? options.by) : given !== undefined && split.by ? split.by : (old.by ?? null),
+            by: typeof options.by === "string" ? (assignees(config).find((name) => nameKey(name) === nameKey(options.by)) ?? options.by) : given !== undefined && split.by ? split.by : (old.by ?? null),
             // The project's own fields: --system 5e, "" clears.
             fields: Object.fromEntries(Object.keys(config.fields).map((key) => [key, isGiven(key) ? String(options[key]).trim() : given !== undefined && split.fields[key] ? split.fields[key] : (old.fields?.[key] ?? "")]).filter(([, value]) => value !== "")),
         };
@@ -480,7 +481,7 @@ function execute(command, options, words, config, say)
         } else {
             const text = words.slice(1).join(" ").trim() || fail(say("commentEmpty"));
             const given = typeof options.by === "string" ? options.by.replace(/\s+/g, " ").replaceAll(" · ", " - ").trim() : "";
-            const by = given ? (assignees(config).find((name) => name.toLowerCase() === given.toLowerCase()) ?? given) : "Claude";
+            const by = given ? (assignees(config).find((name) => nameKey(name) === nameKey(given)) ?? given) : "Claude";
             const path = notePath(config, task.id);
             writeDoc(config, path, withComment(existsSync(path) ? read(path) : `# ${prefix}-${task.id} · ${task.text}\n`, { day: today(), by, text }));
             console.log(say("commentAdded", { id, path: shown(config, path) }));
@@ -498,7 +499,7 @@ function execute(command, options, words, config, say)
         print(shownTasks, options.json, (task) => [line(task), ...[say("stateLabel", { state: stateName(task) }), ...links(task), ...issueLine(task), ...codeLines(code.get(task.id), say)].map((one) => `  ${one}`)].join("\n"));
     } else if (command === "list") {
         const shownTasks = tasks.filter((task) => (options.state ? task.state === options.state : task.state !== "archived" && task.state !== "done"))
-            .filter((task) => !options.to || task.to === options.to)
+            .filter((task) => !options.to || nameKey(task.to) === nameKey(options.to))
             .filter((task) => !options.p || task.priority === options.p)
             .filter((task) => !options.goal || task.goal === options.goal)
             // --atomic: only the tasks done as they are, for Crew and whoever wants them; a large task is done through its parts.
@@ -591,7 +592,7 @@ function execute(command, options, words, config, say)
             notes.forEach((note) => writeDoc(config, notePath(config, note.id), note.text));
         }
     } else if (command === "todos") {
-        const open = openTodos(config).filter((todo) => typeof options.to !== "string" || todo.name.toLowerCase() === options.to.toLowerCase());
+        const open = openTodos(config).filter((todo) => typeof options.to !== "string" || nameKey(todo.name) === nameKey(options.to));
 
         if (options.json === true) {
             console.log(JSON.stringify(open.map((todo) => ({ ...todo, file: shown(config, todo.file) })), null, 2));

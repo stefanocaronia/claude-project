@@ -2,6 +2,7 @@
 // is the surface's own. They are Crew's (github.com/stefanocaronia/claude-crew, MIT), so that the two panels side by side look alike; the
 // light and dark colors follow savvy-progress by johnnyvizz (MIT).
 import type { Member } from "../types";
+import { colorOf } from "../lib/crew.mjs";
 
 // A priority as an issue tracker draws it, the green of work, the purple of decisions, the red of errors, the orange of a warning.
 export const priorities = { P1: { glyph: "⇈", color: "#E5493A" }, P2: { glyph: "=", color: "#E2852B" }, P3: { glyph: "↓", color: "#4C8FE0" } } as const;
@@ -43,8 +44,6 @@ const theme = `<style>
 .k{fill:#e4e4e1}
 @media (prefers-color-scheme: dark){.k{fill:#333331}}
 </style>`;
-// A colleague color in the light theme's tint, the one their initials sit on.
-const tints: Record<string, string> = { red: "#b42318", blue: "#1d4ed8", green: "#15803d", yellow: "#8a6100", purple: "#7e22ce", orange: "#c2410c", pink: "#be185d", cyan: "#0e7490" };
 
 /** A priority's glyph and color; P2's for one it does not know. */
 export function markOf(priority: string)
@@ -52,23 +51,26 @@ export function markOf(priority: string)
     return priorities[priority as keyof typeof priorities] ?? priorities.P2;
 }
 
-/** A colleague's portrait in a circle, or their initials on their color; a person without a profile in gray. */
+/** A colleague's portrait in a circle, or their initials on their color, as Crew draws them; a person without a profile in gray. */
 export function faceSvg(member: Member, uri: string | undefined, size: number): string
 {
     const radius = size / 2;
     const initials = member.fullName.split(/\s+/).map((part) => part[0] ?? "").join("").slice(0, 2).toUpperCase();
-    const color = tints[member.color] ?? (/^#[0-9a-f]{6}$/i.test(member.color) ? member.color : "#6b6b67");
+    const color = colorOf(member.color);
     const face = uri
         ? `<clipPath id="face"><circle cx="${radius}" cy="${radius}" r="${radius}"/></clipPath><image href="${uri}" x="0" y="0" width="${size}" height="${size}" clip-path="url(#face)" preserveAspectRatio="xMidYMid slice"/>`
         : `<circle cx="${radius}" cy="${radius}" r="${radius}" fill="${color}"/><text x="${radius}" y="${radius + radius * 0.28}" text-anchor="middle" font-family="${font}" font-size="${radius * 0.78}" font-weight="600" fill="#ffffff">${xml(initials)}</text>`;
     return svg(size, size, face, false);
 }
 
+// Claude's own color, the critter's orange: theirs where no coordinator gives them one.
+export const claudeColor = "#D97757";
+
 /** Claude: an orange pixel critter on a round cream background, as Crew draws it in a meeting. */
 export function claudeSvg(size: number): string
 {
     const rows = [".X........X.", "..X......X..", "..XXXXXXXX..", ".XXXXXXXXXX.", ".XXEEXXEEXX.", "XXXEEXXEEXXX", "XXXXXXXXXXXX", ".XXXXXXXXXX.", "..X.X..X.X..", "..X.X..X.X.."];
-    const runs = rows.flatMap((row, y) => [...row.matchAll(/X+|E+/g)].map((run) => `<rect x="${(run.index ?? 0) + 2}" y="${y + 3}" width="${run[0].length}" height="1" fill="${run[0][0] === "E" ? "#2B1D17" : "#D97757"}"/>`));
+    const runs = rows.flatMap((row, y) => [...row.matchAll(/X+|E+/g)].map((run) => `<rect x="${(run.index ?? 0) + 2}" y="${y + 3}" width="${run[0].length}" height="1" fill="${run[0][0] === "E" ? "#2B1D17" : claudeColor}"/>`));
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${size}" height="${size}"><circle cx="8" cy="8" r="8" fill="#F3E6DC"/><g shape-rendering="crispEdges">${runs.join("")}</g></svg>`;
 }
 

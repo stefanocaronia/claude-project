@@ -115,7 +115,8 @@ export type Snapshot = {
      * are not in sync. */
     issuesSync?: { at: string | null; error: string | null; missing: { id: string; issue: string }[]; held?: { id: string; issue: string; title: string }[] } | null;
     colleagues: Member[];
-    /** The coordinator Crew hired, `coordinator: true` in their profile: Claude in the backlog, drawn with their name and portrait. */
+    /** The coordinator Crew hired, `coordinator: true` in their profile: Claude in the backlog, drawn with their name, color and portrait,
+     * Claude's critter where they have none. */
     coordinator?: Member | null;
     /** The person this machine's gh is signed in as, with their GitHub picture: on their tasks and on every decision; null without gh. */
     owner?: { name: string; fullName: string; portrait?: string } | null;

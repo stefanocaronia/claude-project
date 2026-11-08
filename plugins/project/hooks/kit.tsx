@@ -2,10 +2,11 @@
 // left, and the pieces the parts share (a card, a section that opens and closes, a hint under the pointer, a chip, a face).
 import type { Elements, EngineInterface, RenderInput } from "claude-code";
 
+import { nameKey } from "../lib/crew.mjs";
 import { linksIn } from "../lib/text.mjs";
 import type { Board, Snapshot, Task, View } from "../types";
 
-import { cardTint, chipSvg, claudeSvg, faceSvg, headingSvg, linkGroundSvg, idleButtonSvg, idleColor, linkColor, markOf, outline, prioritySvg, quietColor, stateLayer, tooltipBackground, tooltipText } from "./draw.ts";
+import { cardTint, chipSvg, claudeColor, claudeSvg, faceSvg, headingSvg, linkGroundSvg, idleButtonSvg, idleColor, linkColor, markOf, outline, prioritySvg, quietColor, stateLayer, tooltipBackground, tooltipText } from "./draw.ts";
 import { startingFor } from "./start.ts";
 import { changeView, say } from "./state.ts";
 
@@ -42,7 +43,9 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
     const words = say(board);
     const prefix = snapshot.prefixes.task;
     const idOf = (task: { id: number }) => `${prefix}-${task.id}`;
-    const byName = new Map(snapshot.colleagues.map((colleague) => [colleague.name, colleague]));
+    // A colleague by the name a task gives, whatever its case and accents (Nicolo is Nicolò).
+    const byKey = new Map(snapshot.colleagues.map((colleague) => [nameKey(colleague.name), colleague]));
+    const byName = { get: (name: string) => byKey.get(nameKey(name)), has: (name: string) => byKey.has(nameKey(name)) };
     const parts = new Map<string, Task[]>();
 
     for (const task of snapshot.tasks) {
@@ -53,9 +56,14 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
 
     // The open parts of a large task, in the backlog's order: looked up, not searched for in every task each time.
     const partsOf = (task: Task) => parts.get(idOf(task)) ?? [];
+    // Claude as the backlog writes them, the first of the people, and the coordinator Crew hired in their place: one person (D-18),
+    // with the coordinator's name, color and portrait, else Claude's own.
+    const claude = snapshot.people[0] ?? "Claude";
+    const coordinator = snapshot.coordinator ?? null;
+    const holderName = (name: string) => (name === claude && coordinator ? coordinator.name : name);
     // Who decides: the owner, else the first person who is not Claude.
     const owner = snapshot.owner;
-    const decider = owner?.name ?? snapshot.people.find((person) => person !== "Claude") ?? null;
+    const decider = owner?.name ?? snapshot.people.find((person) => person !== claude) ?? null;
     const change = (fn: (old: View) => View) => changeView($, fn);
     const openIn = (state: View, section: string) => state.sections[section] ?? openAtStart[section] ?? false;
     const isOpen = (section: string) => openIn(view, section);
@@ -183,19 +191,19 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
     const chatButton = (key: string, label: string, onPress: () => unknown, look: { variant?: "primary"; plain?: true; dimColor?: boolean } = {}) => (isWorking
         ? idleButton(`${key}-idle`, label, words("busyTurn"), Boolean(look.plain))
         : <Button key={key} label={label} onPress={() => void onPress()} {...look} />);
-    // Who holds a task: Claude's critter, or the coordinator Crew hired in its place; a colleague's portrait or initials, the owner's
-    // GitHub picture, a person's initials in gray; the name under the pointer. It stands at the top of its row, beside the first line of
-    // what it holds, however many lines that has.
-    const coordinator = snapshot.coordinator ?? null;
+    // Who holds a task: Claude, or the coordinator Crew hired in their place, with the coordinator's portrait, else Claude's critter,
+    // never initials; a colleague's portrait or initials, the owner's GitHub picture, a person's initials in gray; the name under the
+    // pointer. It stands at the top of its row, beside the first line of what it holds, however many lines that has.
     const face = (name: string, size: number) => {
         const picture = snapshot.faces?.[name];
-        const member = (name === "Claude" ? coordinator : null) ?? byName.get(name) ?? (owner && name === owner.name ? { id: name, name, fullName: owner.fullName, role: "", color: "gray", portrait: owner.portrait } : undefined) ?? (picture ? { id: name, name, fullName: name, role: "", color: "gray", portrait: picture } : undefined);
+        const isClaude = name === claude;
+        const member = (isClaude ? coordinator : null) ?? byName.get(name) ?? (owner && name === owner.name ? { id: name, name, fullName: owner.fullName, role: "", color: "gray", portrait: owner.portrait } : undefined) ?? (picture ? { id: name, name, fullName: name, role: "", color: "gray", portrait: picture } : undefined);
 
         if (!Svg) {
-            return <Text key={`face-${name}`} color={member?.color} dimColor={!member}>●</Text>;
+            return <Text key={`face-${name}`} color={member?.color ?? (isClaude ? claudeColor : undefined)} dimColor={!member && !isClaude}>●</Text>;
         }
 
-        const source = name === "Claude" && !coordinator ? claudeSvg(size) : faceSvg(member ?? { id: name, name, fullName: name, role: "", color: "gray" }, member?.portrait, size);
+        const source = isClaude && !member?.portrait ? claudeSvg(size) : faceSvg(member ?? { id: name, name, fullName: name, role: "", color: "gray" }, member?.portrait, size);
         const fullName = member?.fullName ?? name;
         return (
             <Box key={`face-${name}`} flexShrink={0} alignSelf="flex-start">
@@ -209,5 +217,5 @@ export function panelOf($: EngineInterface, e: RenderInput<"Pane">, board: Board
         return Svg && drawn ? <Svg source={drawn} alt={priority} width={14} height={14} /> : <Text color={markOf(priority).color}>{markOf(priority).glyph}</Text>;
     };
 
-    return { Box, Text, Button, Link, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, isOpen, limited, isStarting, age, dueWords, rowText, linkedText, opener, card, section, more, tip, pill, chip, iconButton, idleButton, isWorking, chatButton, face, priorityIcon };
+    return { Box, Text, Button, Link, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, claude, holderName, decider, change, isOpen, limited, isStarting, age, dueWords, rowText, linkedText, opener, card, section, more, tip, pill, chip, iconButton, idleButton, isWorking, chatButton, face, priorityIcon };
 }

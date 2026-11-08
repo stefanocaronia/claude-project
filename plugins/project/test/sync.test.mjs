@@ -224,7 +224,7 @@ test("the start of a session says who works here, written from gh and kept out o
     }
 });
 
-test("the coordinator Crew hired is Claude in the backlog: by their name, drawn with their portrait, never a colleague to hand a task to", () => {
+test("the coordinator Crew hired is Claude in the backlog: by their name, drawn with their portrait, never a colleague to hand a task to", async () => {
     const crewed = join(base, "crewed");
     put(crewed, ".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude, Ann]\n");
     put(crewed, "docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n## Postponed\n\n## Done\n");
@@ -234,12 +234,40 @@ test("the coordinator Crew hired is Claude in the backlog: by their name, drawn 
     assert.match(run("crewed", "backlog.mjs", "add", "the dice", "--type", "test", "--to", "Giulia"), /· Giulia ·/);
     const snapshot = JSON.parse(run("crewed", "snapshot.mjs", "--no-health"));
     assert.deepEqual(snapshot.colleagues.map((one) => one.id), ["giulia-tester"]);
-    assert.deepEqual([snapshot.coordinator.id, snapshot.coordinator.name, snapshot.coordinator.fullName, snapshot.coordinator.color], ["marco-coordinator", "Marco", "Marco Rossi", "blue"]);
+    // Their name, full name and role from the heading, their color from Crew's table, as Crew reads them.
+    assert.deepEqual([snapshot.coordinator.id, snapshot.coordinator.name, snapshot.coordinator.fullName, snapshot.coordinator.color], ["marco-coordinator", "Marco", "Marco Rossi", "#3F7CC4"]);
+    assert.equal(snapshot.colleagues[0].color, "#4E9A6B");
+    // A colleague whose heading has an accent the id drops: one person by either name, written as the heading has it.
+    put(crewed, ".claude/agents/nicolo-ferri.md", "---\nname: nicolo-ferri\ndescription: \"Nicolò Ferri, game designer.\"\ncolor: \"#aa3366\"\n---\n\n# Nicolò Ferri, game designer\n");
+    assert.match(run("crewed", "backlog.mjs", "add", "the rules", "--type", "feature", "--to", "nicolo"), /^T-3 added: - T-3 · P2 · medium · Nicolò · /m);
+    const tasksFile = join(crewed, "docs", "TASKS.md");
+    writeFileSync(tasksFile, readFileSync(tasksFile, "utf8").replace("· Nicolò ·", "· Nicolo ·"));
+    run("crewed", "backlog.mjs", "set", "T-3", "--p", "P1");
+    assert.deepEqual(JSON.parse(run("crewed", "backlog.mjs", "list", "--to", "Nicolò", "--json")).map((task) => task.id), [3]);
+    const nicolo = JSON.parse(run("crewed", "snapshot.mjs", "--no-health"));
+    assert.equal(nicolo.tasks.find((task) => task.id === 3).colleague, "nicolo-ferri");
+    assert.deepEqual(["name", "fullName", "role", "color"].map((key) => nicolo.colleagues.find((one) => one.id === "nicolo-ferri")[key]), ["Nicolò", "Nicolò Ferri", "game designer", "#aa3366"]);
     // A portrait Claude drew, where Crew had no picture made: drawn as the picture would be; the picture wins where both are.
     put(crewed, ".claude/agent-memory/marco-coordinator/avatar.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 8 8\"><circle cx=\"4\" cy=\"4\" r=\"4\" fill=\"#36c\"/></svg>\n");
     assert.match(JSON.parse(run("crewed", "snapshot.mjs", "--no-health")).coordinator.portrait, /^data:image\/svg\+xml;base64,/);
     put(crewed, ".claude/agent-memory/marco-coordinator/avatar-small.jpg", "\xff\xd8\xff\xd9");
     assert.match(JSON.parse(run("crewed", "snapshot.mjs", "--no-health")).coordinator.portrait, /^data:image\/jpeg;base64,/);
+    // On the page, the coordinator's todo is Claude's: one holder, never a second one by the coordinator's id.
+    put(crewed, ".claude/agent-memory/marco-coordinator/todo.md", "# Todo\n\n- [ ] P1 · 2026-11-08 · ask Ann about the map\n");
+    const noGh = process.env.PROJECT_NO_GH;
+    process.env.PROJECT_NO_GH = "1";
+
+    try {
+        const { loadProject } = await import("../scripts/project.mjs");
+        const { collect } = await import("../page/collect.mjs");
+        const page = await collect(loadProject(crewed).config, (key) => key, []);
+        assert.deepEqual([...new Set(page.tasks.map((task) => task.owner))].sort(), ["Claude", "giulia-tester", "nicolo-ferri"]);
+        assert.equal(page.colleagues.find((one) => one.id === "nicolo-ferri").short, "Nicolò");
+        assert.equal(page.tasks.filter((task) => task.owner === "Claude").length, 2);
+    } finally {
+        noGh === undefined ? delete process.env.PROJECT_NO_GH : (process.env.PROJECT_NO_GH = noGh);
+    }
+
     // Without Crew's coordinator, Claude is Claude.
     put(crewed, ".claude/agents/marco-coordinator.md", "---\nname: marco-coordinator\ndescription: \"Marco Rossi, the team's coordinator.\"\n---\n");
     assert.equal(JSON.parse(run("crewed", "snapshot.mjs", "--no-health")).coordinator, null);

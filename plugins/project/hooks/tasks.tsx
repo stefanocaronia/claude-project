@@ -22,7 +22,7 @@ let newText = "";
 
 export function taskLists($: EngineInterface, p: Panel)
 {
-    const { Box, Text, Button, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, decider, change, limited, isStarting, age, dueWords, rowText, opener, card, section, more, tip, pill, iconButton, face, priorityIcon, isWorking } = p;
+    const { Box, Text, Button, Input, Select, hasForms, Svg, isDesktop, board, view, snapshot, now, words, prefix, idOf, byName, partsOf, claude, decider, change, limited, isStarting, age, dueWords, rowText, opener, card, section, more, tip, pill, iconButton, face, priorityIcon, isWorking } = p;
     const details = taskDetails($, p);
     const indent = isDesktop ? 4 : 2;
     // A part shows under its large task, whatever its state; on its own only when its large task is not open.
@@ -48,7 +48,7 @@ export function taskLists($: EngineInterface, p: Panel)
     const shownRank = new Map([...rest, ...postponed].flatMap((task) => [task, ...[...partsOf(task)].sort(byOrder)]).map((task, index) => [task.id, index]));
     // What the button above the lists starts: the first task someone here can start. A blocked task is skipped: its chain starts from its
     // own ▶.
-    const nextTask = busyWith ? undefined : rest.find((task) => task.state === "todo" && !isBlocked(task) && !isLarge(task) && (task.to === "Claude" || byName.has(task.to)));
+    const nextTask = busyWith ? undefined : rest.find((task) => task.state === "todo" && !isBlocked(task) && !isLarge(task) && (task.to === claude || byName.has(task.to)));
 
     // A press on a task's priority turns it, P1, P2, P3 and P1 again: a clear button laid over the drawn mark takes the press.
     const priorityMark = (task: Task) => {
@@ -103,11 +103,11 @@ export function taskLists($: EngineInterface, p: Panel)
         // A large task is done through its parts: its ▶ starts the next one, by priority and age, free and to do.
         if (isLarge(task)) {
             const part = snapshot.tasks.find((one) => idOf(one) === task.nextPart);
-            return part && (part.to === "Claude" || byName.has(part.to)) && !isStarting(part.id) ? play(task, () => startTask($, snapshot, part, byName.get(part.to))) : idle(task, words("playNoPart"));
+            return part && (part.to === claude || byName.has(part.to)) && !isStarting(part.id) ? play(task, () => startTask($, snapshot, part, byName.get(part.to))) : idle(task, words("playNoPart"));
         }
 
         // Nobody starts a person's own task but them.
-        if (!member && task.to !== "Claude") {
+        if (!member && task.to !== claude) {
             return idle(task, words("playPerson", { name: task.to }));
         }
 

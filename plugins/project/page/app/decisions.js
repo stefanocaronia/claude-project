@@ -99,7 +99,7 @@ function decisionRow(row, terms)
  * nothing without one. */
 function deciderFace()
 {
-    const decider = data.owner?.name ?? (data.people ?? []).find((person) => person !== "Claude");
+    const decider = data.owner?.name ?? (data.people ?? []).find((person) => person !== claudeOf());
     return decider ? face({ to: decider }) : "";
 }
 
