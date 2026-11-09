@@ -8,7 +8,13 @@
 import { join } from "node:path";
 import { joinFrontmatter } from "../lib/frontmatter.mjs";
 import { compareVersions, nextVersion, parseVersion, releaseState, renderRelease } from "../lib/release.mjs";
-import { commandLine, fail, isMain, loadProject, readBacklog, readContracts, readGoals, readReleases, runCli, showsReleases, shown, today, writeDoc } from "./project.mjs";
+import { readBacklog } from "../services/backlog/index.mjs";
+import { commandLine, isMain, runCli } from "../services/cli.mjs";
+import { loadProject } from "../services/config.mjs";
+import { readGoals, writeDoc } from "../services/docs.mjs";
+import { fail } from "../services/errors.mjs";
+import { shown, today } from "../services/files.mjs";
+import { readContracts, readReleases, showsReleases } from "../services/releases.mjs";
 
 if (isMain(import.meta.url)) {
     runCli(() => run(process.argv.slice(2)));

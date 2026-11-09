@@ -6,7 +6,9 @@
 // `exporters` ({ name: (tasks, context) => text }) and `importers` ({ name: (text, context) => [{ text, priority, … }] }).
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { firstLine, git, read, shown } from "./project.mjs";
+import { firstLine } from "./errors.mjs";
+import { read, shown } from "./files.mjs";
+import { git } from "./git.mjs";
 
 /** The extensions of the configuration, each with its id and folder; one that does not load keeps its error, and the rest go on. */
 export async function loadExtensions(config)

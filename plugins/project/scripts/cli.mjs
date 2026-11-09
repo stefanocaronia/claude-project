@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sayer } from "../lib/messages.mjs";
-import { findRoot, loadProject } from "./project.mjs";
+import { findRoot, loadProject } from "../services/config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Each command and its script; `page` starts the project's page, or says where it already is.

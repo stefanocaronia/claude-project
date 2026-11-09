@@ -4,8 +4,13 @@
 //   node plan.mjs goals [--json]   (by phase, each saying whether its goals are all closed)
 //   node plan.mjs phases [--json]
 import { closeGoal, phaseStates, planPhases } from "../lib/plan.mjs";
-import { fail, isMain, loadProject, openStates, read, readBacklog, readGoals, runCli, today, writeDoc } from "./project.mjs";
-import { pullDocs, pushDocs } from "./sync.mjs";
+import { openStates, readBacklog } from "../services/backlog/index.mjs";
+import { isMain, runCli } from "../services/cli.mjs";
+import { loadProject } from "../services/config.mjs";
+import { readGoals, writeDoc } from "../services/docs.mjs";
+import { fail } from "../services/errors.mjs";
+import { read, today } from "../services/files.mjs";
+import { pullDocs, pushDocs } from "../services/sync.mjs";
 
 if (isMain(import.meta.url)) {
     runCli(() => run(process.argv.slice(2)));

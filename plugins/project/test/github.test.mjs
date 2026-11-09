@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { gitHubRepo, pagesYaml, siteOf, withoutCredentials } from "../scripts/github.mjs";
-import { onPath } from "../scripts/project.mjs";
+import { gitHubRepo, pagesYaml, siteOf, withoutCredentials } from "../services/github/index.mjs";
+import { onPath } from "../services/cli.mjs";
 
 const scripts = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts");
 

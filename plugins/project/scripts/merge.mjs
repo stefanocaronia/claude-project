@@ -14,7 +14,8 @@ import { join } from "node:path";
 import { parseBacklog, renderBacklog } from "../lib/backlog.mjs";
 import { joinFrontmatter, splitFrontmatter } from "../lib/frontmatter.mjs";
 import { readable } from "../lib/words.mjs";
-import { isMain, loadProject } from "./project.mjs";
+import { isMain } from "../services/cli.mjs";
+import { loadProject } from "../services/config.mjs";
 
 const day = /^\d{4}-\d{2}-\d{2}$/;
 const rowPattern = /^\|\s*(\d+)\s*\|(.*)\|\s*$/;

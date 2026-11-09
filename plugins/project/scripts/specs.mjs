@@ -9,21 +9,20 @@
 //                                            list line given its number, its text as it was, the docs' links and the configuration following)
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { joinFrontmatter, splitFrontmatter } from "../lib/frontmatter.mjs";
-import { coverage, nextSpec, numberSpecs } from "../lib/specs.mjs";
-import { escapeRegex, plain } from "../lib/text.mjs";
 import { configFile } from "../lib/config.mjs";
-import { commandLine, docFiles, fail, git, isMain, loadProject, moveFile, projectName, read, readBacklog, readDecisions, readSpecs, runCli, shown, specCitations, write, writeDoc } from "./project.mjs";
+import { joinFrontmatter, splitFrontmatter } from "../lib/frontmatter.mjs";
+import { nextSpec, numberSpecs } from "../lib/specs.mjs";
+import { escapeRegex, plain } from "../lib/text.mjs";
+import { commandLine, isMain, runCli } from "../services/cli.mjs";
+import { loadProject, projectName } from "../services/config.mjs";
+import { docFiles, writeDoc } from "../services/docs.mjs";
+import { fail } from "../services/errors.mjs";
+import { read, shown, write } from "../services/files.mjs";
+import { git, moveFile } from "../services/git.mjs";
+import { readSpecs, specCitations, specsState } from "../services/specs.mjs";
 
 if (isMain(import.meta.url)) {
     runCli(() => run(process.argv.slice(2)));
-}
-
-/** Every spec with how far it is covered, its tasks, its decisions and the code that names it. */
-export function specsState(config)
-{
-    const { specs } = readSpecs(config);
-    return coverage(specs, { tasks: readBacklog(config).tasks, decisions: readDecisions(config).decided, files: specCitations(config), prefixes: config.prefixes });
 }
 
 function run(args)

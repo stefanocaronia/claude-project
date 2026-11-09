@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { projectCommandOnPath } from "../scripts/project.mjs";
+import { projectCommandOnPath } from "../services/cli.mjs";
 import { splitFrontmatter } from "../lib/frontmatter.mjs";
 
 const plugin = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -157,7 +157,7 @@ test("a person with regex characters in the name holds tasks and counts on the p
     assert.match(cli(root, "backlog.mjs", "add", "il compilatore", "--type", "feature", "--to", "C++").stdout, /· C\+\+ ·/);
     const { CLAUDE_PROJECT_DIR, PROJECT_CONFIG, ...env } = process.env;
     process.env.CLAUDE_PROJECT_DIR = root;
-    const { loadProject } = await import("../scripts/project.mjs");
+    const { loadProject } = await import("../services/config.mjs");
     const { collect } = await import("../page/collect.mjs");
     const { config, say } = loadProject(root);
     assert.equal((await collect(config, say, [])).decisions.byPerson["C++"], 1);
@@ -237,7 +237,7 @@ test("every doc of the plugin has its frontmatter, the core and the project-mana
 
     // The page's mechanical fix: the core's English names and format, and the frontmatter, in one go; the rest left alone.
     const { runFix, tidyState } = await import("../page/tidy.mjs");
-    const config = (await import("../scripts/project.mjs")).loadProject(root).config;
+    const config = (await import("../services/config.mjs")).loadProject(root).config;
     assert.ok(tidyState(config).whitespace.includes("docs/DECISIONI.md"));
     runFix(config, "whitespace");
     assert.deepEqual(missing(), []);

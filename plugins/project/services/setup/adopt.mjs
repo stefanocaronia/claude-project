@@ -3,14 +3,20 @@
 // checkbox steps into the backlog. Run through init.mjs adopt.
 import { existsSync, readdirSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
-import { formatLine, nextId, parseBacklog } from "../lib/backlog.mjs";
-import { configFile, readConfig, relativeTo } from "../lib/config.mjs";
-import { parseDecisions } from "../lib/decisions.mjs";
-import { phaseSuffix, planGoals, planPhases } from "../lib/plan.mjs";
-import { escapeRegex, quoted } from "../lib/text.mjs";
-import { parseTodo } from "../lib/todos.mjs";
-import { legacyFiles, presets, readable, stateKeys, wordsOf } from "../lib/words.mjs";
-import { changeableBacklog, colleagues, fail, loadProject, readmeTitle, read, readDecisions, realPath, repoTop, shown, today, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
+import { formatLine, nextId, parseBacklog } from "../../lib/backlog.mjs";
+import { configFile, readConfig, relativeTo } from "../../lib/config.mjs";
+import { parseDecisions } from "../../lib/decisions.mjs";
+import { phaseSuffix, planGoals, planPhases } from "../../lib/plan.mjs";
+import { escapeRegex, quoted } from "../../lib/text.mjs";
+import { parseTodo } from "../../lib/todos.mjs";
+import { legacyFiles, presets, readable, stateKeys, wordsOf } from "../../lib/words.mjs";
+import { changeableBacklog, withBacklogLock, writeBacklog } from "../backlog/index.mjs";
+import { loadProject, readmeTitle } from "../config.mjs";
+import { readDecisions, writeDoc } from "../docs.mjs";
+import { fail } from "../errors.mjs";
+import { read, realPath, shown, today, write } from "../files.mjs";
+import { repoTop } from "../git.mjs";
+import { colleagues } from "../people.mjs";
 
 const skipped = new Set(["node_modules", ".git", "dist", "build", "tmp", "sandbox", ".codegraph", "worktrees", "coverage"]);
 const textFile = /\.(md|ts|tsx|js|mjs|cjs|yaml|yml|json|py)$/;

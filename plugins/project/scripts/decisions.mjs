@@ -5,8 +5,11 @@
 //   node decisions.mjs cites 287
 import { nextDecision, numbering, citedDecisions } from "../lib/decisions.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
-import { citingFiles, isMain, loadProject, read, readDecisions, runCli, shown } from "./project.mjs";
-import { pullDocs } from "./sync.mjs";
+import { isMain, runCli } from "../services/cli.mjs";
+import { loadProject } from "../services/config.mjs";
+import { citingFiles, readDecisions } from "../services/docs.mjs";
+import { read, shown } from "../services/files.mjs";
+import { pullDocs } from "../services/sync.mjs";
 
 // How much of a decision find shows, without --full.
 const shownLength = 220;

@@ -26,22 +26,29 @@
 //   node backlog.mjs committed   (the tasks still open that the commits of the last minutes do: the panel runs it after a commit)
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
-import { parseCsv, toCsv } from "../lib/csv.mjs";
-import { isShared } from "../lib/config.mjs";
 import { formatLine, moveTasks, nextId, similarTasks, taskErrors } from "../lib/backlog.mjs";
 import { codeView, doneTasks, issueOf, ownLogins } from "../lib/code.mjs";
+import { isShared } from "../lib/config.mjs";
+import { nameKey } from "../lib/crew.mjs";
+import { parseCsv, toCsv } from "../lib/csv.mjs";
 import { issueTask, lineTitle } from "../lib/issues.mjs";
 import { listOf, nestedParts, splitLinks, todoLinks } from "../lib/links.mjs";
+import { changeComment, withComment } from "../lib/notes.mjs";
 import { escapeRegex, plain } from "../lib/text.mjs";
 import { formatTodo, parseTodo } from "../lib/todos.mjs";
-import { nameKey } from "../lib/crew.mjs";
-import { changeComment, withComment } from "../lib/notes.mjs";
 import { effortWord, stateKeys } from "../lib/words.mjs";
-import { closeIssue, closePull, doneComment, ghLogin, readCode, readIssue, readIssues, readLogin, readPull, takenPulls } from "./code.mjs";
-import { context, loadExtensions } from "./extensions.mjs";
-import { syncIssues } from "./issues.mjs";
-import { pullDocs, pushDocs } from "./sync.mjs";
-import { assignees, backlogName, changeableBacklog, commandLine, fail, firstLine, git, isClosed, isMain, loadProject, notePath, openStates, projectRepos, read, readBacklog, readDecisions, readDependencies, readGoals, readSpecs, runCli, shown, taskLinks, taskRules, today, todoFiles, withBacklogLock, write, writeBacklog, writeDoc } from "./project.mjs";
+import { changeableBacklog, isClosed, openStates, readBacklog, readDependencies, syncIssues, taskLinks, taskRules, withBacklogLock, writeBacklog } from "../services/backlog/index.mjs";
+import { commandLine, isMain, runCli } from "../services/cli.mjs";
+import { loadProject } from "../services/config.mjs";
+import { notePath, readDecisions, readGoals, writeDoc } from "../services/docs.mjs";
+import { fail, firstLine } from "../services/errors.mjs";
+import { context, loadExtensions } from "../services/extensions.mjs";
+import { read, shown, today, write } from "../services/files.mjs";
+import { git, projectRepos } from "../services/git.mjs";
+import { closeIssue, closePull, doneComment, ghLogin, readCode, readIssue, readIssues, readLogin, readPull, takenPulls } from "../services/github/index.mjs";
+import { assignees, backlogName, todoFiles } from "../services/people.mjs";
+import { readSpecs } from "../services/specs.mjs";
+import { pullDocs, pushDocs } from "../services/sync.mjs";
 
 // The commands that change the backlog, each alone; and the options that take no value.
 const changes = ["add", "start", "done", "postpone", "todo", "archive", "delete", "set", "import", "take"];
@@ -57,50 +64,6 @@ function importedKeys(config)
     const folder = config.files.notes;
     const names = existsSync(folder) ? readdirSync(folder).filter((name) => name.endsWith(".md")) : [];
     return new Map(names.map((name) => [read(join(folder, name)).match(/^Origin: (.+?)(?: · \S+)?$/m)?.[1]?.trim(), name.slice(0, -3)]).filter(([key]) => key));
-}
-
-/** What the backlog's checks need: the problems of the tasks as they are, for check.mjs. */
-export function backlogProblems(config, say)
-{
-    const { tasks, unread } = readBacklog(config);
-    const prefix = config.prefixes.task;
-    const problems = unread.map((one) => ({ file: one.file, line: one.line, message: say("unreadLine", { text: one.text.slice(0, 80) }) }));
-    const rules = taskRules(config, say);
-    const seen = new Map();
-    const known = new Set(tasks.map((task) => `${prefix}-${task.id}`));
-
-    for (const task of tasks) {
-        const at = { file: task.file, line: task.line };
-        const id = `${prefix}-${task.id}`;
-
-        if (seen.has(task.id)) {
-            problems.push({ ...at, message: say("dupTask", { id, other: seen.get(task.id) }) });
-        }
-
-        seen.set(task.id, task.line);
-        // An archived task keeps the goal it had, even one the plan no longer holds.
-        const goals = task.state === "archived" ? [...rules.goals, task.goal] : rules.goals;
-
-        for (const error of taskErrors(task, { ...rules, goals })) {
-            problems.push({ ...at, message: `${id}: ${error}` });
-        }
-
-        // A link to a task that is in neither the backlog nor the archive; a decision's the check of the references says.
-        for (const cited of [...task.after, ...task.see, ...(task.parent ? [task.parent] : [])].filter((one) => one.startsWith(`${prefix}-`) && !known.has(one))) {
-            problems.push({ ...at, message: say("linkUnknown", { id, other: cited }) });
-        }
-
-        if (task.state === "done" && !task.done) {
-            problems.push({ ...at, message: say("doneNoDate", { id, marker: config.words.doneMarker }) });
-        }
-    }
-
-    for (const nested of nestedParts(tasks, prefix)) {
-        const task = tasks.find((one) => `${prefix}-${one.id}` === nested.id);
-        problems.push({ file: task.file, line: task.line, message: say("inNested", { id: nested.id, other: nested.parent }) });
-    }
-
-    return problems;
 }
 
 if (isMain(import.meta.url)) {

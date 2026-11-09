@@ -258,7 +258,7 @@ test("the coordinator Crew hired is Claude in the backlog: by their name, drawn 
     process.env.PROJECT_NO_GH = "1";
 
     try {
-        const { loadProject } = await import("../scripts/project.mjs");
+        const { loadProject } = await import("../services/config.mjs");
         const { collect } = await import("../page/collect.mjs");
         const page = await collect(loadProject(crewed).config, (key) => key, []);
         assert.deepEqual([...new Set(page.tasks.map((task) => task.owner))].sort(), ["Claude", "giulia-tester", "nicolo-ferri"]);

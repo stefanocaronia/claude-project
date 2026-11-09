@@ -4,7 +4,10 @@
 // Silent, and never in the way: a file that is no document of a project, or a project that does not read, is left alone.
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { findRoot, isDoc, isMain, loadProject, read, stampDoc, write } from "./project.mjs";
+import { isMain } from "../services/cli.mjs";
+import { findRoot, loadProject } from "../services/config.mjs";
+import { isDoc, stampDoc } from "../services/docs.mjs";
+import { read, write } from "../services/files.mjs";
 
 if (isMain(import.meta.url)) {
     const [command, ...files] = process.argv.slice(2);

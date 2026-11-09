@@ -72,7 +72,8 @@ test("a project that does not release shows no versions until its first release 
     write(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\n");
     write("docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n## Postponed\n\n## Done\n\n- T-1 · P2 · medium · Claude · 2026-10-01 · — · chapter one (type: feature) · done 2026-10-10\n");
     assert.match(release("status").stdout, /This project shows no releases/);
-    const { loadProject, showsReleases } = await import("../scripts/project.mjs");
+    const { loadProject } = await import("../services/config.mjs");
+    const { showsReleases } = await import("../services/releases.mjs");
     assert.equal(showsReleases(loadProject(book).config), false);
     write(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\nrelease: true\n");
     assert.match(release("status").stdout, /No release yet[\s\S]*Suggested: v0\.1\.0/);
@@ -181,7 +182,8 @@ test("the repo's tags are the versions, the notes go with theirs; with neither, 
     git("tag", "weather-v0.2.3");
     git("tag", "-a", "v0.9.0", "-m", "v0.9.0");
     // A tag without notes: its summary from its own message when it says more than the version, else from its commit's.
-    const { readReleases, loadProject } = await import("../scripts/project.mjs");
+    const { loadProject } = await import("../services/config.mjs");
+    const { readReleases } = await import("../services/releases.mjs");
     const releases = readReleases(loadProject(tagged).config);
     assert.deepEqual(releases.map(({ version, summary, source }) => [version, summary, source]), [["0.9.0", "One", "commit"], ["0.9.1", "One", "commit"]]);
     // The tag holds T-1, done before its day; T-2 is still to release, from v0.9.1 and not from the package.
@@ -199,7 +201,8 @@ test("a plugin's version is its manifest's past every tag, on the day the manife
     };
     const release = (...args) => spawnSync(process.execPath, [join(scripts, "release.mjs"), ...args], { cwd: folder, encoding: "utf8", env: env() });
     const git = (day, ...args) => spawnSync("git", ["-C", folder, "-c", "user.name=T", "-c", "user.email=t@t", ...args], { encoding: "utf8", env: { ...process.env, GIT_AUTHOR_DATE: `${day}T12:00:00`, GIT_COMMITTER_DATE: `${day}T12:00:00` } });
-    const { readReleases, loadProject } = await import("../scripts/project.mjs");
+    const { loadProject } = await import("../services/config.mjs");
+    const { readReleases } = await import("../services/releases.mjs");
     const versions = () => readReleases(loadProject(folder).config).map(({ version, day, source }) => [version, day, source]);
     write(".claude/project.yaml", "language: en\ndocs: docs\npeople: [Claude]\n");
     write("docs/TASKS.md", "# Backlog\n\n## In progress\n\n## To do\n\n## Postponed\n\n## Done\n\n- T-1 · P2 · medium · Claude · 2026-10-01 · — · the dice (type: feature) · done 2026-10-10\n- T-2 · P2 · medium · Claude · 2026-10-01 · — · the map (type: feature) · done 2099-01-01\n");

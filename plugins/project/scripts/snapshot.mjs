@@ -10,13 +10,18 @@ import { plainMarkdown } from "../lib/text.mjs";
 import { codeView, freeIssues, issueOf, ownLogins } from "../lib/code.mjs";
 import { readsAsInstruction } from "../lib/issues.mjs";
 import { releaseState } from "../lib/release.mjs";
-import { gitHubRepo } from "./github.mjs";
-import { specsState } from "./specs.mjs";
-import { check } from "./check.mjs";
-import { readCode, readFaces, readFreePulls, readIssues, readLogin, readOwner } from "./code.mjs";
-import { syncStateFile, syncSummary } from "./issues.mjs";
-import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "./extensions.mjs";
-import { colleagues, coordinatorOf, findRoot, git, isClosed, isMain, onPath, loadProject, openStates, portraitFile, profileOf, projectName, read, readBacklog, readDecisions, readContracts, readGoals, readReleases, runCli, shown, showsReleases, taskLinks, today, todoFiles } from "./project.mjs";
+import { gitHubRepo, readCode, readFaces, readFreePulls, readIssues, readLogin, readOwner } from "../services/github/index.mjs";
+import { specsState } from "../services/specs.mjs";
+import { check } from "../services/check.mjs";
+import { isClosed, openStates, readBacklog, syncStateFile, syncSummary, taskLinks } from "../services/backlog/index.mjs";
+import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "../services/extensions.mjs";
+import { isMain, onPath, runCli } from "../services/cli.mjs";
+import { findRoot, loadProject, projectName } from "../services/config.mjs";
+import { readDecisions, readGoals } from "../services/docs.mjs";
+import { read, shown, today } from "../services/files.mjs";
+import { git } from "../services/git.mjs";
+import { colleagues, coordinatorOf, portraitFile, profileOf, todoFiles } from "../services/people.mjs";
+import { readContracts, readReleases, showsReleases } from "../services/releases.mjs";
 import { nameKey } from "../lib/crew.mjs";
 
 // The most a portrait may weigh in the panel's drawing, which the desktop drops past about 100 KB: Crew's small ones are under 2 KB.

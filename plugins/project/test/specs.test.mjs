@@ -83,7 +83,7 @@ test("adopt makes a project's spec the core's SPECS.md: numbered, links and conf
     rmSync(join(root, "src/save.mjs"));
 
     // The page and the panel.
-    const { loadProject } = await import("../scripts/project.mjs");
+    const { loadProject } = await import("../services/config.mjs");
     const { collect } = await import("../page/collect.mjs");
     const config = loadProject(root).config;
     const page = await collect(config, (key) => key, []);

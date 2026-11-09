@@ -6,10 +6,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fixFrontmatter, fixWhitespace } from "../scripts/check.mjs";
-import { realPath, shown } from "../scripts/project.mjs";
-import { renameCore } from "../scripts/init.mjs";
-import { dateTasks } from "../scripts/task-dates.mjs";
+import { fixFrontmatter, fixWhitespace } from "../services/check.mjs";
+import { realPath, shown } from "../services/files.mjs";
+import { renameCore } from "../services/setup/index.mjs";
+import { dateTasks } from "../services/backlog/index.mjs";
 
 const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), "..").replaceAll("\\", "/");
 const timeoutMinutes = 20;

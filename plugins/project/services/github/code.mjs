@@ -4,10 +4,12 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { citationsOf, freePulls, parseIssues, parseLog, parsePulls, repoUrl } from "../lib/code.mjs";
-import { parseSyncIssues } from "../lib/issues.mjs";
-import { sayer } from "../lib/messages.mjs";
-import { fail, git, projectRepos, tempFolder } from "./project.mjs";
+import { citationsOf, freePulls, parseIssues, parseLog, parsePulls, repoUrl } from "../../lib/code.mjs";
+import { parseSyncIssues } from "../../lib/issues.mjs";
+import { sayer } from "../../lib/messages.mjs";
+import { fail } from "../errors.mjs";
+import { tempFolder } from "../files.mjs";
+import { git, projectRepos } from "../git.mjs";
 
 // How many commits of each repo are read, the newest; how long a reading of gh holds.
 const commitLimit = 3000;

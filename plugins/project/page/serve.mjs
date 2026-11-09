@@ -5,10 +5,13 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { isMain, loadProject, notePath, portraitFile } from "../scripts/project.mjs";
-import { context, loadExtensions } from "../scripts/extensions.mjs";
+import { isMain } from "../services/cli.mjs";
+import { loadProject } from "../services/config.mjs";
+import { notePath } from "../services/docs.mjs";
+import { portraitFile } from "../services/people.mjs";
+import { context, loadExtensions } from "../services/extensions.mjs";
 import { collect } from "./collect.mjs";
-import { readFaces, readOwner } from "../scripts/code.mjs";
+import { readFaces, readOwner } from "../services/github/index.mjs";
 import { lineTitle } from "../lib/issues.mjs";
 import { apply, isRunning, propose, runFix, tidyState } from "./tidy.mjs";
 
@@ -243,7 +246,7 @@ function restartOnChange(port)
 function stamp()
 {
     try {
-        const code = ["lib", "scripts", "page"].flatMap((folder) => readdirSync(join(pluginRoot, folder)).filter((name) => /\.m?js$/.test(name)).map((name) => statSync(join(pluginRoot, folder, name)).mtimeMs));
+        const code = ["lib", "scripts", "services", "page"].flatMap((folder) => readdirSync(join(pluginRoot, folder), { recursive: folder === "services" }).filter((name) => /\.m?js$/.test(name)).map((name) => statSync(join(pluginRoot, folder, name)).mtimeMs));
         return `${Math.max(...code)} ${JSON.stringify(loadProject().config)}`;
     } catch {
         return null;
