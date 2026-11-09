@@ -1,0 +1,2 @@
+# Text in LF on every machine, whatever git's core.autocrlf says there; git tells text from binary by itself.
+* text=auto eol=lf
