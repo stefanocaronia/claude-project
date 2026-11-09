@@ -32,6 +32,7 @@ node tools/preview.mjs        the panel as the desktop app draws it, as an HTML 
 
 ## Rules
 
+- **Code** goes where [docs/structure.md](docs/structure.md) says: the folder of its part and area, in a file named for what it does, never with its area as a prefix (`backlog/notes.mjs`, not `backlog-notes.mjs`).
 - **Words** the panel, the page and the messages show go in English and Italian, in `plugins/project/lib/messages.mjs`.
 - **Behavior** Claude follows goes in the skills, under `plugins/project/skills/`.
 - **Your own project** stays out: `/project/` and `/.claude/` are ignored.
