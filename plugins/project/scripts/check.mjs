@@ -1,5 +1,5 @@
 // The health of the project docs: node check.mjs [--fix] [--json]. Read-only without --fix, which fixes whitespace and the docs' frontmatter.
-import { check, fixFrontmatter, fixWhitespace } from "../services/check.mjs";
+import { check, fixFrontmatter, fixWhitespace } from "../services/check/index.mjs";
 import { isMain, runCli } from "../services/cli.mjs";
 import { loadProject } from "../services/config.mjs";
 import { extensionChecks, loadExtensions } from "../services/extensions.mjs";

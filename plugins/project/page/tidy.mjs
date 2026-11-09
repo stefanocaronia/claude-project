@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fixFrontmatter, fixWhitespace } from "../services/check.mjs";
+import { fixFrontmatter, fixWhitespace } from "../services/check/index.mjs";
 import { realPath, shown } from "../services/files.mjs";
 import { renameCore } from "../services/setup/index.mjs";
 import { dateTasks } from "../services/backlog/index.mjs";

@@ -13,7 +13,7 @@ import { nameKey } from "../lib/crew.mjs";
 import { codeView, freeIssues, issueOf, ownLogins } from "../lib/code.mjs";
 import { readsAsInstruction } from "../lib/issues.mjs";
 import { decisionLinks } from "../lib/links.mjs";
-import { check } from "../services/check.mjs";
+import { check } from "../services/check/index.mjs";
 import { readCode, readFaces, readFreePulls, readIssues, readLogin, readOwner } from "../services/github/index.mjs";
 import { readBacklog, readHolds, syncSummary, taskLinks } from "../services/backlog/index.mjs";
 import { specsState } from "../services/specs.mjs";

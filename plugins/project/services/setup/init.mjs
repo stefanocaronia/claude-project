@@ -7,7 +7,7 @@ import { configFile, readConfig, relativeTo } from "../../lib/config.mjs";
 import { sayer } from "../../lib/messages.mjs";
 import { quoted } from "../../lib/text.mjs";
 import { coreFiles, legacyFiles, presets } from "../../lib/words.mjs";
-import { markdownFiles } from "../check.mjs";
+import { markdownFiles } from "../check/index.mjs";
 import { loadProject, readmeTitle } from "../config.mjs";
 import { legacyFormat, writeDoc } from "../docs.mjs";
 import { fail } from "../errors.mjs";

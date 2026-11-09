@@ -12,7 +12,7 @@ import { readsAsInstruction } from "../lib/issues.mjs";
 import { releaseState } from "../lib/release.mjs";
 import { gitHubRepo, readCode, readFaces, readFreePulls, readIssues, readLogin, readOwner } from "../services/github/index.mjs";
 import { specsState } from "../services/specs.mjs";
-import { check } from "../services/check.mjs";
+import { check } from "../services/check/index.mjs";
 import { isClosed, openStates, readBacklog, syncStateFile, syncSummary, taskLinks } from "../services/backlog/index.mjs";
 import { extensionChecks, extensionErrors, loadExtensions, panelLinks } from "../services/extensions.mjs";
 import { isMain, onPath, runCli } from "../services/cli.mjs";
